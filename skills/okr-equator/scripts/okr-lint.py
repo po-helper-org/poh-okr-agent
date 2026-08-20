@@ -37,14 +37,18 @@ def parse_tables(text):
     tables = []
     lines = text.splitlines()
     i = 0
-    sep_re = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+    sep_re = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
+
+    def is_row(candidate):
+        return "|" in candidate and candidate.strip() != ""
+
     while i < len(lines):
         line = lines[i]
-        if line.strip().startswith("|") and i + 1 < len(lines) and sep_re.match(lines[i + 1]):
+        if is_row(line) and i + 1 < len(lines) and lines[i + 1].strip() != "" and sep_re.match(lines[i + 1]):
             header = [c.strip() for c in line.strip().strip("|").split("|")]
             rows = []
             j = i + 2
-            while j < len(lines) and lines[j].strip().startswith("|"):
+            while j < len(lines) and is_row(lines[j]):
                 rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
                 j += 1
             tables.append((header, rows))

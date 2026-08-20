@@ -23,6 +23,7 @@ run_case() {
 run_case "valid-equator.md" 0
 run_case "invalid-missing-section.md" 1
 run_case "invalid-bad-status.md" 1
+run_case "invalid-no-pipe-table.md" 1
 
 echo "---"
 echo "$pass passed, $fail failed"
