@@ -32,33 +32,26 @@ def check_headers(text):
     return errors
 
 
+# Only recognizes fully-braced "| cell | cell |" tables (the only style this repo's
+# template and fixtures produce) — deliberately not full-GFM-generic, see task-10 review history.
 def parse_tables(text):
     """Возвращает список (header_cells, [row_cells, ...]) для каждой markdown-таблицы."""
     tables = []
     lines = text.splitlines()
     i = 0
-    sep_re = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
+    sep_re = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
 
     def is_row(candidate):
-        return "|" in candidate and candidate.strip() != ""
+        return candidate.strip().startswith("|")
 
     while i < len(lines):
         line = lines[i]
-        if is_row(line) and i + 1 < len(lines) and lines[i + 1].strip() != "" and sep_re.match(lines[i + 1]):
-            header_raw = line.strip()
-            header = [c.strip() for c in header_raw.strip("|").split("|")]
-            # Arity check uses the RAW (pipe-unstripped) split so a row's leading/
-            # trailing-pipe style must match the header's — this is what lets us
-            # tell a genuine (possibly pipe-less) continuation row apart from an
-            # ordinary prose line that merely contains the same number of "|" as
-            # the table has columns but isn't bracketed like the table rows are.
-            header_cell_count = len(header_raw.split("|"))
+        if is_row(line) and i + 1 < len(lines) and sep_re.match(lines[i + 1]):
+            header = [c.strip() for c in line.strip().strip("|").split("|")]
             rows = []
             j = i + 2
             while j < len(lines) and is_row(lines[j]):
                 row_raw = lines[j].strip()
-                if len(row_raw.split("|")) != header_cell_count:
-                    break
                 rows.append([c.strip() for c in row_raw.strip("|").split("|")])
                 j += 1
             tables.append((header, rows))
