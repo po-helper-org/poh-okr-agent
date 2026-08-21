@@ -17,8 +17,10 @@ description: Deck Builder — собирает plan-deck.pptx (кикофф-пр
 ## Инструкция для LLM
 
 Следуй `skills/okr-plan-deck/SKILL.md`. Собери JSON-payload из
-`OKR-<quarter>.md` + `roadmap.md`, вызови
-`node skills/okr-plan-deck/scripts/build_plan_deck.js <payload.json> .okr/<quarter>/plan-deck.pptx`.
+`OKR-<quarter>.md` + `roadmap.md`, вызови (путь — относительно корня
+установки, куда `install.sh` синкнул навыки; обычно `.claude/skills/...`,
+зависит от выбора при установке)
+`node <корень установки>/skills/okr-plan-deck/scripts/build_plan_deck.js <payload.json> .okr/<quarter>/plan-deck.pptx`.
 
 ## Отчёт
 
