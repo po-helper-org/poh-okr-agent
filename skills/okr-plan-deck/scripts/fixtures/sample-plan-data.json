@@ -1,0 +1,6 @@
+{
+  "meta": {"team": "GDS", "quarterLabel": "Q3 2026"},
+  "objectives": [{"code": "OBJ 1", "name": "Отделение от БАЗИС"}, {"code": "OBJ 2", "name": "Развитие витрины"}],
+  "sprintPlan": [{"label": "Спринт 1", "focus": "Заказы TicketsCloud, dataflow пилот"}],
+  "entryRisks": ["Kafka от TC не готова к 24.08"]
+}
