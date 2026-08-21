@@ -244,9 +244,178 @@ function addSprintsSlide(pres, sprints) {
   return slide;
 }
 
+function statusChipColor(status) {
+  const s = (status || "").toLowerCase();
+  if (s === "выполнено") return BRAND.statusDone;
+  if (s === "в работе") return BRAND.statusInProgress;
+  if (s === "на паузе") return BRAND.statusHold;
+  if (s === "в ожидании") return BRAND.statusWaiting;
+  if (s === "отменено") return BRAND.statusCancelled;
+  return BRAND.white;
+}
+
+function addStageFunnelSlide(pres, objective) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText(`${objective.code} — ${objective.name}`, {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.8,
+    fontFace: BRAND.fontHead, fontSize: 26, bold: true, color: BRAND.dark, margin: 0,
+  });
+  if (objective.goalQuote) {
+    slide.addText(objective.goalQuote, {
+      x: MARGIN, y: 1.3, w: LAYOUT_W - MARGIN * 2, h: 0.6,
+      fontFace: BRAND.fontHead, italic: true, fontSize: 15, color: BRAND.grayMid, margin: 0,
+    });
+  }
+
+  const stats = [
+    { label: "Всего KR", value: objective.stageFunnel.total, color: BRAND.dark },
+    { label: "В ожидании", value: objective.stageFunnel.waiting, color: BRAND.statusWaiting },
+    { label: "Исследование", value: objective.stageFunnel.research, color: BRAND.statusInProgress2 },
+    { label: "Аналитика", value: objective.stageFunnel.analysis, color: BRAND.statusInProgress2 },
+    { label: "Разработка", value: objective.stageFunnel.dev, color: BRAND.statusInProgress },
+    { label: "Отладка", value: objective.stageFunnel.debug, color: BRAND.statusInProgress },
+    { label: "Выполнено", value: objective.stageFunnel.done, color: BRAND.statusDone },
+    { label: "Отменено", value: objective.stageFunnel.cancelled, color: BRAND.statusCancelled },
+  ];
+  const boxW = (LAYOUT_W - MARGIN * 2 - 0.3 * (stats.length - 1)) / stats.length;
+  stats.forEach((s, i) => {
+    const x = MARGIN + i * (boxW + 0.3);
+    slide.addShape("rect", {
+      x, y: 2.4, w: boxW, h: 2.0, fill: { color: s.color }, line: { type: "none" },
+    });
+    slide.addText(String(s.value), {
+      x, y: 2.6, w: boxW, h: 1.0, align: "center",
+      fontFace: BRAND.fontMono, fontSize: 32, bold: true, color: BRAND.dark, margin: 0,
+    });
+    slide.addText(s.label, {
+      x, y: 3.6, w: boxW, h: 0.7, align: "center",
+      fontFace: BRAND.fontHead, fontSize: 11, color: BRAND.grayDark, margin: 0,
+    });
+  });
+  return slide;
+}
+
+function bulletColumn(slide, x, w, title, items, chipColor) {
+  slide.addShape("roundRect", {
+    x, y: 2.0, w: 1.8, h: 0.4, rectRadius: 0.2,
+    fill: { color: chipColor }, line: { type: "none" },
+  });
+  slide.addText(title.toUpperCase(), {
+    x, y: 2.0, w: 1.8, h: 0.4, align: "center", valign: "middle",
+    fontFace: BRAND.fontHead, fontSize: 11, bold: true, color: BRAND.grayDark, margin: 0,
+  });
+  if (items.length) {
+    const textItems = items.map((item, idx) => ({
+      text: item,
+      options: { bullet: true, breakLine: idx < items.length - 1, fontFace: BRAND.fontHead, fontSize: 13, color: BRAND.grayDark, paraSpaceAfter: 8 },
+    }));
+    slide.addText(textItems, { x, y: 2.6, w, h: LAYOUT_H - 2.6 - MARGIN, margin: 0 });
+  } else {
+    slide.addText("нет задач", {
+      x, y: 2.6, w, h: 0.5, fontFace: BRAND.fontHead, italic: true, fontSize: 13, color: BRAND.grayMid, margin: 0,
+    });
+  }
+}
+
+function addPart2PlanSlide(pres, objective) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText(`${objective.code} · чем занимаемся до конца квартала`, {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.8,
+    fontFace: BRAND.fontHead, fontSize: 26, bold: true, color: BRAND.dark, margin: 0,
+  });
+  const colW = (LAYOUT_W - MARGIN * 2 - 1.0) / 3;
+  bulletColumn(slide, MARGIN, colW, "В работе", objective.part2Plan.inProgress, BRAND.statusInProgress);
+  bulletColumn(slide, MARGIN + colW + 0.5, colW, "В ожидании", objective.part2Plan.waiting, BRAND.statusWaiting);
+  bulletColumn(slide, MARGIN + 2 * (colW + 0.5), colW, "Новое", objective.part2Plan.new, BRAND.statusDone);
+  return slide;
+}
+
+function addPart1DetailTableSlide(pres, objective) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText(`${objective.code} — что сделано из того, что брали`, {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.8,
+    fontFace: BRAND.fontHead, fontSize: 24, bold: true, color: BRAND.dark, margin: 0,
+  });
+
+  const header = ["KR", "Задача", "PBV", "Что сделано", "Что осталось"];
+  const tableRows = [
+    header.map((h) => ({ text: h, options: { bold: true, fill: { color: BRAND.dark }, color: BRAND.white, fontFace: BRAND.fontHead, fontSize: 12 } })),
+    ...objective.part1Table.map((r) => [
+      { text: r.kr, options: { fontFace: BRAND.fontMono, fontSize: 12, color: BRAND.grayDark, fill: { color: statusChipColor(r.status) } } },
+      { text: r.task, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } },
+      { text: String(r.pbv), options: { fontFace: BRAND.fontMono, fontSize: 12, color: BRAND.grayDark, align: "center" } },
+      { text: r.done, options: { fontFace: BRAND.fontHead, fontSize: 11, color: BRAND.grayDark } },
+      { text: r.left, options: { fontFace: BRAND.fontHead, fontSize: 11, color: BRAND.grayDark } },
+    ]),
+  ];
+  slide.addTable(tableRows, {
+    x: MARGIN, y: 1.6, w: LAYOUT_W - MARGIN * 2, h: 0.8 * tableRows.length,
+    border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
+    autoPage: false,
+  });
+  return slide;
+}
+
+function addNewTasksSlide(pres, objective) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText(`${objective.code} · новые задачи`, {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.8,
+    fontFace: BRAND.fontHead, fontSize: 26, bold: true, color: BRAND.dark, margin: 0,
+  });
+  const header = ["Название", "How to demo", "PBV", "Заказчик"];
+  const tableRows = [
+    header.map((h) => ({ text: h, options: { bold: true, fill: { color: BRAND.dark }, color: BRAND.white, fontFace: BRAND.fontHead, fontSize: 12 } })),
+    ...objective.newTasks.map((t) => [
+      { text: t.name, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } },
+      { text: t.howToDemo, options: { fontFace: BRAND.fontHead, fontSize: 11, color: BRAND.grayDark } },
+      { text: t.pbv == null ? "—" : String(t.pbv), options: { fontFace: BRAND.fontMono, fontSize: 12, color: BRAND.grayDark, align: "center" } },
+      { text: t.owner || "—", options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } },
+    ]),
+  ];
+  slide.addTable(tableRows, {
+    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: 0.8 * tableRows.length,
+    border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
+    autoPage: false,
+  });
+  slide.addText("Эти задачи не входили в исходный план квартала.", {
+    x: MARGIN, y: LAYOUT_H - 1.0, w: LAYOUT_W - MARGIN * 2, h: 0.5,
+    fontFace: BRAND.fontHead, italic: true, fontSize: 12, color: BRAND.grayMid, margin: 0,
+  });
+  return slide;
+}
+
+function addObjRisksSlide(pres, objective) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText(`${objective.code} · риски и эскалации`, {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.8,
+    fontFace: BRAND.fontHead, fontSize: 26, bold: true, color: BRAND.dark, margin: 0,
+  });
+  const header = ["Тип", "Риск", "Что делаем"];
+  const tableRows = [
+    header.map((h) => ({ text: h, options: { bold: true, fill: { color: BRAND.dark }, color: BRAND.white, fontFace: BRAND.fontHead, fontSize: 12 } })),
+    ...objective.risks.map((r) => [
+      { text: r.type, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark, fill: { color: BRAND.statusWaiting } } },
+      { text: r.risk, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } },
+      { text: r.mitigation, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } },
+    ]),
+  ];
+  slide.addTable(tableRows, {
+    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: 0.9 * tableRows.length,
+    border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
+    autoPage: false,
+  });
+  return slide;
+}
+
 module.exports = {
   BRAND, LAYOUT_NAME, LAYOUT_W, LAYOUT_H, MARGIN,
   newDeck, addTitleSlide, addDividerSlide, addSummaryFunnelSlide, addStatusTableSlide,
   addRisksSlide, addRoadmapGridSlide, addSprintsSlide,
-  statusBreakdown,
+  addStageFunnelSlide, addPart2PlanSlide, addPart1DetailTableSlide, addNewTasksSlide, addObjRisksSlide,
+  statusBreakdown, statusChipColor,
 };

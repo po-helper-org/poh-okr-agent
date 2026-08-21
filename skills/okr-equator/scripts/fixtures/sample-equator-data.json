@@ -31,5 +31,22 @@
       {"objective": "O1", "title": "Заказы и возвраты TicketsCloud", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
       {"objective": "O2", "title": "FAQ на LLM — PoC", "stagesPerSprint": [["аналитика"], ["бек", "приёмка"], []]}
     ]
-  }
+  },
+  "objectives": [
+    {
+      "code": "OBJ 1",
+      "name": "Отделение витрины Ticketland от БАЗИС",
+      "goalQuote": "«Недоступность БАЗИС не останавливает Ticketland»",
+      "stageFunnel": {"total": 7, "waiting": 1, "research": 3, "analysis": 0, "dev": 2, "debug": 0, "done": 1, "cancelled": 0},
+      "part2Plan": {"inProgress": ["1.1 Dataflow TC → UMC → web_db", "1.2 Заказы TicketsCloud"], "waiting": ["1.5 extapi_go B2B"], "new": []},
+      "part1Table": [
+        {"status": "выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
+        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
+      ],
+      "newTasks": [],
+      "risks": [
+        {"type": "Внешнее", "risk": "Kafka от TC не готова к 24.08", "mitigation": "Отслеживаем 24.08"}
+      ]
+    }
+  ]
 }
