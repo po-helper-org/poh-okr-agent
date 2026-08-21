@@ -1,6 +1,20 @@
 {
-  "meta": {"team": "GDS", "quarterLabel": "Q3 2026"},
+  "meta": {
+    "team": "GDS",
+    "quarterLabel": "Q3 2026",
+    "po": "Тестовый PO",
+    "period1": "01.07 — 17.08",
+    "period2": "19.08 — 30.09",
+    "scopeNote": "GDS · Live · UMC"
+  },
   "objectives": [{"code": "OBJ 1", "name": "Отделение от БАЗИС"}, {"code": "OBJ 2", "name": "Развитие витрины"}],
+  "roadmapGrid": {
+    "columns": ["OBJ 1 · БАЗИС", "OBJ 2 · ВИТРИНА"],
+    "items": [
+      ["Dataflow TC → UMC, пилот", "Заказы TicketsCloud 24.08"],
+      ["FAQ на LLM — PoC на проде"]
+    ]
+  },
   "sprintPlan": [{"label": "Спринт 1", "focus": "Заказы TicketsCloud, dataflow пилот"}],
   "entryRisks": ["Kafka от TC не готова к 24.08"]
 }

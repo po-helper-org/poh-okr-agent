@@ -1,5 +1,5 @@
 const path = require("path");
-const { BRAND, newDeck, addDividerSlide, LAYOUT_W, LAYOUT_H, MARGIN } = require(
+const { BRAND, newDeck, addTitleSlide, addRoadmapGridSlide, LAYOUT_W, LAYOUT_H, MARGIN } = require(
   path.join(__dirname, "..", "..", "okr-equator", "scripts", "build_equator_pptx.js")
 );
 
@@ -60,24 +60,52 @@ function addEntryRisksSlide(pres, risks) {
   return slide;
 }
 
+function validatePlanData(data) {
+  function fail(path, msg) {
+    throw new Error(`buildPlanDeck: data.${path} is ${msg}`);
+  }
+  if (!data || typeof data !== "object") fail("", "missing or not an object");
+  ["meta", "objectives", "sprintPlan"].forEach((k) => {
+    if (data[k] === undefined) fail(k, "missing");
+  });
+  if (!Array.isArray(data.objectives)) fail("objectives", "missing or not an array");
+  if (!Array.isArray(data.sprintPlan)) fail("sprintPlan", "missing or not an array");
+}
+
 function buildPlanDeck(data) {
+  validatePlanData(data);
   const pres = newDeck();
-  addDividerSlide(pres, `Квартальный план · ${data.meta.quarterLabel}`, data.meta.team);
+  addTitleSlide(pres, data.meta, {
+    title: `Квартальный план ${data.meta.quarterLabel} · ${data.meta.team}`,
+    subtitle: "Цели квартала, план по спринтам и риски входа.",
+  });
   addGoalsSlide(pres, data.objectives);
+  if (data.roadmapGrid) addRoadmapGridSlide(pres, data.roadmapGrid);
   addSprintPlanSlide(pres, data.sprintPlan);
   addEntryRisksSlide(pres, data.entryRisks || []);
   return pres;
 }
 
-module.exports = { buildPlanDeck, addGoalsSlide, addSprintPlanSlide, addEntryRisksSlide };
+module.exports = { buildPlanDeck, addGoalsSlide, addSprintPlanSlide, addEntryRisksSlide, validatePlanData };
 
 if (require.main === module) {
+  const fs = require("fs");
   const [, , dataPath, outPath] = process.argv;
   if (!dataPath || !outPath) {
     console.error("Usage: node build_plan_deck.js <data.json> <out.pptx>");
     process.exit(1);
   }
-  const data = JSON.parse(require("fs").readFileSync(dataPath, "utf8"));
-  const pres = buildPlanDeck(data);
-  pres.writeFile({ fileName: outPath }).then(() => console.log(`Written ${outPath}`));
+  let pres;
+  try {
+    const data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+    pres = buildPlanDeck(data);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  pres
+    .writeFile({ fileName: outPath })
+    .then(() => console.log(`Written ${outPath}`))
+    .catch((e) => { console.error(e.message); process.exit(1); });
 }

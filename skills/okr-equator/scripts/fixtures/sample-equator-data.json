@@ -40,8 +40,8 @@
       "stageFunnel": {"total": 7, "waiting": 1, "research": 3, "analysis": 0, "dev": 2, "debug": 0, "done": 1, "cancelled": 0},
       "part2Plan": {"inProgress": ["1.1 Dataflow TC → UMC → web_db", "1.2 Заказы TicketsCloud"], "waiting": ["1.5 extapi_go B2B"], "new": []},
       "part1Table": [
-        {"status": "выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
-        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
+        {"status": "Выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
+        {"status": "В работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
       ],
       "newTasks": [],
       "risks": [
@@ -55,7 +55,7 @@
       "stageFunnel": {"total": 15, "waiting": 5, "research": 0, "analysis": 0, "dev": 1, "debug": 1, "done": 3, "cancelled": 5},
       "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 VibeApp/Музыка"], "new": ["AI-Harness — пилот"]},
       "part1Table": [
-        {"status": "выполнено", "kr": "2.4", "task": "RELEASE КИНО", "pbv": 9, "done": "Закрыт 23-24.07", "left": "—"}
+        {"status": "Выполнено", "kr": "2.4", "task": "RELEASE КИНО", "pbv": 9, "done": "Закрыт 23-24.07", "left": "—"}
       ],
       "newTasks": [
         {"name": "FAQ на LLM", "howToDemo": "Первая версия генерации FAQ в проде", "pbv": null, "owner": null}
