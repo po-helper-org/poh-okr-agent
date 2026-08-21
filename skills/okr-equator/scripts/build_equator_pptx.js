@@ -23,6 +23,17 @@ const LAYOUT_W = 20;
 const LAYOUT_H = 11.25;
 const MARGIN = 0.6;
 
+function clampTableHeight(rowCount, rowHeight, startY) {
+  const available = LAYOUT_H - startY - MARGIN;
+  const wanted = rowCount * rowHeight;
+  if (wanted > available) {
+    console.error(
+      `⚠ Таблица на ${rowCount} строк (желаемая высота ${wanted.toFixed(2)}in) не помещается в доступные ${available.toFixed(2)}in — слайд может потребовать ручного разделения.`
+    );
+  }
+  return Math.min(wanted, available);
+}
+
 function newDeck() {
   const pres = new pptxgen();
   pres.defineLayout({ name: LAYOUT_NAME, width: LAYOUT_W, height: LAYOUT_H });
@@ -30,14 +41,16 @@ function newDeck() {
   return pres;
 }
 
-function addTitleSlide(pres, meta) {
+function addTitleSlide(pres, meta, opts) {
+  const title = (opts && opts.title) || `Экватор ${meta.quarterLabel} · ${meta.team}`;
+  const subtitle = (opts && opts.subtitle) || "Что сделали за первую половину квартала и что планируем закончить.";
   const slide = pres.addSlide();
   slide.background = { color: BRAND.dark };
-  slide.addText(`Экватор ${meta.quarterLabel} · ${meta.team}`, {
+  slide.addText(title, {
     x: MARGIN, y: 3.6, w: LAYOUT_W - MARGIN * 2, h: 1.6,
     fontFace: BRAND.fontHead, fontSize: 44, bold: true, color: BRAND.white, margin: 0,
   });
-  slide.addText("Что сделали за первую половину квартала и что планируем закончить.", {
+  slide.addText(subtitle, {
     x: MARGIN, y: 5.2, w: LAYOUT_W - MARGIN * 2, h: 0.8,
     fontFace: BRAND.fontHead, fontSize: 18, color: BRAND.grayMid, margin: 0,
   });
@@ -138,7 +151,7 @@ function addStatusTableSlide(pres, summaryFunnel) {
   ];
 
   slide.addTable(tableRows, {
-    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: 0.6 * tableRows.length,
+    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.6, 2.0),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -156,6 +169,13 @@ function addRisksSlide(pres, risks) {
   const cols = 2;
   const cardW = (LAYOUT_W - MARGIN * 2 - 0.6) / cols;
   const cardH = 2.4;
+  const lastRow = Math.floor((risks.length - 1) / cols);
+  const lastCardBottom = 2.0 + lastRow * (cardH + 0.5) + cardH;
+  if (risks.length && lastCardBottom > LAYOUT_H - MARGIN) {
+    console.error(
+      `⚠ Сетка рисков на ${risks.length} карточек (нижний край ${lastCardBottom.toFixed(2)}in) не помещается в доступные ${(LAYOUT_H - MARGIN).toFixed(2)}in — слайд может потребовать ручного разделения.`
+    );
+  }
   risks.forEach((risk, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
@@ -237,7 +257,7 @@ function addSprintsSlide(pres, sprints) {
   ];
 
   slide.addTable(tableRows, {
-    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: 0.6 * tableRows.length,
+    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.6, 2.0),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -352,7 +372,7 @@ function addPart1DetailTableSlide(pres, objective) {
     ]),
   ];
   slide.addTable(tableRows, {
-    x: MARGIN, y: 1.6, w: LAYOUT_W - MARGIN * 2, h: 0.8 * tableRows.length,
+    x: MARGIN, y: 1.6, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.8, 1.6),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -377,7 +397,7 @@ function addNewTasksSlide(pres, objective) {
     ]),
   ];
   slide.addTable(tableRows, {
-    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: 0.8 * tableRows.length,
+    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.8, 1.8),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -405,7 +425,7 @@ function addObjRisksSlide(pres, objective) {
     ]),
   ];
   slide.addTable(tableRows, {
-    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: 0.9 * tableRows.length,
+    x: MARGIN, y: 1.8, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.9, 1.8),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -421,29 +441,71 @@ function addLeadershipAsksSlide(pres, asks) {
   });
   const cols = Math.min(asks.length, 3) || 1;
   const cardW = (LAYOUT_W - MARGIN * 2 - 0.6 * (cols - 1)) / cols;
+  const rowH = 4.0;
   asks.forEach((ask, i) => {
-    const x = MARGIN + i * (cardW + 0.6);
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = MARGIN + col * (cardW + 0.6);
+    const y = row * rowH;
     slide.addText(String(ask.num), {
-      x, y: 2.0, w: 1.2, h: 1.0,
+      x, y: y + 2.0, w: 1.2, h: 1.0,
       fontFace: BRAND.fontMono, fontSize: 40, bold: true, color: BRAND.accent, margin: 0,
     });
     slide.addText(ask.title, {
-      x, y: 3.1, w: cardW, h: 0.6,
+      x, y: y + 3.1, w: cardW, h: 0.6,
       fontFace: BRAND.fontHead, fontSize: 18, bold: true, color: BRAND.white, margin: 0,
     });
     slide.addText(ask.why, {
-      x, y: 3.8, w: cardW, h: 1.3,
+      x, y: y + 3.8, w: cardW, h: 1.3,
       fontFace: BRAND.fontHead, fontSize: 13, color: BRAND.grayMid, margin: 0,
     });
     slide.addText(ask.ask, {
-      x, y: 5.3, w: cardW, h: 1.3,
+      x, y: y + 5.3, w: cardW, h: 1.3,
       fontFace: BRAND.fontHead, fontSize: 14, bold: true, color: BRAND.white, margin: 0,
     });
   });
   return slide;
 }
 
+function validateEquatorData(data) {
+  function fail(path, msg) {
+    throw new Error(`buildEquatorDeck: data.${path} is ${msg}`);
+  }
+
+  if (!data || typeof data !== "object") fail("", "missing or not an object");
+
+  const topKeys = ["meta", "summaryFunnel", "risks", "roadmapGrid", "sprints", "objectives", "leadershipAsks"];
+  topKeys.forEach((k) => {
+    if (data[k] === undefined) fail(k, "missing");
+  });
+
+  if (!data.summaryFunnel || !Array.isArray(data.summaryFunnel.objectives)) {
+    fail("summaryFunnel.objectives", "missing or not an array");
+  }
+  const funnelNumKeys = ["total", "done", "inProgress", "notStarted", "cancelled"];
+  data.summaryFunnel.objectives.forEach((entry, i) => {
+    funnelNumKeys.forEach((k) => {
+      if (!entry || typeof entry[k] !== "number") fail(`summaryFunnel.objectives[${i}].${k}`, "missing or not a number");
+    });
+  });
+
+  if (!Array.isArray(data.objectives)) fail("objectives", "missing or not an array");
+  const objKeys = ["code", "name", "stageFunnel", "part2Plan", "part1Table", "newTasks", "risks"];
+  const stageFunnelKeys = ["total", "waiting", "research", "analysis", "dev", "debug", "done", "cancelled"];
+  data.objectives.forEach((obj, i) => {
+    objKeys.forEach((k) => {
+      if (!obj || obj[k] === undefined) fail(`objectives[${i}].${k}`, "missing");
+    });
+    if (obj && obj.stageFunnel) {
+      stageFunnelKeys.forEach((sk) => {
+        if (typeof obj.stageFunnel[sk] !== "number") fail(`objectives[${i}].stageFunnel.${sk}`, "missing or not a number");
+      });
+    }
+  });
+}
+
 function buildEquatorDeck(data) {
+  validateEquatorData(data);
   const pres = newDeck();
   addTitleSlide(pres, data.meta);
   addSummaryFunnelSlide(pres, data.summaryFunnel);
@@ -468,17 +530,29 @@ module.exports = {
   newDeck, addTitleSlide, addDividerSlide, addSummaryFunnelSlide, addStatusTableSlide,
   addRisksSlide, addRoadmapGridSlide, addSprintsSlide,
   addStageFunnelSlide, addPart2PlanSlide, addPart1DetailTableSlide, addNewTasksSlide, addObjRisksSlide,
-  addLeadershipAsksSlide, buildEquatorDeck,
+  addLeadershipAsksSlide, buildEquatorDeck, validateEquatorData, clampTableHeight,
   statusBreakdown, statusChipColor,
 };
 
 if (require.main === module) {
+  const fs = require("fs");
+  const path = require("path");
   const [, , dataPath, outPath] = process.argv;
   if (!dataPath || !outPath) {
     console.error("Usage: node build_equator_pptx.js <data.json> <out.pptx>");
     process.exit(1);
   }
-  const data = JSON.parse(require("fs").readFileSync(dataPath, "utf8"));
-  const pres = buildEquatorDeck(data);
-  pres.writeFile({ fileName: outPath }).then(() => console.log(`Written ${outPath}`));
+  let pres;
+  try {
+    const data = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+    pres = buildEquatorDeck(data);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  pres
+    .writeFile({ fileName: outPath })
+    .then(() => console.log(`Written ${outPath}`))
+    .catch((e) => { console.error(e.message); process.exit(1); });
 }
