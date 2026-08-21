@@ -58,6 +58,14 @@ done
 # Конфиг-шаблон в корень (если ещё нет)
 [ -f okr-config.md ] || cp "$SRC/okr-config.template.md" ./okr-config.template.md 2>/dev/null || true
 
+# pptxgenjs — рантайм-зависимость для .pptx-генерации (/okr-equator, /okr-plan-deck)
+if command -v npm >/dev/null 2>&1; then
+  echo -e "${BLUE}Устанавливаю pptxgenjs…${NC}"
+  npm install --prefix "$ROOT/skills/okr-equator/scripts" --silent || echo -e "${YELLOW}⚠ npm install не удался — установите pptxgenjs вручную в $ROOT/skills/okr-equator/scripts перед /okr-equator.${NC}"
+else
+  echo -e "${YELLOW}⚠ npm не найден — перед /okr-equator установите вручную: npm install --prefix $ROOT/skills/okr-equator/scripts pptxgenjs${NC}"
+fi
+
 [ "$SRC" = "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
 
 echo -e "${GREEN}✔ Установлено в $ROOT/${NC}"

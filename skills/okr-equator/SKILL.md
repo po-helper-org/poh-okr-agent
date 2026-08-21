@@ -35,7 +35,9 @@ description: Equator Reporter — генерирует отчёт-экватор
    `scripts/build_equator_pptx.js`, секция `fixtures/sample-equator-data.json`
    как пример формы данных) из того же материала, что и `.md`-отчёт — оба
    документа описывают одни и те же факты в двух форматах.
-7. Сгенерируй `.pptx`:
+7. Сгенерируй `.pptx` (требует Node.js/npm и установленный `pptxgenjs` —
+   ставится автоматически через `install.sh`, при необходимости вручную:
+   `npm install --prefix scripts`):
    `node scripts/build_equator_pptx.js <payload.json> .okr/<quarter>/equator/экватор-<quarter>.pptx`.
 8. STOP: покажи сводку (сколько KR по каждому статусу, сколько
    `[УТОЧНИТЬ]`) и оба пути файлов.
@@ -49,6 +51,27 @@ description: Equator Reporter — генерирует отчёт-экватор
 - `scripts/build_equator_pptx.js` — генератор `.pptx`, 16-27 слайдов в
   зависимости от числа Objectives и заполненности «новые задачи»/«риски» по
   каждому.
+
+## Соответствие статусов между .md и .pptx
+
+- **Источник истины** — 5-значный статус-enum `.md`-стороны:
+  `Выполнено, В работе, На паузе, В ожидании, Отменено` (см.
+  `resources/equator-report-template.md`, `okr-lint.py → ALLOWED_STATUSES`).
+- **Слайды summary-funnel/status-table** (`statusBreakdown()`,
+  `addStatusTableSlide` в `scripts/build_equator_pptx.js`) используют
+  4-корзинную таксономию, где третья корзина — `notStarted` («Не начато»).
+  Это **намеренное упрощение** для визуализации воронки: `На паузе` и
+  `В ожидании` схлопываются в одну корзину `notStarted`/«Не начато». Это не
+  ошибка данных — просто у funnel-слайда меньше делений, чем у 5-значного
+  enum.
+- **`stageFunnel`** (используется `addStageFunnelSlide`) — отдельная, более
+  мелкая 7-значная разбивка: `waiting/research/analysis/dev/debug/done/
+  cancelled`. Она зеркалит пайплайн-стадии `waiting/research/analysis/dev/
+  debug` референсной колоды внутри укрупнённых статусов «в работе»/«в
+  ожидании» 5-значного enum и **не обязана сходиться 1:1** с ним. LLM
+  собирает `stageFunnel` из KR-уровневой детализации в
+  `OKR-<quarter>.md`/`KR-EPIC-MAP.md` во время `/okr-equator` — это ручная
+  сборка по контексту, не механический derive из статус-enum.
 
 ## Главное правило
 

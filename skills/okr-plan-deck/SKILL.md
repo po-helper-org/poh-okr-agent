@@ -21,15 +21,22 @@ description: Deck Builder — собирает квартальную кикоф
 ## Процесс
 
 1. Прочитай `OKR-<quarter>.md` и `roadmap.md`.
-2. Собери план по спринтам из `roadmap.md → Now/Next` (Later — вне слайда,
+2. Собери roadmap-грид (те же колонки/пункты, что и на roadmap-слайде
+   экватора — `roadmapGrid` в payload) из `roadmap.md → Now/Next`.
+3. Собери план по спринтам из `roadmap.md → Now/Next` (Later — вне слайда,
    это горизонт за пределами ближайших спринтов).
-3. Риски входа — из `okr-context-pack.md`, если там зафиксированы внешние
+4. Риски входа — из `okr-context-pack.md`, если там зафиксированы внешние
    блокеры на старте квартала.
-4. Собери JSON-payload под схему `buildPlanDeck` (см.
-   `scripts/fixtures/sample-plan-data.json`) и вызови
+5. Собери JSON-payload под схему `buildPlanDeck` (см.
+   `scripts/fixtures/sample-plan-data.json`; `meta` — те же поля, что у
+   `addTitleSlide` в `okr-equator`: `team`, `quarterLabel`, `po`, `period1`,
+   `period2`, `scopeNote`) и вызови (требует Node.js/npm и установленный
+   `pptxgenjs` — ставится автоматически через `install.sh`, при
+   необходимости вручную: `npm install --prefix ../../okr-equator/scripts`):
    `node scripts/build_plan_deck.js <payload.json> .okr/<quarter>/plan-deck.pptx`.
 
 ## Скрипты
 
-- `scripts/build_plan_deck.js` — генератор `.pptx`, 4 слайда (титул/цели/
-  спринты/риски входа).
+- `scripts/build_plan_deck.js` — генератор `.pptx`, 5 слайдов (титул/цели/
+  roadmap/спринты/риски входа). `roadmapGrid` в payload опционален — если
+  не задан, roadmap-слайд пропускается.
