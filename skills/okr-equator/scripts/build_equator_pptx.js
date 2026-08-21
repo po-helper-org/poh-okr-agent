@@ -145,8 +145,108 @@ function addStatusTableSlide(pres, summaryFunnel) {
   return slide;
 }
 
+function addRisksSlide(pres, risks) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText("Риски и проблемы", {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.9,
+    fontFace: BRAND.fontHead, fontSize: 30, bold: true, color: BRAND.dark, margin: 0,
+  });
+
+  const cols = 2;
+  const cardW = (LAYOUT_W - MARGIN * 2 - 0.6) / cols;
+  const cardH = 2.4;
+  risks.forEach((risk, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = MARGIN + col * (cardW + 0.6);
+    const y = 2.0 + row * (cardH + 0.5);
+    slide.addShape("roundRect", {
+      x, y, w: cardW, h: cardH, rectRadius: 0.08,
+      fill: { color: BRAND.white }, line: { type: "none" },
+      shadow: { type: "outer", color: "000000", opacity: 0.15, blur: 6, offset: 2, angle: 90 },
+    });
+    slide.addShape("roundRect", {
+      x: x + 0.3, y: y + 0.3, w: 1.8, h: 0.4, rectRadius: 0.2,
+      fill: { color: BRAND.statusWaiting }, line: { type: "none" },
+    });
+    slide.addText(risk.category.toUpperCase(), {
+      x: x + 0.3, y: y + 0.3, w: 1.8, h: 0.4,
+      fontFace: BRAND.fontHead, fontSize: 11, bold: true, color: BRAND.grayDark,
+      align: "center", valign: "middle", margin: 0,
+    });
+    slide.addText(risk.title, {
+      x: x + 0.3, y: y + 0.85, w: cardW - 0.6, h: 0.6,
+      fontFace: BRAND.fontHead, fontSize: 16, bold: true, color: BRAND.dark, margin: 0,
+    });
+    slide.addText(risk.detail, {
+      x: x + 0.3, y: y + 1.45, w: cardW - 0.6, h: cardH - 1.6,
+      fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayMid, margin: 0,
+    });
+  });
+  return slide;
+}
+
+function addRoadmapGridSlide(pres, grid) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText("Roadmap на вторую часть", {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.9,
+    fontFace: BRAND.fontHead, fontSize: 30, bold: true, color: BRAND.dark, margin: 0,
+  });
+
+  const cols = grid.columns.length;
+  const colW = (LAYOUT_W - MARGIN * 2 - (cols - 1) * 0.5) / cols;
+  grid.columns.forEach((colTitle, i) => {
+    const x = MARGIN + i * (colW + 0.5);
+    slide.addText(colTitle, {
+      x, y: 2.0, w: colW, h: 0.6,
+      fontFace: BRAND.fontHead, fontSize: 16, bold: true, color: BRAND.dark, margin: 0,
+    });
+    const items = grid.items[i] || [];
+    const textItems = items.map((item, idx) => ({
+      text: item,
+      options: { bullet: true, breakLine: idx < items.length - 1, fontFace: BRAND.fontHead, fontSize: 13, color: BRAND.grayDark, paraSpaceAfter: 8 },
+    }));
+    if (textItems.length) {
+      slide.addText(textItems, { x, y: 2.7, w: colW, h: LAYOUT_H - 2.7 - MARGIN, margin: 0 });
+    }
+  });
+  return slide;
+}
+
+function addSprintsSlide(pres, sprints) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.beige };
+  slide.addText("Инициативы по спринтам", {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.9,
+    fontFace: BRAND.fontHead, fontSize: 30, bold: true, color: BRAND.dark, margin: 0,
+  });
+
+  const header = ["Инициатива", ...sprints.sprintLabels];
+  const tableRows = [
+    header.map((h) => ({ text: h, options: { bold: true, fill: { color: BRAND.dark }, color: BRAND.white, fontFace: BRAND.fontHead, fontSize: 12 } })),
+    ...sprints.rows.map((r) => {
+      const titleCell = { text: `[${r.objective}] ${r.title}`, options: { fontFace: BRAND.fontHead, fontSize: 12, color: BRAND.grayDark } };
+      const stageCells = r.stagesPerSprint.map((stages) => ({
+        text: stages.length ? stages.join(", ") : "—",
+        options: { fontFace: BRAND.fontMono, fontSize: 11, color: BRAND.grayDark, fill: { color: stages.length ? BRAND.statusInProgress2 : BRAND.white } },
+      }));
+      return [titleCell, ...stageCells];
+    }),
+  ];
+
+  slide.addTable(tableRows, {
+    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: 0.6 * tableRows.length,
+    border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
+    autoPage: false,
+  });
+  return slide;
+}
+
 module.exports = {
   BRAND, LAYOUT_NAME, LAYOUT_W, LAYOUT_H, MARGIN,
   newDeck, addTitleSlide, addDividerSlide, addSummaryFunnelSlide, addStatusTableSlide,
+  addRisksSlide, addRoadmapGridSlide, addSprintsSlide,
   statusBreakdown,
 };

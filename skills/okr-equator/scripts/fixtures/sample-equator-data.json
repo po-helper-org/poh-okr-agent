@@ -13,5 +13,23 @@
       {"name": "OBJ 2 — Развитие витрины", "total": 15, "done": 4, "inProgress": 2, "notStarted": 3, "cancelled": 6}
     ],
     "total": {"total": 22, "done": 5, "inProgress": 7, "notStarted": 4, "cancelled": 6}
+  },
+  "risks": [
+    {"category": "Внешнее", "title": "Kafka от TC не готова", "detail": "Если не выкатится — заказы уходят за квартал."},
+    {"category": "Ресурс", "title": "Аналитики перегружены", "detail": "Временный перегруз из-за крупных задач."}
+  ],
+  "roadmapGrid": {
+    "columns": ["OBJ 1 · БАЗИС", "OBJ 2 · ВИТРИНА"],
+    "items": [
+      ["Dataflow TC → UMC, пилот", "Заказы TicketsCloud 24.08"],
+      ["FAQ на LLM — PoC на проде"]
+    ]
+  },
+  "sprints": {
+    "sprintLabels": ["Спринт 1\n19.08–01.09", "Спринт 2\n02.09–15.09", "Спринт 3\n16.09–30.09"],
+    "rows": [
+      {"objective": "O1", "title": "Заказы и возвраты TicketsCloud", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
+      {"objective": "O2", "title": "FAQ на LLM — PoC", "stagesPerSprint": [["аналитика"], ["бек", "приёмка"], []]}
+    ]
   }
 }
