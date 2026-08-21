@@ -1,0 +1,7 @@
+{
+  "name": "poh-okr-agent-equator-scripts",
+  "private": true,
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}

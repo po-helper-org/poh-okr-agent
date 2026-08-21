@@ -412,10 +412,73 @@ function addObjRisksSlide(pres, objective) {
   return slide;
 }
 
+function addLeadershipAsksSlide(pres, asks) {
+  const slide = pres.addSlide();
+  slide.background = { color: BRAND.dark };
+  slide.addText("Что нужно от руководителей", {
+    x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.9,
+    fontFace: BRAND.fontHead, fontSize: 30, bold: true, color: BRAND.white, margin: 0,
+  });
+  const cols = Math.min(asks.length, 3) || 1;
+  const cardW = (LAYOUT_W - MARGIN * 2 - 0.6 * (cols - 1)) / cols;
+  asks.forEach((ask, i) => {
+    const x = MARGIN + i * (cardW + 0.6);
+    slide.addText(String(ask.num), {
+      x, y: 2.0, w: 1.2, h: 1.0,
+      fontFace: BRAND.fontMono, fontSize: 40, bold: true, color: BRAND.accent, margin: 0,
+    });
+    slide.addText(ask.title, {
+      x, y: 3.1, w: cardW, h: 0.6,
+      fontFace: BRAND.fontHead, fontSize: 18, bold: true, color: BRAND.white, margin: 0,
+    });
+    slide.addText(ask.why, {
+      x, y: 3.8, w: cardW, h: 1.3,
+      fontFace: BRAND.fontHead, fontSize: 13, color: BRAND.grayMid, margin: 0,
+    });
+    slide.addText(ask.ask, {
+      x, y: 5.3, w: cardW, h: 1.3,
+      fontFace: BRAND.fontHead, fontSize: 14, bold: true, color: BRAND.white, margin: 0,
+    });
+  });
+  return slide;
+}
+
+function buildEquatorDeck(data) {
+  const pres = newDeck();
+  addTitleSlide(pres, data.meta);
+  addSummaryFunnelSlide(pres, data.summaryFunnel);
+  addRisksSlide(pres, data.risks);
+  addRoadmapGridSlide(pres, data.roadmapGrid);
+  addSprintsSlide(pres, data.sprints);
+  addDividerSlide(pres, "ЧАСТЬ 2", "Полный отчёт");
+  addStatusTableSlide(pres, data.summaryFunnel);
+  data.objectives.forEach((obj) => {
+    addStageFunnelSlide(pres, obj);
+    addPart2PlanSlide(pres, obj);
+    addPart1DetailTableSlide(pres, obj);
+    if (obj.newTasks && obj.newTasks.length) addNewTasksSlide(pres, obj);
+    if (obj.risks && obj.risks.length) addObjRisksSlide(pres, obj);
+  });
+  addLeadershipAsksSlide(pres, data.leadershipAsks);
+  return pres;
+}
+
 module.exports = {
   BRAND, LAYOUT_NAME, LAYOUT_W, LAYOUT_H, MARGIN,
   newDeck, addTitleSlide, addDividerSlide, addSummaryFunnelSlide, addStatusTableSlide,
   addRisksSlide, addRoadmapGridSlide, addSprintsSlide,
   addStageFunnelSlide, addPart2PlanSlide, addPart1DetailTableSlide, addNewTasksSlide, addObjRisksSlide,
+  addLeadershipAsksSlide, buildEquatorDeck,
   statusBreakdown, statusChipColor,
 };
+
+if (require.main === module) {
+  const [, , dataPath, outPath] = process.argv;
+  if (!dataPath || !outPath) {
+    console.error("Usage: node build_equator_pptx.js <data.json> <out.pptx>");
+    process.exit(1);
+  }
+  const data = JSON.parse(require("fs").readFileSync(dataPath, "utf8"));
+  const pres = buildEquatorDeck(data);
+  pres.writeFile({ fileName: outPath }).then(() => console.log(`Written ${outPath}`));
+}

@@ -47,6 +47,24 @@
       "risks": [
         {"type": "Внешнее", "risk": "Kafka от TC не готова к 24.08", "mitigation": "Отслеживаем 24.08"}
       ]
+    },
+    {
+      "code": "OBJ 2",
+      "name": "Развитие витрины",
+      "goalQuote": "",
+      "stageFunnel": {"total": 15, "waiting": 5, "research": 0, "analysis": 0, "dev": 1, "debug": 1, "done": 3, "cancelled": 5},
+      "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 VibeApp/Музыка"], "new": ["AI-Harness — пилот"]},
+      "part1Table": [
+        {"status": "выполнено", "kr": "2.4", "task": "RELEASE КИНО", "pbv": 9, "done": "Закрыт 23-24.07", "left": "—"}
+      ],
+      "newTasks": [
+        {"name": "FAQ на LLM", "howToDemo": "Первая версия генерации FAQ в проде", "pbv": null, "owner": null}
+      ],
+      "risks": []
     }
+  ],
+  "leadershipAsks": [
+    {"num": 1, "title": "SUPPORT", "why": "Support-задачи конкурируют с фичами, но не видны в OKR.", "ask": "Выделить поддержку отдельной строкой в планировании."},
+    {"num": 2, "title": "НОВЫЕ ЗАДАЧИ", "why": "Уже выполняются и занимают ресурс команды.", "ask": "Зафиксировать в OKR AI Harness и FAQ на LLM."}
   ]
 }
