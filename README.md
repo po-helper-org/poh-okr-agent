@@ -92,7 +92,7 @@ python3 <корень установки>/skills/okr-equator/scripts/okr-lint.py
 Ненулевой код выхода — документ не по шаблону: потерян обязательный раздел,
 PBV вне диапазона, недопустимое значение статуса. `/okr-equator` прогоняет
 линтер перед каждой записью файла и не сохраняет документ с ошибками.
-Самотест линтера: `bash skills/okr-equator/scripts/test-okr-lint.sh`.
+Самотест линтера: `bash <корень установки>/skills/okr-equator/scripts/test-okr-lint.sh`.
 
 ## Место в конвейере poh-org
 

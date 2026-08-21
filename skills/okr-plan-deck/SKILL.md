@@ -32,7 +32,7 @@ description: Deck Builder — собирает квартальную кикоф
    `addTitleSlide` в `okr-equator`: `team`, `quarterLabel`, `po`, `period1`,
    `period2`, `scopeNote`) и вызови (требует Node.js/npm и установленный
    `pptxgenjs` — ставится автоматически через `install.sh`, при
-   необходимости вручную: `npm install --prefix ../../okr-equator/scripts`):
+   необходимости вручную: `npm install --prefix ../okr-equator/scripts`):
    `node scripts/build_plan_deck.js <payload.json> .okr/<quarter>/plan-deck.pptx`.
 
 ## Скрипты

@@ -207,10 +207,10 @@ function addRisksSlide(pres, risks) {
   return slide;
 }
 
-function addRoadmapGridSlide(pres, grid) {
+function addRoadmapGridSlide(pres, grid, title = "Roadmap на вторую часть") {
   const slide = pres.addSlide();
   slide.background = { color: BRAND.beige };
-  slide.addText("Roadmap на вторую часть", {
+  slide.addText(title, {
     x: MARGIN, y: MARGIN, w: LAYOUT_W - MARGIN * 2, h: 0.9,
     fontFace: BRAND.fontHead, fontSize: 30, bold: true, color: BRAND.dark, margin: 0,
   });
@@ -441,7 +441,14 @@ function addLeadershipAsksSlide(pres, asks) {
   });
   const cols = Math.min(asks.length, 3) || 1;
   const cardW = (LAYOUT_W - MARGIN * 2 - 0.6 * (cols - 1)) / cols;
-  const rowH = 4.0;
+  const rowH = 4.8;
+  const lastRow = Math.floor((asks.length - 1) / cols);
+  const lastCardBottom = lastRow * rowH + 6.6;
+  if (asks.length && lastCardBottom > LAYOUT_H - MARGIN) {
+    console.error(
+      `⚠ Сетка leadership asks на ${asks.length} карточек (нижний край ${lastCardBottom.toFixed(2)}in) не помещается в доступные ${(LAYOUT_H - MARGIN).toFixed(2)}in — слайд может потребовать ручного разделения.`
+    );
+  }
   asks.forEach((ask, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
@@ -478,6 +485,17 @@ function validateEquatorData(data) {
   topKeys.forEach((k) => {
     if (data[k] === undefined) fail(k, "missing");
   });
+
+  const metaStringKeys = ["quarterLabel", "team", "po", "period1", "period2"];
+  if (!data.meta || typeof data.meta !== "object") {
+    fail("meta", "missing or not an object");
+  } else {
+    metaStringKeys.forEach((k) => {
+      if (typeof data.meta[k] !== "string" || data.meta[k].length === 0) {
+        fail(`meta.${k}`, "missing or not a string");
+      }
+    });
+  }
 
   if (!data.summaryFunnel || !Array.isArray(data.summaryFunnel.objectives)) {
     fail("summaryFunnel.objectives", "missing or not an array");

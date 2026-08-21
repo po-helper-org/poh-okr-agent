@@ -1,5 +1,5 @@
 const path = require("path");
-const { BRAND, newDeck, addTitleSlide, addRoadmapGridSlide, LAYOUT_W, LAYOUT_H, MARGIN } = require(
+const { BRAND, newDeck, addTitleSlide, addRoadmapGridSlide, clampTableHeight, LAYOUT_W, LAYOUT_H, MARGIN } = require(
   path.join(__dirname, "..", "..", "okr-equator", "scripts", "build_equator_pptx.js")
 );
 
@@ -37,7 +37,7 @@ function addSprintPlanSlide(pres, sprintPlan) {
     ]),
   ];
   slide.addTable(tableRows, {
-    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: 0.7 * tableRows.length,
+    x: MARGIN, y: 2.0, w: LAYOUT_W - MARGIN * 2, h: clampTableHeight(tableRows.length, 0.7, 2.0),
     border: { type: "solid", color: BRAND.grayMid, pt: 0.5 },
     autoPage: false,
   });
@@ -68,6 +68,18 @@ function validatePlanData(data) {
   ["meta", "objectives", "sprintPlan"].forEach((k) => {
     if (data[k] === undefined) fail(k, "missing");
   });
+
+  const metaStringKeys = ["quarterLabel", "team", "po", "period1", "period2"];
+  if (!data.meta || typeof data.meta !== "object") {
+    fail("meta", "missing or not an object");
+  } else {
+    metaStringKeys.forEach((k) => {
+      if (typeof data.meta[k] !== "string" || data.meta[k].length === 0) {
+        fail(`meta.${k}`, "missing or not a string");
+      }
+    });
+  }
+
   if (!Array.isArray(data.objectives)) fail("objectives", "missing or not an array");
   if (!Array.isArray(data.sprintPlan)) fail("sprintPlan", "missing or not an array");
 }
@@ -80,7 +92,7 @@ function buildPlanDeck(data) {
     subtitle: "Цели квартала, план по спринтам и риски входа.",
   });
   addGoalsSlide(pres, data.objectives);
-  if (data.roadmapGrid) addRoadmapGridSlide(pres, data.roadmapGrid);
+  if (data.roadmapGrid) addRoadmapGridSlide(pres, data.roadmapGrid, "Roadmap квартала");
   addSprintPlanSlide(pres, data.sprintPlan);
   addEntryRisksSlide(pres, data.entryRisks || []);
   return pres;
