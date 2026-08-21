@@ -24,7 +24,7 @@ run_case "valid-equator.md" 0
 run_case "invalid-missing-section.md" 1
 run_case "invalid-bad-status.md" 1
 run_case "valid-equator-prose-after-table.md" 0
-run_case "valid-equator-malformed-row-typo.md" 1
+run_case "invalid-malformed-row-typo.md" 1
 
 echo "---"
 echo "$pass passed, $fail failed"
