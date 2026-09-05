@@ -1,5 +1,5 @@
 import { InvalidMilestoneIdError, InvalidTaskIdError, SprintOutOfRangeError } from './errors.js'
-import { SPRINT_COUNT, poTaskLabel, type Phase, type PoTaskKind } from './model.js'
+import { SPRINT_COUNT, krLabel, poTaskLabel, type Phase, type PoTaskKind } from './model.js'
 import { labelForPhase, phaseLabelsOf } from './phases.js'
 
 /**
@@ -75,7 +75,11 @@ export interface CreatePoTaskInput {
 export function createPoTask(input: CreatePoTaskInput): BacklogArgs {
   // У `task create` флаг называется `--labels`, у `task edit` — `--label`. Имена разные,
   // и перепутать их нельзя: неизвестный флаг Backlog.md отвергает целиком.
-  const args = ['task', 'create', input.title, '--type', input.taskType, '--labels', poTaskLabel(input.kind)]
+  const labels = [poTaskLabel(input.kind)]
+  // Связь дублируется меткой: `task list --json` зависимостей не отдаёт, а панель читает
+  // список (см. KR_LABEL_PREFIX в model.ts).
+  if (input.relatedKrId) labels.push(krLabel(taskId(input.relatedKrId)))
+  const args = ['task', 'create', input.title, '--type', input.taskType, '--labels', labels.join(',')]
   if (input.relatedKrId) args.push('--dep', taskId(input.relatedKrId))
   if (input.dueDate) args.push('--due-date', input.dueDate)
   return args
@@ -154,4 +158,40 @@ export function renameObjective(from: string, to: string): BacklogArgs {
  */
 export function removeObjective(id: string): BacklogArgs {
   return ['milestone', 'remove', milestoneId(id), '--task-handling', 'keep']
+}
+
+export function deleteTask(id: string): BacklogArgs {
+  return ['task', 'archive', taskId(id)]
+}
+
+/** Подписи столбцов доски: тело служебного документа целиком переписывается. */
+export function updateBoardDoc(docId: string, content: string): BacklogArgs {
+  if (!/^doc-\d+$/.test(docId)) throw new InvalidTaskIdError(docId)
+  return ['doc', 'update', docId, '--content', content]
+}
+
+export function createBoardDoc(title: string): BacklogArgs {
+  return ['doc', 'create', title, '--plain']
+}
+
+export function setDependencies(id: string, dependsOn: readonly string[]): BacklogArgs {
+  return ['task', 'edit', taskId(id), '--dep', dependsOn.map(taskId).join(',')]
+}
+
+export function setAssignee(id: string, assignee: string): BacklogArgs {
+  return ['task', 'edit', taskId(id), '-a', assignee]
+}
+
+/** Ссылка на Confluence живёт в documentation, ссылка на эпик трекера — в references. */
+export function setConfluence(id: string, url: string): BacklogArgs {
+  return ['task', 'edit', taskId(id), '--doc', url]
+}
+
+export function setEpicLink(id: string, url: string): BacklogArgs {
+  return ['task', 'edit', taskId(id), '--ref', url]
+}
+
+/** Плановые спринты и ресурсы по стадиям: блок плагина в поле «План реализации». */
+export function setPlan(id: string, text: string): BacklogArgs {
+  return ['task', 'edit', taskId(id), '--plan', text]
 }

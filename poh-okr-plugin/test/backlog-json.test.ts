@@ -46,8 +46,20 @@ test('незнакомая версия схемы — ошибка, а не р�
 })
 
 test('чужой вид ответа не разбирается как список', () => {
-  const payload = JSON.stringify({ schemaVersion: 1, kind: 'task', task: {} })
+  const payload = JSON.stringify({ schemaVersion: 1, kind: 'task-view', task: {} })
   assert.throws(() => parseTaskList(payload), BacklogSchemaError)
+})
+
+test('карточка приходит видом task-view, а данные полем task', () => {
+  // Вид ответа и имя поля не выводятся друг из друга: живой CLI отвечает
+  // kind «task-view» и кладёт задачу в «task».
+  const payload = JSON.stringify({ schemaVersion: 1, kind: 'task-view', task: { id: 'PO-30', title: 'KR' } })
+  assert.equal(parseTaskView(payload).id, 'PO-30')
+})
+
+test('список, выданный за карточку, не разбирается', () => {
+  const payload = JSON.stringify({ schemaVersion: 1, kind: 'task-list', tasks: [] })
+  assert.throws(() => parseTaskView(payload), BacklogSchemaError)
 })
 
 test('задача без идентификатора — ошибка', () => {
@@ -65,18 +77,19 @@ test('пустой заголовок допустим — задачу заво
 test('карточка задачи отдаёт комментарии как события ленты', () => {
   const payload = JSON.stringify({
     schemaVersion: 1,
-    kind: 'task',
+    kind: 'task-view',
     task: {
       id: 'PO-30',
       title: 'KR',
-      comments: [{ author: '@ivanov', date: '2026-09-01', text: 'Согласовали объём' }],
+      comments: [{ index: 1, author: '@ivanov', createdAt: '2026-09-01T09:00:00Z', body: 'Согласовали объём' }],
       documentation: ['https://confluence.example/BFT'],
       dependencies: ['PO-12'],
     },
   })
   const task = parseTaskView(payload)
   assert.equal(task.comments.length, 1)
-  assert.equal(task.comments[0].text, 'Согласовали объём')
+  assert.equal(task.comments[0].body, 'Согласовали объём')
+  assert.equal(task.comments[0].createdAt, '2026-09-01T09:00:00Z')
   assert.deepEqual(task.dependencies, ['PO-12'])
 })
 

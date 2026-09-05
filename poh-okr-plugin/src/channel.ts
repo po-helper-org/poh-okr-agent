@@ -10,8 +10,8 @@ import {
   TaskNotFoundError,
 } from './errors.js'
 import type { BacklogReader } from './reader.js'
-import type { Phase } from './model.js'
-import { PHASES } from './model.js'
+import type { Phase, PoTaskKind } from './model.js'
+import { PHASES, PO_TASK_KINDS, SPRINT_COUNT } from './model.js'
 import * as writer from './writer.js'
 
 /** Имя канала. Одна регистрация, подкоманды разбираются внутри. */
@@ -70,6 +70,8 @@ function stringField(payload: unknown, name: string): string | null {
 }
 
 const PHASE_SET: ReadonlySet<string> = new Set(PHASES)
+const KIND_SET: ReadonlySet<string> = new Set(PO_TASK_KINDS)
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /**
  * Разбирает подкоманду канала.
@@ -125,6 +127,143 @@ export async function dispatch(
         if (!title) return fail('bad-request', 'пустое название задачи')
         await reader.write(writer.renameTask(id, title), signal)
         return ok({ id, title })
+      }
+
+      case 'createKr': {
+        const title = stringField(payload, 'title')
+        const objectiveId = stringField(payload, 'objectiveId')
+        if (!title) return fail('bad-request', 'пустое название ключевого результата')
+        if (!objectiveId) return fail('bad-request', 'не передан объектив')
+        await reader.write(
+          writer.createKeyResult({ title, objectiveId, taskType: reader.krTaskType }),
+          signal,
+        )
+        return ok({ created: true })
+      }
+
+      case 'createPoTask': {
+        const title = stringField(payload, 'title')
+        const kind = stringField(payload, 'kind')
+        if (!title) return fail('bad-request', 'пустое название задачи')
+        if (kind !== null && !KIND_SET.has(kind)) {
+          return fail('bad-request', `неизвестная вкладка ${JSON.stringify(kind)}`)
+        }
+        const relatedKrId = stringField(payload, 'relatedKrId')
+        const dueDate = stringField(payload, 'dueDate')
+        await reader.write(
+          writer.createPoTask({
+            title,
+            kind: (kind ?? 'task') as PoTaskKind,
+            taskType: reader.poTaskType,
+            ...(relatedKrId ? { relatedKrId } : {}),
+            ...(dueDate ? { dueDate } : {}),
+          }),
+          signal,
+        )
+        return ok({ created: true })
+      }
+
+      case 'setStatus': {
+        const id = stringField(payload, 'id')
+        const status = stringField(payload, 'status')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (!status) return fail('bad-request', 'не передан статус')
+        await reader.write(writer.setStatus(id, status), signal)
+        return ok({ id, status })
+      }
+
+      case 'setDueDate': {
+        const id = stringField(payload, 'id')
+        const dueDate = stringField(payload, 'dueDate')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (!dueDate || !ISO_DATE_RE.test(dueDate)) {
+          return fail('bad-request', 'дата должна быть в виде ГГГГ-ММ-ДД')
+        }
+        await reader.write(writer.setDueDate(id, dueDate), signal)
+        return ok({ id, dueDate })
+      }
+
+      // Текстовые поля карточки KR. Разные поля Backlog.md — разные подкоманды, чтобы
+      // клиенту не приходилось знать, какое из них куда ложится.
+      case 'setDescription':
+      case 'setPlan': {
+        const id = stringField(payload, 'id')
+        const text = field(payload, 'text')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (typeof text !== 'string') return fail('bad-request', 'не передан текст')
+        const args = endpoint === 'setPlan' ? writer.setPlan(id, text) : writer.setDescription(id, text)
+        await reader.write(args, signal)
+        return ok({ id })
+      }
+
+      case 'setConfluence':
+      case 'setEpicLink': {
+        const id = stringField(payload, 'id')
+        const url = stringField(payload, 'url')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (!url) return fail('bad-request', 'не передана ссылка')
+        const args = endpoint === 'setConfluence' ? writer.setConfluence(id, url) : writer.setEpicLink(id, url)
+        await reader.write(args, signal)
+        return ok({ id, url })
+      }
+
+      // Событие ленты детальной страницы — комментарий задачи: дату и автора проставляет CLI,
+      // своей нумерации и своего хранилища у ленты нет.
+      case 'addEvent': {
+        const id = stringField(payload, 'id')
+        const text = stringField(payload, 'text')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (!text) return fail('bad-request', 'пустой текст события')
+        const author = stringField(payload, 'author')
+        await reader.write(writer.addEvent(id, text, author ?? undefined), signal)
+        return ok({ id })
+      }
+
+      /**
+       * Удаление задачи — архивация, а не стирание файла.
+       * Backlog.md переносит задачу в архив, откуда её можно вернуть; необратимого удаления
+       * из интерфейса доски не предлагаем вовсе.
+       */
+      case 'deleteTask': {
+        const id = stringField(payload, 'id')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        await reader.write(writer.deleteTask(id), signal)
+        return ok({ id })
+      }
+
+      case 'createObjective': {
+        const title = stringField(payload, 'title')
+        if (!title) return fail('bad-request', 'пустое название объектива')
+        const dueDate = stringField(payload, 'dueDate')
+        await reader.write(writer.createObjective(title, dueDate ?? undefined), signal)
+        return ok({ created: true })
+      }
+
+      case 'renameObjective': {
+        const from = stringField(payload, 'from')
+        const to = stringField(payload, 'to')
+        if (!from) return fail('bad-request', 'не передан объектив')
+        if (!to) return fail('bad-request', 'пустое название объектива')
+        await reader.write(writer.renameObjective(from, to), signal)
+        return ok({ from, to })
+      }
+
+      case 'removeObjective': {
+        const id = stringField(payload, 'id')
+        if (!id) return fail('bad-request', 'не передан объектив')
+        await reader.write(writer.removeObjective(id), signal)
+        return ok({ id })
+      }
+
+      case 'setSprintLabels': {
+        const labels = field(payload, 'sprintLabels')
+        if (!Array.isArray(labels)) return fail('bad-request', 'не переданы подписи столбцов')
+        const clean = labels.filter((item): item is string => typeof item === 'string')
+        if (clean.length !== SPRINT_COUNT) {
+          return fail('bad-request', `подписей должно быть ровно ${SPRINT_COUNT}`)
+        }
+        await reader.saveBoardSettings({ sprintLabels: clean }, signal)
+        return ok({ sprintLabels: clean })
       }
 
       default:

@@ -10,9 +10,20 @@ export {
   type RawTask,
   type RawTaskDetail,
 } from './backlog-json.js'
+export { emptyPlan, formatPlan, parsePlan, type PlanBlock, type StageRow } from './plan-block.js'
+export { decodeEvent, encodeEvent, eventTypes, sortEvents, type OkrEvent } from './event-note.js'
+export { groupOf, groupTasks, isoDay, type Group, type GroupKey } from './po-groups.js'
 export { parseMilestoneList, type MilestoneRow } from './parse-milestones.js'
 export {
+  decodeBoardSettings,
+  docBody,
+  encodeBoardSettings,
+  parseDocList,
+  type BoardSettings,
+} from './board-doc.js'
+export {
   kindFromLabels,
+  krIdsFromLabels,
   labelForPhase,
   phaseLabelsOf,
   phasesFromLabels,

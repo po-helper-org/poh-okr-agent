@@ -83,3 +83,10 @@ test('удаление объектива сохраняет привязку з
     ['milestone', 'remove', 'm-2', '--task-handling', 'keep'],
   )
 })
+
+test('связь с KR дублируется меткой ради чтения списком', () => {
+  // `task list --json` зависимостей не отдаёт; панель работы читает именно список.
+  const args = writer.createPoTask({ title: 'Созвон', kind: 'task', taskType: 'potask', relatedKrId: 'PO-30' })
+  assert.ok(args[args.indexOf('--labels') + 1].split(',').includes('okr-kr:PO-30'))
+  assert.ok(args.includes('--dep'))
+})

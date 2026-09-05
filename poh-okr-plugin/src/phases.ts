@@ -1,4 +1,5 @@
 import {
+  KR_LABEL_PREFIX,
   PHASES,
   PHASE_LABEL_PREFIX,
   PO_TASK_LABEL_PREFIX,
@@ -74,4 +75,12 @@ export function kindFromLabels(labels: readonly string[]): PoTaskKind {
     if (kind) return kind
   }
   return 'task'
+}
+
+/** Идентификаторы KR, к которым привязана операционная задача. */
+export function krIdsFromLabels(labels: readonly string[]): string[] {
+  return labels
+    .filter(label => label.startsWith(KR_LABEL_PREFIX))
+    .map(label => label.slice(KR_LABEL_PREFIX.length))
+    .filter(id => id !== '')
 }

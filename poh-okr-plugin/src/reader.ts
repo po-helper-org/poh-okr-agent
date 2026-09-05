@@ -1,3 +1,4 @@
+import { decodeBoardSettings, docBody, encodeBoardSettings, parseDocList, type BoardSettings } from './board-doc.js'
 import { parseMilestoneList, type MilestoneRow } from './parse-milestones.js'
 import {
   parseTaskList,
@@ -14,9 +15,10 @@ import {
   InvalidTaskIdError,
 } from './errors.js'
 import { REQUIRED_BACKLOG_VERSION, type OkrConfig } from './config.js'
-import { defaultSprintLabels, type Board, type KeyResult, type Objective, type PoTask } from './model.js'
-import { kindFromLabels, phasesFromLabels } from './phases.js'
+import { type Board, type KeyResult, type Objective, type PoTask } from './model.js'
+import { kindFromLabels, krIdsFromLabels, phasesFromLabels } from './phases.js'
 import { runCommandWithNode, type RunCommand } from './ports.js'
+import { createBoardDoc as writerCreateBoardDoc, updateBoardDoc as writerUpdateBoardDoc } from './writer.js'
 
 export interface BacklogPorts {
   run: RunCommand
@@ -116,7 +118,7 @@ export class BacklogReader {
     return raw.map(task => ({
       ...toSummary(task),
       kind: kindFromLabels(task.labels),
-      relatedKrIds: [],
+      relatedKrIds: krIdsFromLabels(task.labels),
     }))
   }
 
@@ -132,9 +134,10 @@ export class BacklogReader {
    * заведённая мимо плагина, должна быть видна и её можно будет перетащить в объектив.
    */
   async readBoard(signal?: AbortSignal): Promise<Board> {
-    const [objectives, krs] = await Promise.all([
+    const [objectives, krs, settings] = await Promise.all([
       this.listObjectives(signal),
       this.listKeyResults(signal),
+      this.readBoardSettings(signal),
     ])
 
     const groups = new Map<string, Objective>()
@@ -154,7 +157,7 @@ export class BacklogReader {
       result.push({ id: '', title: 'Без объектива', krs: orphans })
     }
 
-    return { sprintLabels: defaultSprintLabels(), objectives: result }
+    return { sprintLabels: settings.sprintLabels, objectives: result }
   }
 
   async getTask(id: string, signal?: AbortSignal): Promise<RawTaskDetail> {
@@ -162,6 +165,51 @@ export class BacklogReader {
     await this.ensureVersion(signal)
     return parseTaskView(await this.exec(['task', 'view', id, '--json'], signal))
   }
+
+  /**
+   * Идентификатор служебного документа доски. Ищется по заголовку из настройки.
+   * `null` — документа ещё нет; это обычное состояние свежего воркспейса, а не ошибка.
+   */
+  private async findBoardDoc(signal?: AbortSignal): Promise<string | null> {
+    const docs = parseDocList(await this.exec(['doc', 'list', '--plain'], signal))
+    return docs.find(doc => doc.title === this.config.boardDocTitle)?.id ?? null
+  }
+
+  /**
+   * Настройки доски: подписи столбцов.
+   *
+   * Нет документа, пустое тело, битый JSON — умолчания. Доска обязана открыться в любом из
+   * этих случаев: служебный файл мог отредактировать человек, и одна кривая строка не должна
+   * оборачиваться пустым экраном вместо квартала работы.
+   */
+  async readBoardSettings(signal?: AbortSignal): Promise<BoardSettings> {
+    const docId = await this.findBoardDoc(signal)
+    if (docId === null) return decodeBoardSettings('')
+    return decodeBoardSettings(docBody(await this.exec(['doc', 'view', docId, '--plain'], signal)))
+  }
+
+  /**
+   * Записывает подписи столбцов, заводя документ при первой правке.
+   *
+   * Документ создаётся лениво, а не при старте плагина: воркспейс, где доску ни разу не
+   * открывали, не должен обрастать служебными файлами.
+   */
+  async saveBoardSettings(settings: BoardSettings, signal?: AbortSignal): Promise<void> {
+    await this.ensureVersion(signal)
+    let docId = await this.findBoardDoc(signal)
+    if (docId === null) {
+      await this.exec(writerCreateBoardDoc(this.config.boardDocTitle), signal)
+      docId = await this.findBoardDoc(signal)
+      if (docId === null) {
+        throw new BacklogFailedError('doc create', 0, 'документ доски создан, но не найден в списке')
+      }
+    }
+    await this.exec(writerUpdateBoardDoc(docId, encodeBoardSettings(settings)), signal)
+  }
+
+  /** Типы задач нужны каналу, чтобы собирать команды создания. */
+  get krTaskType(): string { return this.config.krTaskType }
+  get poTaskType(): string { return this.config.poTaskType }
 
   /**
    * Выполняет команду записи, построенную в `writer.ts`.

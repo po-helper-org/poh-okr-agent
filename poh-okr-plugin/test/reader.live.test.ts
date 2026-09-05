@@ -54,3 +54,27 @@ test('живой воркспейс: версия CLI годится для де
   const reader = new BacklogReader(loadConfig(process.env))
   await reader.ensureVersion()
 })
+
+test('живой воркспейс: карточка задачи разбирается', async t => {
+  if (!await ready()) {
+    t.skip('нет OKR_WORKSPACE_ROOT или backlog не установлен')
+    return
+  }
+  const reader = new BacklogReader(loadConfig(process.env))
+  const board = await reader.readBoard()
+  const [kr] = board.objectives.flatMap(objective => objective.krs)
+  if (kr === undefined) {
+    // Пустой воркспейс — не ошибка, но и не проверка: говорим об этом вслух.
+    announceSkip()
+    t.skip('в воркспейсе нет ни одного ключевого результата — разбор карточки не проверен')
+    return
+  }
+
+  // Конверт `task view --json` отличается от списка не только именем поля: `kind` равен
+  // «task-view». Разбор списка этого не покрывает, и без отдельной проверки ошибка вылезает
+  // только в интерфейсе.
+  const detail = await reader.getTask(kr.id)
+  assert.equal(detail.id, kr.id)
+  assert.ok(Array.isArray(detail.comments))
+  assert.ok(Array.isArray(detail.documentation))
+})

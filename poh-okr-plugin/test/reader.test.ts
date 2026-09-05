@@ -86,6 +86,7 @@ test('доска раскладывает KR по объективам', async (
   const reader = new BacklogReader(CONFIG, {
     run: fakeRun([
       VERSION_OK,
+      [/doc list/, result(' - \n')],
       [/milestone list/, result('Active milestones (1):\n  m-1: Удержание\n')],
       [/task list/, result(taskList([
         { id: 'PO-30', title: 'KR один', status: 'To Do', type: 'okr', labels: ['okr-phase:s1:dev'], milestone: 'm-1' },
@@ -104,6 +105,7 @@ test('KR без объектива не теряется, а собираетс�
   const reader = new BacklogReader(CONFIG, {
     run: fakeRun([
       VERSION_OK,
+      [/doc list/, result(' - \n')],
       [/milestone list/, result('Active milestones (0):\n  (none)\n')],
       [/task list/, result(taskList([{ id: 'PO-31', title: 'Осиротевший KR', status: 'To Do', type: 'okr' }]))],
     ]),
@@ -119,9 +121,37 @@ test('доска отдаёт шесть подписей столбцов', asy
   const reader = new BacklogReader(CONFIG, {
     run: fakeRun([
       VERSION_OK,
+      [/doc list/, result(' - \n')],
       [/milestone list/, result('Active milestones (0):\n  (none)\n')],
       [/task list/, result(taskList([]))],
     ]),
   })
   assert.equal((await reader.readBoard()).sprintLabels.length, 6)
+})
+
+test('подписи столбцов берутся из служебного документа', async () => {
+  const reader = new BacklogReader(CONFIG, {
+    run: fakeRun([
+      VERSION_OK,
+      [/doc list/, result(' - \ndoc-1 - okr-board\n')],
+      [/doc view/, result('---\nid: doc-1\n---\n{"sprintLabels":["Q3-S1","B","C","D","E","F"]}\n')],
+      [/milestone list/, result('Active milestones (0):\n  (none)\n')],
+      [/task list/, result(taskList([]))],
+    ]),
+  })
+  assert.equal((await reader.readBoard()).sprintLabels[0], 'Q3-S1')
+})
+
+test('без служебного документа доска открывается с умолчаниями', async () => {
+  // Документ заводится лениво, при первой правке подписей: свежий воркспейс не должен
+  // обрастать служебными файлами только оттого, что доску один раз открыли.
+  const reader = new BacklogReader(CONFIG, {
+    run: fakeRun([
+      VERSION_OK,
+      [/doc list/, result(' - \n')],
+      [/milestone list/, result('Active milestones (0):\n  (none)\n')],
+      [/task list/, result(taskList([]))],
+    ]),
+  })
+  assert.deepEqual((await reader.readBoard()).sprintLabels, ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'])
 })

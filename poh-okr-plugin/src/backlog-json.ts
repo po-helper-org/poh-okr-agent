@@ -29,11 +29,18 @@ export interface RawTask {
   acceptanceCriteriaCount: number
 }
 
-/** Комментарий задачи. Служит событием ленты на детальной странице KR. */
+/**
+ * Комментарий задачи. Служит событием ленты на детальной странице KR.
+ *
+ * Имена полей взяты из живого ответа CLI: текст лежит в `body`, отметка времени — в
+ * `createdAt`. Догадка «text/date» выглядела правдоподобно, разбор молча давал пустые
+ * события, и лента писала «событий нет» при записанных комментариях.
+ */
 export interface RawComment {
+  index?: number | null
   author?: string | null
-  date?: string | null
-  text?: string | null
+  createdAt?: string | null
+  body?: string | null
 }
 
 /** Дополнение `RawTask` полями, которые есть только в `task view --json`. */
@@ -80,10 +87,15 @@ function num(source: Record<string, unknown>, key: string): number {
 
 /**
  * Проверяет конверт ответа и достаёт полезную нагрузку.
- * Незнакомая `schemaVersion` — ошибка, а не повод разбирать наугад: разбор чужой схемы
- * даст правдоподобный мусор, который на экране не отличить от настоящих данных.
+ *
+ * Незнакомая `schemaVersion` — ошибка, а не повод разбирать наугад: разбор чужой схемы даст
+ * правдоподобный мусор, который на экране не отличить от настоящих данных.
+ *
+ * Вид ответа и имя поля с данными задаются отдельно и не выводятся друг из друга: у карточки
+ * задачи `kind` равен `task-view`, а данные лежат в поле `task`. Попытка вывести одно из
+ * другого ровно здесь и обошлась ошибкой на живом CLI.
  */
-function unwrap(json: unknown, kind: string): unknown {
+function unwrap(json: unknown, kind: string, field: string): unknown {
   const envelope = asRecord(json, 'ответ')
   const version = envelope['schemaVersion']
   if (version !== SUPPORTED_SCHEMA) {
@@ -94,7 +106,7 @@ function unwrap(json: unknown, kind: string): unknown {
   if (envelope['kind'] !== kind) {
     throw new BacklogSchemaError(`ожидался kind «${kind}», пришёл ${JSON.stringify(envelope['kind'])}`)
   }
-  return envelope[kind === 'task-list' ? 'tasks' : 'task']
+  return envelope[field]
 }
 
 function decodeTask(value: unknown): RawTask {
@@ -121,18 +133,24 @@ function decodeTask(value: unknown): RawTask {
 }
 
 export function parseTaskList(stdout: string): RawTask[] {
-  const payload = unwrap(JSON.parse(stdout), 'task-list')
+  const payload = unwrap(JSON.parse(stdout), 'task-list', 'tasks')
   if (!Array.isArray(payload)) throw new BacklogSchemaError('поле tasks — не массив')
   return payload.map(decodeTask)
 }
 
 export function parseTaskView(stdout: string): RawTaskDetail {
-  const payload = unwrap(JSON.parse(stdout), 'task')
+  const payload = unwrap(JSON.parse(stdout), 'task-view', 'task')
   const raw = asRecord(payload, 'задача')
   const comments = Array.isArray(raw['comments'])
     ? (raw['comments'] as unknown[]).map(item => {
         const c = asRecord(item, 'комментарий')
-        return { author: str(c, 'author'), date: str(c, 'date'), text: str(c, 'text') }
+        const index = c['index']
+        return {
+          index: typeof index === 'number' ? index : null,
+          author: str(c, 'author'),
+          createdAt: str(c, 'createdAt'),
+          body: str(c, 'body'),
+        }
       })
     : []
 

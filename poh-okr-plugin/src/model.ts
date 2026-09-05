@@ -59,6 +59,21 @@ export function poTaskLabel(kind: PoTaskKind): string {
   return `${PO_TASK_LABEL_PREFIX}${kind}`
 }
 
+/**
+ * Метка связи операционной задачи с ключевым результатом: `okr-kr:PO-30`.
+ *
+ * Дублирует зависимость `--dep`, и это осознанно. Смысловая связь — именно зависимость: она
+ * видна в самом Backlog.md и участвует в его графе готовности. Но `task list --json` зависимостей
+ * не отдаёт, только `task view`, — а панель работы показывает десятки задач сразу, и карточка на
+ * каждую превратила бы открытие панели в десятки запусков CLI. Метки в списке есть, поэтому
+ * связь дублируется меткой ради чтения списком.
+ */
+export const KR_LABEL_PREFIX = 'okr-kr:'
+
+export function krLabel(krId: string): string {
+  return `${KR_LABEL_PREFIX}${krId}`
+}
+
 export type Priority = 'high' | 'medium' | 'low'
 
 /** Строка списка: всё, что видно без открытия задачи. */
