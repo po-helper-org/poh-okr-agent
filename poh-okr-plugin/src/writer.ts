@@ -1,5 +1,14 @@
 import { InvalidMilestoneIdError, InvalidTaskIdError, SprintOutOfRangeError } from './errors.js'
-import { SPRINT_COUNT, krLabel, poTaskLabel, type Phase, type PoTaskKind, type Priority } from './model.js'
+import {
+  KR_LABEL_PREFIX,
+  PO_TASK_LABEL_PREFIX,
+  SPRINT_COUNT,
+  krLabel,
+  poTaskLabel,
+  type Phase,
+  type PoTaskKind,
+  type Priority,
+} from './model.js'
 import { labelForPhase, phaseLabelsOf } from './phases.js'
 
 /**
@@ -201,4 +210,58 @@ export function setEpicLink(id: string, url: string): BacklogArgs {
 /** Плановые спринты и ресурсы по стадиям: блок плагина в поле «План реализации». */
 export function setPlan(id: string, text: string): BacklogArgs {
   return ['task', 'edit', taskId(id), '--plan', text]
+}
+
+/**
+ * Смена типа записи — она же смена лейбла.
+ *
+ * Как и у фаз доски: снимаются все метки вида, а не только ожидаемая старая. Метки могли
+ * править мимо плагина, и уцелевший дубликат пережил бы правку — запись осталась бы разом
+ * и задачей, и риском, попав сразу на две вкладки.
+ *
+ * `null` — снять тип вовсе; тогда запись показывается на вкладке задач как безымянная.
+ * Возвращает `null`, если менять нечего.
+ */
+export function setKind(
+  id: string,
+  currentLabels: readonly string[],
+  kind: PoTaskKind | null,
+): BacklogArgs | null {
+  const next = kind === null ? null : poTaskLabel(kind)
+  const stale = currentLabels.filter(
+    label => label.startsWith(PO_TASK_LABEL_PREFIX) && label !== next,
+  )
+  if (stale.length === 0 && (next === null || currentLabels.includes(next))) return null
+
+  const args = ['task', 'edit', taskId(id)]
+  if (stale.length > 0) args.push('--remove-label', stale.join(','))
+  if (next !== null && !currentLabels.includes(next)) args.push('--add-label', next)
+  return args
+}
+
+/**
+ * Смена привязки к ключевому результату.
+ *
+ * Метка и зависимость правятся одной командой: они описывают одно и то же отношение, и
+ * разъехавшись, они дали бы задачу, которая в списке привязана к одному KR, а в графе
+ * готовности Backlog.md — к другому.
+ *
+ * `null` — снять привязку. `--dep` с пустым значением очищает список зависимостей.
+ */
+export function setKr(
+  id: string,
+  currentLabels: readonly string[],
+  krId: string | null,
+): BacklogArgs | null {
+  const next = krId === null ? null : krLabel(taskId(krId))
+  const stale = currentLabels.filter(
+    label => label.startsWith(KR_LABEL_PREFIX) && label !== next,
+  )
+  if (stale.length === 0 && (next === null || currentLabels.includes(next))) return null
+
+  const args = ['task', 'edit', taskId(id)]
+  if (stale.length > 0) args.push('--remove-label', stale.join(','))
+  if (next !== null && !currentLabels.includes(next)) args.push('--add-label', next)
+  args.push('--dep', krId === null ? '' : taskId(krId))
+  return args
 }

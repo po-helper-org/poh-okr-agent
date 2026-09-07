@@ -171,6 +171,31 @@ export async function dispatch(
         return ok({ id })
       }
 
+      // Смена типа и привязки к KR: текущие метки приходят от клиента — он их уже знает
+      // из списка, и лишняя карточка на каждый клик замедлила бы панель.
+      case 'setKind':
+      case 'setKr': {
+        const id = stringField(payload, 'id')
+        const labels = field(payload, 'labels')
+        const value = field(payload, 'value')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (!Array.isArray(labels)) return fail('bad-request', 'не переданы текущие метки задачи')
+        if (value !== null && typeof value !== 'string') {
+          return fail('bad-request', 'значение должно быть строкой или null')
+        }
+        if (endpoint === 'setKind' && value !== null && !KIND_SET.has(value)) {
+          return fail('bad-request', `неизвестный тип ${JSON.stringify(value)}`)
+        }
+
+        const current = labels.filter((item): item is string => typeof item === 'string')
+        const args = endpoint === 'setKind'
+          ? writer.setKind(id, current, value as PoTaskKind | null)
+          : writer.setKr(id, current, value)
+        // `null` — менять нечего: запись уже в нужном состоянии. Это успех, а не ошибка.
+        if (args) await reader.write(args, signal)
+        return ok({ changed: args !== null })
+      }
+
       case 'setStatus': {
         const id = stringField(payload, 'id')
         const status = stringField(payload, 'status')

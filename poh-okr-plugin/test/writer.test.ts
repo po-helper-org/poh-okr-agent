@@ -106,3 +106,45 @@ test('невыбранный приоритет не подставляется 
   const args = writer.createPoTask({ title: 'Задача', kind: 'task', taskType: 'potask' })
   assert.ok(!args.includes('--priority'))
 })
+
+test('смена типа снимает старую метку вида и ставит новую', () => {
+  const args = writer.setKind('PO-25', ['okr-kind:task', 'okr-kr:PO-40'], 'risk')
+  assert.deepEqual(args, [
+    'task', 'edit', 'PO-25', '--remove-label', 'okr-kind:task', '--add-label', 'okr-kind:risk',
+  ])
+})
+
+test('дубликаты меток вида снимаются целиком', () => {
+  // Уцелевший дубликат сделал бы запись разом задачей и риском — она попала бы на две вкладки.
+  const args = writer.setKind('PO-25', ['okr-kind:task', 'okr-kind:control'], 'risk')!
+  const removed = args[args.indexOf('--remove-label') + 1].split(',').sort()
+  assert.deepEqual(removed, ['okr-kind:control', 'okr-kind:task'])
+})
+
+test('тип уже нужный — команды нет', () => {
+  assert.equal(writer.setKind('PO-25', ['okr-kind:risk'], 'risk'), null)
+})
+
+test('привязка к KR правит метку и зависимость одной командой', () => {
+  // Разъехавшись, они дали бы задачу, привязанную в списке к одному KR, а в графе
+  // готовности Backlog.md — к другому.
+  const args = writer.setKr('PO-25', ['okr-kr:PO-40'], 'PO-42')
+  assert.deepEqual(args, [
+    'task', 'edit', 'PO-25', '--remove-label', 'okr-kr:PO-40', '--add-label', 'okr-kr:PO-42',
+    '--dep', 'PO-42',
+  ])
+})
+
+test('снятие привязки очищает и метку, и зависимость', () => {
+  const args = writer.setKr('PO-25', ['okr-kr:PO-40'], null)
+  assert.deepEqual(args, ['task', 'edit', 'PO-25', '--remove-label', 'okr-kr:PO-40', '--dep', ''])
+})
+
+test('чужие метки при смене типа и привязки не трогаются', () => {
+  const labels = ['okr-kind:task', 'okr-kr:PO-40', 'bft-needed', 'okr-phase:s1:dev']
+  for (const args of [writer.setKind('PO-25', labels, 'risk'), writer.setKr('PO-25', labels, 'PO-42')]) {
+    const joined = args!.join(' ')
+    assert.ok(!joined.includes('bft-needed'))
+    assert.ok(!joined.includes('okr-phase'))
+  }
+})
