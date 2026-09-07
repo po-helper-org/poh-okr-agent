@@ -62,6 +62,11 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | 7 | `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
 | 8 | `/okr-validate <path>` | Validator | структурный отчёт линтера |
 
+У каждой команды есть одноимённый навык в `skills/`: команда — точка входа с
+форматом вызова и отчёта, процесс живёт в `skills/<команда>/SKILL.md`. Так
+пайплайн доступен и там, где слэш-команд нет, а есть только каталог навыков —
+например в DeepSeek Harness, куда его подключает `poh-okr-plugin`.
+
 STOP-пауза после каждой — PO подтверждает переход. Полный workflow:
 `/okr-index → /okr-context → /okr-draft → /okr-debate → /okr-roadmap → /okr-decompose → /okr-plan-deck → /okr-equator`
 
