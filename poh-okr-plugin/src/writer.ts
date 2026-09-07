@@ -265,3 +265,8 @@ export function setKr(
   args.push('--dep', krId === null ? '' : taskId(krId))
   return args
 }
+
+/** Приоритет существующей задачи. У Backlog.md нет значения «никакой» — только три уровня. */
+export function setPriority(id: string, priority: Priority): BacklogArgs {
+  return ['task', 'edit', taskId(id), '--priority', priority]
+}

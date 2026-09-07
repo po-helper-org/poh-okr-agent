@@ -13,6 +13,16 @@ export {
 export { emptyPlan, formatPlan, parsePlan, type PlanBlock, type StageRow } from './plan-block.js'
 export { decodeEvent, encodeEvent, eventTypes, sortEvents, type OkrEvent } from './event-note.js'
 export { groupOf, groupTasks, isoDay, type Group, type GroupKey } from './po-groups.js'
+export {
+  BLOCK_TYPES,
+  CONTINUING,
+  formatBlock,
+  formatBlocks,
+  parseBlocks,
+  parseLine,
+  type Block,
+  type BlockType,
+} from './markdown-blocks.js'
 export { parseCreatedId } from './parse-created.js'
 export { parseMilestoneList, type MilestoneRow } from './parse-milestones.js'
 export {

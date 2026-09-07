@@ -26,6 +26,7 @@ export const ru = {
   dateTomorrow: 'Завтра',
   dateWeek: 'Через неделю',
   dateNone: 'Без срока',
+  dateYesterday: 'Вчера',
   // Названия по умолчанию для только что заведённых записей. Отдельно от подписей
   // кнопок: подпись кнопки в качестве названия задачи читается как ошибка.
   newTask: 'Новая задача',
@@ -98,6 +99,27 @@ export const ru = {
 
   taskContext: 'Контекст по задаче…',
   taskSource: 'Источник',
+
+  // Календарь
+  monthJan: 'Январь', monthFeb: 'Февраль', monthMar: 'Март', monthApr: 'Апрель',
+  monthMay: 'Май', monthJun: 'Июнь', monthJul: 'Июль', monthAug: 'Август',
+  monthSep: 'Сентябрь', monthOct: 'Октябрь', monthNov: 'Ноябрь', monthDec: 'Декабрь',
+  dowMon: 'Пн', dowTue: 'Вт', dowWed: 'Ср', dowThu: 'Чт', dowFri: 'Пт',
+  dowSat: 'Сб', dowSun: 'Вс',
+  monthPrev: 'Предыдущий месяц',
+  monthNext: 'Следующий месяц',
+  clear: 'Очистить',
+  done: 'Готово',
+
+  // Быстрый ввод и карточка
+  composerCollapsed: 'Добавить задачу',
+  composerTitle: 'Название задачи',
+  fieldKind: 'Тип',
+  fieldKr: 'Ключевой результат',
+  krNone: 'Без привязки',
+  more: 'Ещё',
+  blockNumbered2: 'Нумерованный список',
+  editorPlaceholder: 'Текст, «/» — команды',
 } as const
 
 export type OkrLocaleKey = keyof typeof ru

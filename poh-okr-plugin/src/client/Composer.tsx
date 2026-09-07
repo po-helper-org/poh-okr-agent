@@ -1,36 +1,41 @@
 /**
  * Быстрый ввод задачи — постоянная строка вверху панели.
  *
- * Поведение взято из todo-приложений, где заведение задачи стоит одного нажатия:
- * набранный текст по умолчанию идёт в название, Shift+Enter открывает вторую строку под
- * описание, Enter заводит задачу. Команда «/» открывает меню свойств, «!» — сразу приоритет.
+ * По умолчанию одна строка: набранное идёт в название, Enter заводит задачу. Расширенный
+ * режим со вторым полем и рядом свойств открывается только по Shift+Enter — раскрытие по
+ * фокусу заставляло панель прыгать от случайного клика мимо списка.
  *
- * Свойства ограничены тем, что умеет Backlog.md: срок и приоритет. Вложений, шаблонов и
- * превращения в заметку в нём нет, и предлагать их в меню — обещать несуществующее.
- * Список задавать не нужно: им служит активная вкладка панели.
+ * Команды: «/» открывает меню свойств, «!» — сразу приоритет. Символ команды убирается из
+ * текста, он служил только вызовом меню.
  */
-import { useEffect, useRef, useState } from 'react'
-import { Button, IconPlusOutline16, Menu, StateDot, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { Priority } from '../model.js'
-import { isoDay } from '../po-groups.js'
+import { useRef, useState } from 'react'
+import type { KeyResult, Priority, PoTaskKind } from '../model.js'
+import { PO_TASK_KINDS } from '../model.js'
+import { Icon, PriorityFlag } from './icons.js'
 import type { OkrLocaleKey } from './locales.js'
-import { classNames as css } from './styles.js'
+import { Popover, PopoverItem } from './Popover.js'
+import { Calendar } from './Calendar.js'
+import { classNames as css, dueLabel } from './styles.js'
 
 export interface ComposerDraft {
   title: string
   description: string
   dueDate: string | null
   priority: Priority | null
+  kind: PoTaskKind | null
+  krId: string | null
 }
 
 export interface ComposerProps {
   t: (key: OkrLocaleKey) => string
-  /** Заводит задачу. Строка очищается только после успешной отправки в канал. */
+  /** Вкладка панели: она же тип по умолчанию. */
+  tab: PoTaskKind
+  /** Ключевые результаты доски — из них наполняется меню привязки. */
+  krs: KeyResult[]
   onSubmit: (draft: ComposerDraft) => void
 }
 
-/** Что сейчас открыто поверх строки ввода. */
-type OpenMenu = 'commands' | 'priority' | 'date' | null
+type OpenMenu = 'commands' | 'priority' | 'date' | 'kind' | 'kr' | null
 
 const PRIORITIES: ReadonlyArray<{ id: Priority | 'none'; key: OkrLocaleKey }> = [
   { id: 'high', key: 'priorityHigh' },
@@ -39,186 +44,258 @@ const PRIORITIES: ReadonlyArray<{ id: Priority | 'none'; key: OkrLocaleKey }> = 
   { id: 'none', key: 'priorityNone' },
 ]
 
-/** Сдвиг от сегодняшнего дня в днях. `null` — снять срок. */
-const DATES: ReadonlyArray<{ id: string; key: OkrLocaleKey; days: number | null }> = [
-  { id: 'today', key: 'dateToday', days: 0 },
-  { id: 'tomorrow', key: 'dateTomorrow', days: 1 },
-  { id: 'week', key: 'dateWeek', days: 7 },
-  { id: 'none', key: 'dateNone', days: null },
-]
-
-function shift(days: number): string {
-  const now = new Date()
-  return isoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + days))
+const KIND_LABEL: Readonly<Record<PoTaskKind, OkrLocaleKey>> = {
+  task: 'tabTasks',
+  control: 'tabControl',
+  risk: 'tabRisks',
 }
 
-/** `2026-09-19` → `19.09`. Год в строке ввода только шумит. */
-function shortDate(iso: string): string {
-  const [, month, day] = iso.split('-')
-  return month === undefined || day === undefined ? iso : `${day}.${month}`
+const EMPTY: ComposerDraft = {
+  title: '', description: '', dueDate: null, priority: null, kind: null, krId: null,
 }
 
-export function Composer({ t, onSubmit }: ComposerProps) {
+export function Composer({ t, tab, krs, onSubmit }: ComposerProps) {
   const titleRef = useRef<HTMLInputElement>(null)
-  const descriptionRef = useRef<HTMLTextAreaElement>(null)
-  const boxRef = useRef<HTMLDivElement>(null)
-  /** Позиция символа-команды в названии: при выборе пункта его надо убрать из текста. */
+  const anchorRef = useRef<HTMLElement | null>(null)
+  /** Позиция символа команды: при выборе пункта его надо убрать из названия. */
   const triggerAt = useRef<number | null>(null)
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [showDescription, setShowDescription] = useState(false)
-  const [dueDate, setDueDate] = useState<string | null>(null)
-  const [priority, setPriority] = useState<Priority | null>(null)
+  const [draft, setDraft] = useState<ComposerDraft>(EMPTY)
+  const [open, setOpen] = useState(false)
   const [menu, setMenu] = useState<OpenMenu>(null)
 
-  useEffect(() => {
-    if (showDescription) descriptionRef.current?.focus()
-  }, [showDescription])
+  const kind = draft.kind ?? tab
+  const anchorRect = () => anchorRef.current?.getBoundingClientRect() ?? null
 
-  const reset = () => {
-    setTitle('')
-    setDescription('')
-    setShowDescription(false)
-    setDueDate(null)
-    setPriority(null)
-    setMenu(null)
-    triggerAt.current = null
-  }
+  const closeMenu = () => { setMenu(null) }
 
-  const submit = () => {
-    if (title.trim() === '') return
-    onSubmit({ title: title.trim(), description: description.trim(), dueDate, priority })
-    reset()
-    titleRef.current?.focus()
-  }
-
-  /** Убирает символ команды из названия — он служил только для вызова меню. */
+  /** Убирает символ команды из названия. */
   const dropTrigger = () => {
     const at = triggerAt.current
     triggerAt.current = null
     if (at === null) return
-    setTitle(current => (current[at] === '/' || current[at] === '!'
-      ? current.slice(0, at) + current.slice(at + 1)
-      : current))
+    setDraft(current => {
+      const symbol = current.title[at]
+      if (symbol !== '/' && symbol !== '!') return current
+      return { ...current, title: current.title.slice(0, at) + current.title.slice(at + 1) }
+    })
   }
 
-  const onTitleChange = (next: string) => {
-    // Команда распознаётся по только что набранному символу, а не поиском по всей строке:
-    // «/» и «!» — обычные знаки, и в середине текста они ничего открывать не должны.
-    if (next.length === title.length + 1) {
-      const at = next.length - 1
-      const typed = next[at]
-      const before = at === 0 ? ' ' : next[at - 1]
-      const atWordStart = before === ' ' || before === undefined
-      if (typed === '/' && atWordStart) { triggerAt.current = at; setMenu('commands') }
-      else if (typed === '!' && atWordStart) { triggerAt.current = at; setMenu('priority') }
-    }
-    setTitle(next)
+  const reset = () => {
+    setDraft(EMPTY)
+    setOpen(false)
+    triggerAt.current = null
+    setMenu(null)
   }
 
-  const commandItems: MenuEntry[] = [
-    { id: 'date', label: t('fieldDue') },
-    { id: 'priority', label: t('fieldPriority') },
-  ]
-
-  const priorityItems: MenuEntry[] = PRIORITIES.map(item => ({
-    id: item.id,
-    label: t(item.key),
-    icon: item.id === 'none' ? undefined : <StateDot state={item.id === 'high' ? 'error' : 'warning'} />,
-  }))
-
-  const dateItems: MenuEntry[] = DATES.map(item => ({ id: item.id, label: t(item.key) }))
-
-  const onSelect = (id: string) => {
-    if (menu === 'commands') {
-      dropTrigger()
-      setMenu(id === 'date' ? 'date' : 'priority')
-      return
-    }
-    if (menu === 'priority') {
-      setPriority(id === 'none' ? null : (id as Priority))
-    } else if (menu === 'date') {
-      const found = DATES.find(item => item.id === id)
-      setDueDate(found === undefined || found.days === null ? null : shift(found.days))
-    }
-    dropTrigger()
+  const submit = () => {
+    if (draft.title.trim() === '') return
+    onSubmit({ ...draft, title: draft.title.trim(), description: draft.description.trim() })
+    // Расширенный режим не схлопывается после отправки: заводя несколько задач подряд,
+    // человек продолжает пользоваться теми же свойствами.
+    setDraft(EMPTY)
+    triggerAt.current = null
     setMenu(null)
     titleRef.current?.focus()
   }
 
-  const items = menu === 'commands' ? commandItems : menu === 'priority' ? priorityItems : dateItems
+  const onTitleChange = (next: string, caret: number) => {
+    // Команда распознаётся по только что набранному символу в начале слова: «/» и «!» —
+    // обычные знаки, и в середине текста они ничего открывать не должны.
+    if (next.length === draft.title.length + 1) {
+      const at = caret - 1
+      const typed = next[at]
+      const before = at === 0 ? ' ' : next[at - 1]
+      if ((typed === '/' || typed === '!') && (before === ' ' || before === undefined)) {
+        triggerAt.current = at
+        anchorRef.current = titleRef.current
+        setMenu(typed === '!' ? 'priority' : 'commands')
+      }
+    }
+    setDraft(current => ({ ...current, title: next }))
+  }
+
+  const openFrom = (event: { currentTarget: HTMLElement }, next: OpenMenu) => {
+    anchorRef.current = event.currentTarget
+    setMenu(next)
+  }
+
+  const titleInput = (
+    <input
+      ref={titleRef}
+      className={css.composerTitle}
+      autoComplete="off"
+      placeholder={open ? t('composerTitle') : t('composerCollapsed')}
+      value={draft.title}
+      onChange={event => { onTitleChange(event.target.value, event.target.selectionStart ?? event.target.value.length) }}
+      onKeyDown={event => {
+        if (event.key === 'Enter' && event.shiftKey) {
+          // Единственный вход в расширенный режим.
+          event.preventDefault()
+          setOpen(true)
+          return
+        }
+        if (event.key === 'Enter') { event.preventDefault(); submit() }
+        if (event.key === 'Escape' && menu === null) { event.preventDefault(); reset() }
+      }}
+    />
+  )
+
+  const dateButton = (
+    <button
+      type="button"
+      className={css.dateBtn}
+      data-set={draft.dueDate !== null || undefined}
+      onClick={event => { openFrom(event, 'date') }}
+    >
+      <Icon name="calendar" size={15} />
+      {draft.dueDate === null ? t('fieldDue') : dueLabel(draft.dueDate, t)}
+    </button>
+  )
 
   return (
-    <div className={css.composer} ref={boxRef} data-active={title !== '' || showDescription || undefined}>
-      <input
-        ref={titleRef}
-        className={css.composerTitle}
-        placeholder={t('composerPlaceholder')}
-        value={title}
-        onChange={event => { onTitleChange(event.target.value) }}
-        onKeyDown={event => {
-          if (event.key === 'Enter' && event.shiftKey) {
-            // Shift+Enter уводит во вторую строку, а не переносит строку в названии:
-            // название однострочное по смыслу.
-            event.preventDefault()
-            setShowDescription(true)
-            return
-          }
-          if (event.key === 'Enter') { event.preventDefault(); submit() }
-          if (event.key === 'Escape' && menu === null) { event.preventDefault(); reset() }
-        }}
-      />
-
-      {showDescription && (
-        <textarea
-          ref={descriptionRef}
-          className={css.composerDescription}
-          placeholder={t('composerDescription')}
-          value={description}
-          onChange={event => { setDescription(event.target.value) }}
-          onKeyDown={event => {
-            // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit() }
-            if (event.key === 'Escape') { event.preventDefault(); titleRef.current?.focus() }
-          }}
-        />
+    <div className={css.composer} data-open={open || undefined}>
+      {open ? titleInput : (
+        <div className={css.composerLine}>
+          <span style={{ color: 'var(--dsw-alias-label-caption)', display: 'flex' }}>
+            <Icon name="calendar" size={0} />
+          </span>
+          {titleInput}
+          {dateButton}
+          <span style={{ color: 'var(--dsw-alias-label-caption)', display: 'flex' }}>
+            <Icon name="chevronDown" size={15} />
+          </span>
+        </div>
       )}
 
-      <div className={css.composerFoot}>
-        <Menu
-          open={menu !== null}
-          portal
-          getAnchorRect={() => boxRef.current?.getBoundingClientRect() ?? null}
-          anchor={
-            <button type="button" className={css.composerChip} onClick={() => { setMenu('date') }}>
-              {dueDate === null ? t('fieldDue') : shortDate(dueDate)}
-            </button>
-          }
-          items={items}
-          onSelect={onSelect}
-          onClose={() => { setMenu(null); dropTrigger() }}
-        />
+      {open && (
+        <>
+          <textarea
+            className={css.composerDescription}
+            placeholder={t('composerDescription')}
+            value={draft.description}
+            rows={1}
+            onChange={event => {
+              const node = event.target
+              setDraft(current => ({ ...current, description: node.value }))
+              node.style.height = 'auto'
+              node.style.height = `${node.scrollHeight}px`
+            }}
+            onKeyDown={event => {
+              // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit() }
+              if (event.key === 'Escape') { event.preventDefault(); titleRef.current?.focus() }
+            }}
+          />
 
-        <button type="button" className={css.composerChip} onClick={() => { setMenu('priority') }}>
-          {priority === null
-            ? t('fieldPriority')
-            : <>
-                <StateDot state={priority === 'high' ? 'error' : 'warning'} />
-                {t(priority === 'high' ? 'priorityHigh' : priority === 'medium' ? 'priorityMedium' : 'priorityLow')}
-              </>}
-        </button>
+          <div className={css.composerLine}>
+            <div className={css.composerTools}>
+              {dateButton}
+              <button
+                type="button"
+                className={css.iconButton}
+                title={t('fieldPriority')}
+                data-on={draft.priority !== null || undefined}
+                onClick={event => { openFrom(event, 'priority') }}
+              ><PriorityFlag priority={draft.priority} size={16} /></button>
+              {/* Ящик — привязка к ключевому результату: операционная задача помогает его достичь. */}
+              <button
+                type="button"
+                className={css.iconButton}
+                title={t('fieldKr')}
+                data-on={draft.krId !== null || undefined}
+                onClick={event => { openFrom(event, 'kr') }}
+              ><Icon name="inbox" /></button>
+              {/* Лейбл — тип записи: задача, договорённость или риск. */}
+              <button
+                type="button"
+                className={css.iconButton}
+                title={`${t('fieldKind')}: ${t(KIND_LABEL[kind])}`}
+                data-on={draft.kind !== null || undefined}
+                onClick={event => { openFrom(event, 'kind') }}
+              ><Icon name="tag" /></button>
+              <button type="button" className={css.iconButton} title={t('more')}>
+                <Icon name="dots" />
+              </button>
+            </div>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              className={css.addBtn}
+              disabled={draft.title.trim() === ''}
+              onClick={submit}
+            >{t('addTask')}</button>
+          </div>
+        </>
+      )}
 
-        <span style={{ flex: 1 }} />
-        <span className={css.composerHint}>{t('composerHint')}</span>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<IconPlusOutline16 />}
-          disabled={title.trim() === ''}
-          onClick={submit}
-        >{t('addTask')}</Button>
-      </div>
+      {menu !== null && (
+        <Popover anchor={anchorRect} onClose={() => { dropTrigger(); closeMenu() }}>
+          {menu === 'commands' && (
+            <>
+              <PopoverItem glyph={<Icon name="calendar" size={15} />} label={t('fieldDue')}
+                onSelect={() => { dropTrigger(); setMenu('date') }} />
+              <PopoverItem glyph={<PriorityFlag priority={null} size={15} />} label={t('fieldPriority')}
+                onSelect={() => { dropTrigger(); setMenu('priority') }} />
+              <PopoverItem glyph={<Icon name="inbox" size={15} />} label={t('fieldKr')}
+                onSelect={() => { dropTrigger(); setMenu('kr') }} />
+              <PopoverItem glyph={<Icon name="tag" size={15} />} label={t('fieldKind')}
+                onSelect={() => { dropTrigger(); setMenu('kind') }} />
+            </>
+          )}
+
+          {menu === 'priority' && PRIORITIES.map(item => (
+            <PopoverItem
+              key={item.id ?? 'none'}
+              glyph={item.id === 'none' ? <Icon name="ban" size={15} /> : <PriorityFlag priority={item.id} size={15} />}
+              label={t(item.key)}
+              onSelect={() => {
+                setDraft(current => ({ ...current, priority: item.id === 'none' ? null : item.id as Priority }))
+                dropTrigger(); closeMenu()
+              }}
+            />
+          ))}
+
+          {menu === 'kind' && PO_TASK_KINDS.map(item => (
+            <PopoverItem
+              key={item}
+              glyph={<Icon name="tag" size={15} />}
+              label={t(KIND_LABEL[item])}
+              onSelect={() => {
+                setDraft(current => ({ ...current, kind: item }))
+                dropTrigger(); closeMenu()
+              }}
+            />
+          ))}
+
+          {menu === 'kr' && (
+            <>
+              <PopoverItem glyph={<Icon name="ban" size={15} />} label={t('krNone')}
+                onSelect={() => { setDraft(current => ({ ...current, krId: null })); dropTrigger(); closeMenu() }} />
+              {krs.map(kr => (
+                <PopoverItem
+                  key={kr.id}
+                  glyph={<Icon name="inbox" size={15} />}
+                  label={kr.title}
+                  sub={kr.id}
+                  onSelect={() => { setDraft(current => ({ ...current, krId: kr.id })); dropTrigger(); closeMenu() }}
+                />
+              ))}
+            </>
+          )}
+
+          {menu === 'date' && (
+            <Calendar
+              value={draft.dueDate}
+              t={t}
+              onPick={value => {
+                setDraft(current => ({ ...current, dueDate: value }))
+                dropTrigger(); closeMenu()
+              }}
+            />
+          )}
+        </Popover>
+      )}
     </div>
   )
 }

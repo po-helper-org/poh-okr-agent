@@ -5,27 +5,32 @@
  * `potask`, а не отдельный тип и не отдельное хранилище. Секции внутри вкладки считаются из
  * срока и статуса (см. `po-groups.ts`).
  *
- * Здесь же живёт маршрутизация раздела: доска открывается только отсюда (требование N-03),
+ * Здесь же маршрутизация раздела: доска открывается только отсюда (требование N-03),
  * детальная страница — из сайдбара ключевого результата, и возврат с неё ведёт на доску,
  * а не в панель (требование G-05).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsStore } from '@deepseek-ai/dsh-client-store'
-import {
-  Button, IconPlusOutline16, IconCloseOutline16, IconRefreshOutline16, Pill, StateDot,
-} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { poTaskLabel, type Board as BoardModel, type KeyResult, type PoTask, type PoTaskKind } from '../model.js'
+import {
+  poTaskLabel,
+  type Board as BoardModel,
+  type KeyResult,
+  type PoTask,
+  type PoTaskKind,
+  type Priority,
+} from '../model.js'
 import type { RawTaskDetail } from '../backlog-json.js'
 import { groupTasks, isoDay, type GroupKey } from '../po-groups.js'
 import { Board } from './Board.js'
 import { Composer, type ComposerDraft } from './Composer.js'
 import { DetailPage } from './DetailPage.js'
 import { KrSidebar } from './KrSidebar.js'
-import { TaskPopup } from './TaskPopup.js'
+import { TaskSheet } from './TaskSheet.js'
+import { Icon, PriorityFlag } from './icons.js'
 import type { OkrLocaleKey } from './locales.js'
 import type { PanelStoreHandle } from './index.js'
-import { classNames as css } from './styles.js'
+import { classNames as css, dueLabel } from './styles.js'
 import { unwrap, type CallOkr } from './rpc.js'
 
 export interface OkrPanelInjected {
@@ -60,19 +65,14 @@ type Route =
   | { view: 'board' }
   | { view: 'detail'; kr: KeyResult; objectiveTitle: string; detail: RawTaskDetail }
 
-/** `2026-09-19` → `19.09`. Год не показываем: в панели задач он почти всегда текущий. */
-function formatDue(iso: string): string {
-  const [year, month, day] = iso.split('-')
-  if (year === undefined || month === undefined || day === undefined) return iso
-  return `${day}.${month}`
-}
-
 type Load<T> =
   | { phase: 'loading' }
   | { phase: 'ready'; value: T }
   | { phase: 'error'; message: string }
 
-// Грань `inject` фреймворк раскладывает прямо в пропсы, а не кладёт объектом.
+const PANEL_WIDTH_KEY = 'okr-panel-width'
+const MIN_PANEL = 340
+
 export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrPanelProps) {
   const open = useStore(state => state.open)
 
@@ -81,39 +81,83 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   const [tasks, setTasks] = useState<Load<PoTask[]>>({ phase: 'loading' })
   const [board, setBoard] = useState<Load<BoardModel>>({ phase: 'loading' })
   const [openKr, setOpenKr] = useState<{ kr: KeyResult; objectiveTitle: string } | null>(null)
-  /**
-   * Открытая карточка задачи. `content: null` — описание ещё грузится.
-   *
-   * Попап нельзя открывать с пустым контекстом до загрузки: сохранение по уходу фокуса
-   * записало бы эту пустоту поверх существующего описания задачи.
-   */
-  const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null; justCreated: boolean } | null>(null)
+  const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null } | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+
   /**
    * Счётчик и обещания идентификаторов для записей, заведённых оптимистично.
    *
-   * Новая задача появляется в списке и открывается сразу, до ответа CLI, — иначе между
-   * нажатием и карточкой проходят секунды на запуск процесса. До ответа настоящего
-   * идентификатора нет, и правки такой записи некуда отправлять: временный идентификатор
-   * CLI отвергнет. Поэтому каждая оптимистичная запись несёт обещание своего настоящего
-   * идентификатора, а правки дожидаются его — счёт идёт на доли секунды, и человек этого
-   * не замечает.
+   * Новая задача появляется в списке сразу, до ответа CLI, — иначе между нажатием и
+   * строкой проходят секунды на запуск процесса. До ответа настоящего идентификатора нет,
+   * и правки такой записи некуда отправлять: временный идентификатор CLI отвергнет. Поэтому
+   * каждая оптимистичная запись несёт обещание своего идентификатора, а правки его ждут.
    */
-  /** Причина последней неудавшейся правки. Список при этом остаётся на экране. */
-  const [error, setError] = useState<string | null>(null)
   const tempCounter = useRef(0)
   const pendingIds = useRef(new Map<string, Promise<string>>())
+  const panelRef = useRef<HTMLElement>(null)
+  const gripRef = useRef<HTMLDivElement>(null)
+
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(PANEL_WIDTH_KEY))
+      return Number.isFinite(stored) && stored >= MIN_PANEL ? stored : 420
+    } catch {
+      // Приватное окно или запрет на хранилище — ширина по умолчанию, а не отказ открыться.
+      return 420
+    }
+  })
 
   const reload = useCallback(() => { setReloadToken(token => token + 1) }, [])
 
+  // Сайдбар задачи встаёт слева от панели и должен знать её ширину. Переменная на корне —
+  // единственный способ отдать её туда, не протаскивая через все промежуточные компоненты.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--okr-panel-width', `${panelWidth}px`)
+  }, [panelWidth])
+
+  useEffect(() => {
+    const grip = gripRef.current
+    if (grip === null || !open) return
+    let startX = 0
+    let startWidth = 0
+
+    const onMove = (event: PointerEvent) => {
+      // Панель прижата к правому краю: движение влево делает её шире.
+      setPanelWidth(Math.min(window.innerWidth - 24, Math.max(MIN_PANEL, startWidth + (startX - event.clientX))))
+    }
+    const onUp = () => {
+      grip.removeAttribute('data-dragging')
+      document.body.style.userSelect = ''
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      try {
+        const current = panelRef.current?.getBoundingClientRect().width
+        if (current !== undefined) window.localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(current)))
+      } catch { /* см. чтение ширины выше */ }
+    }
+    const onDown = (event: PointerEvent) => {
+      event.preventDefault()
+      startX = event.clientX
+      startWidth = panelRef.current?.getBoundingClientRect().width ?? panelWidth
+      grip.setAttribute('data-dragging', '')
+      document.body.style.userSelect = 'none'
+      document.addEventListener('pointermove', onMove)
+      document.addEventListener('pointerup', onUp)
+    }
+
+    grip.addEventListener('pointerdown', onDown)
+    return () => { grip.removeEventListener('pointerdown', onDown) }
+  }, [open, panelWidth])
+
   // Панель закрыли — раздел возвращается в исходное состояние. Иначе следующее открытие
-  // показало бы доску или детальную страницу вместо списка задач, хотя пользователь нажимал
-  // на пункт меню, а не на «открыть доску».
+  // показало бы доску или детальную страницу вместо списка задач, хотя нажимали на пункт меню.
   useEffect(() => {
     if (!open) {
       setRoute({ view: 'panel' })
       setOpenKr(null)
       setOpenTask(null)
+      setError(null)
     }
   }, [open])
 
@@ -130,8 +174,10 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     return () => { controller.abort() }
   }, [open, call, reloadToken])
 
+  // Доска нужна не только своему экрану: из неё берётся список ключевых результатов для
+  // меню привязки, а оно доступно прямо из панели.
   useEffect(() => {
-    if (route.view === 'panel') return
+    if (!open) return
     const controller = new AbortController()
     unwrap<BoardModel>(call('board', {}, controller.signal))
       .then(value => { if (!controller.signal.aborted) setBoard({ phase: 'ready', value }) })
@@ -140,10 +186,9 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         setBoard({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) })
       })
     return () => { controller.abort() }
-  }, [route.view, call, reloadToken])
+  }, [open, call, reloadToken])
 
-  // Esc закрывает верхний открытый слой: меню блоков живёт внутри попапа, дальше попап,
-  // сайдбар, экран, панель (требование G-01).
+  // Esc закрывает верхний открытый слой: карточка, сайдбар KR, экран, панель (требование G-01).
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
@@ -160,27 +205,10 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
   if (!open) return null
 
-  const openTaskCard = (task: PoTask, justCreated = false) => {
-    setOpenTask({ task, content: null, justCreated })
-    // У только что заведённой записи описания заведомо нет — читать его незачем.
-    if (justCreated) {
-      setOpenTask({ task, content: '', justCreated })
-      return
-    }
-    unwrap<RawTaskDetail>(call('task', { id: task.id }))
-      .then(detail => {
-        setOpenTask(current => (current?.task.id === task.id
-          ? { ...current, content: detail.description ?? '' }
-          : current))
-      })
-      .catch(() => {
-        // Описание не прочиталось — карточку закрываем, а не показываем пустой: пустое поле
-        // выглядит как «описания нет» и при первой же правке стёрло бы настоящее.
-        setOpenTask(current => (current?.task.id === task.id ? null : current))
-      })
-  }
+  const krs: KeyResult[] = board.phase === 'ready'
+    ? board.value.objectives.flatMap(objective => objective.krs)
+    : []
 
-  /** Правит уже загруженный список на месте. Вне состояния «готово» правки не к чему применять. */
   const patchTasks = (update: (list: PoTask[]) => PoTask[]) => {
     setTasks(current => (current.phase === 'ready' ? { phase: 'ready', value: update(current.value) } : current))
   }
@@ -193,10 +221,8 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
   /**
    * Правка с немедленным откликом: список меняется сразу, CLI отвечает следом.
-   *
-   * Ждать ответа нельзя: каждое действие — это запуск процесса `backlog`, и отметка
-   * выполнения занимала бы секунды. Если запись не прошла, список возвращается к прежнему
-   * виду и показывается причина: молча разойтись с Backlog.md хуже, чем показать ошибку.
+   * Не прошло — список возвращается к прежнему виду и показывается причина: молча
+   * разойтись с Backlog.md хуже, чем показать ошибку.
    */
   const mutate = (
     endpoint: string,
@@ -206,34 +232,33 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   ) => {
     const before = tasks.phase === 'ready' ? tasks.value.find(task => task.id === id) : undefined
     patchTasks(list => list.map(task => (task.id === id ? optimistic(task) : task)))
+    setOpenTask(current => (current?.task.id === id ? { ...current, task: optimistic(current.task) } : current))
 
     void resolveId(id)
       .then(realId => unwrap(call(endpoint, { ...payload, id: realId })))
       .catch((cause: unknown) => {
-        if (before !== undefined) patchTasks(list => list.map(task => (task.id === id ? before : task)))
+        if (before !== undefined) {
+          patchTasks(list => list.map(task => (task.id === id ? before : task)))
+          setOpenTask(current => (current?.task.id === id ? { ...current, task: before } : current))
+        }
         setError(cause instanceof Error ? cause.message : String(cause))
       })
   }
 
-  /**
-   * Заводит запись и открывает её, не дожидаясь CLI.
-   *
-   * Требование T-07 — «создаёт запись и сразу открывает её в режиме редактирования».
-   * Буквально сразу: строка появляется в списке, карточка открывается с пустым контекстом
-   * (у новой записи его и не может быть), а настоящий идентификатор подставляется, когда
-   * ответит CLI. Перечитывать список после этого незачем — в нём уже ровно то, что создано.
-   */
+  /** Заводит запись, не дожидаясь CLI: строка появляется сразу. */
   const addTask = (input: ComposerDraft) => {
     tempCounter.current += 1
     const tempId = `new-${tempCounter.current}`
+    const kind = input.kind ?? tab
+    const labels = [poTaskLabel(kind)]
     const draft: PoTask = {
       id: tempId,
       title: input.title,
       status: 'To Do',
       priority: input.priority ?? 'medium',
-      labels: [poTaskLabel(tab)],
-      kind: tab,
-      relatedKrIds: [],
+      labels,
+      kind,
+      relatedKrIds: input.krId === null ? [] : [input.krId],
       ...(input.dueDate !== null ? { dueDate: input.dueDate } : {}),
     }
 
@@ -241,10 +266,11 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
     const created = unwrap<{ id: string | null }>(call('createPoTask', {
       title: input.title,
-      kind: tab,
+      kind,
       ...(input.description !== '' ? { description: input.description } : {}),
       ...(input.dueDate !== null ? { dueDate: input.dueDate } : {}),
       ...(input.priority !== null ? { priority: input.priority } : {}),
+      ...(input.krId !== null ? { relatedKrId: input.krId } : {}),
     }))
       .then(result => {
         if (result.id === null) {
@@ -269,10 +295,23 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     pendingIds.current.set(tempId, created)
   }
 
+  const openTaskCard = (task: PoTask) => {
+    setOpenTask({ task, content: null })
+    void resolveId(task.id)
+      .then(id => unwrap<RawTaskDetail>(call('task', { id })))
+      .then(detail => {
+        setOpenTask(current => (current?.task.id === task.id
+          ? { ...current, content: detail.description ?? '' }
+          : current))
+      })
+      .catch(() => {
+        // Описание не прочиталось — карточку не открываем: пустое поле выглядит как
+        // «описания нет» и при первой правке стёрло бы настоящее.
+        setOpenTask(current => (current?.task.id === task.id ? null : current))
+      })
+  }
+
   const continueInChat = (kr: KeyResult) => {
-    // Чату передаётся идентификатор задачи: остальное он возьмёт из Backlog.md сам.
-    // Дублировать сюда содержимое ключевого результата незачем — оно к моменту чтения
-    // может уже устареть, а идентификатор нет.
     void openChatWithDraft(`Работаем над ключевым результатом ${kr.id} («${kr.title}»). Открой его: backlog task ${kr.id} --plain`)
   }
 
@@ -293,14 +332,17 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   if (route.view === 'board') {
     return (
       <>
-        {board.phase === 'loading' && <div className={css.screen}><div className={css.stateBlock}><span className={css.stateTitle}>{t('loading')}</span></div></div>}
+        {board.phase === 'loading' && (
+          <div className={css.screen}>
+            <div className={css.stateBlock}><span className={css.stateTitle}>{t('loading')}</span></div>
+          </div>
+        )}
         {board.phase === 'error' && (
           <div className={css.screen}>
             <div className={css.stateBlock}>
               <span className={css.stateTitle}>{t('errorTitle')}</span>
               <span className={css.stateMessage}>{board.message}</span>
-              <button type="button" className={css.addButton} onClick={reload}>{t('retry')}</button>
-              <button type="button" className={css.addButton} onClick={() => { setRoute({ view: 'panel' }) }}>{t('close')}</button>
+              <button type="button" className={css.addBtn} onClick={reload}>{t('retry')}</button>
             </div>
           </div>
         )}
@@ -341,27 +383,37 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
   return (
     <>
-      <aside className={css.panel} role="dialog" aria-label={t('panelTitle')}>
+      <aside
+        ref={panelRef}
+        className={css.panel}
+        style={{ width: panelWidth }}
+        role="dialog"
+        aria-label={t('panelTitle')}
+      >
+        <div ref={gripRef} className={css.grip} />
+
         <div className={css.header}>
           <div className={css.headerTitle}>{t('panelTitle')}</div>
-          <Button variant="toolbar" size="sm" aria-label={t('refresh')} onClick={reload}
-            icon={<IconRefreshOutline16 />} />
-          <Button variant="toolbar" size="sm" aria-label={t('close')} onClick={() => { actions.close() }}
-            icon={<IconCloseOutline16 />} />
+          <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>⟳</button>
+          <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>✕</button>
         </div>
 
         <div className={css.tabsRow}>
           {TABS.map(([kind, label]) => (
-            <Pill key={kind} active={tab === kind} onClick={() => { setTab(kind) }}>{t(label)}</Pill>
+            <button
+              key={kind}
+              type="button"
+              className={css.tab}
+              data-active={tab === kind || undefined}
+              onClick={() => { setTab(kind); setOpenTask(null) }}
+            >{t(label)}</button>
           ))}
         </div>
 
         <div className={css.body}>
-          <Composer t={t} onSubmit={addTask} />
+          <Composer t={t} tab={tab} krs={krs} onSubmit={addTask} />
 
-          {error !== null && (
-            <div className={css.stateMessage} role="alert">{error}</div>
-          )}
+          {error !== null && <div className={css.stateMessage} role="alert">{error}</div>}
 
           {tasks.phase === 'loading' && (
             <div className={css.skeletonGroup}>
@@ -376,7 +428,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             <div className={css.stateBlock}>
               <span className={css.stateTitle}>{t('errorTitle')}</span>
               <span className={css.stateMessage}>{tasks.message}</span>
-              <button type="button" className={css.addButton} onClick={reload}>{t('retry')}</button>
+              <button type="button" className={css.addBtn} onClick={reload}>{t('retry')}</button>
             </div>
           )}
 
@@ -390,26 +442,25 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
           {groups.map(group => (
             <div key={group.key} className={css.group}>
               <div className={css.groupHeader}>
-                <span
-                  className={group.key === 'overdue' ? `${css.groupLabel} ${css.overdue}` : css.groupLabel}
-                >{t(GROUP_LABELS[group.key])}</span>
+                <span className={css.groupLabel} data-overdue={group.key === 'overdue' || undefined}>
+                  {t(GROUP_LABELS[group.key])}
+                </span>
                 <span className={css.groupCount}>{group.tasks.length}</span>
               </div>
               <div className={css.sectionCard}>
                 {group.tasks.map(task => {
                   const done = task.status.toLowerCase() === 'done'
-                  const overdue = !done && task.dueDate !== undefined && task.dueDate <= today
+                  const overdue = !done && task.dueDate !== undefined && task.dueDate < today
                   return (
                     <div
                       key={task.id}
                       className={css.item}
                       data-done={done || undefined}
+                      data-active={openTask?.task.id === task.id || undefined}
                       role="button"
                       tabIndex={0}
                       onClick={() => { openTaskCard(task) }}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter') openTaskCard(task)
-                      }}
+                      onKeyDown={event => { if (event.key === 'Enter') openTaskCard(task) }}
                     >
                       <button
                         type="button"
@@ -430,14 +481,17 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
                       <span className={css.rowMain}>
                         <span className={css.itemTitle}>{task.title}</span>
                         {task.dueDate !== undefined && (
-                          <span className={overdue ? `${css.rowMeta} ${css.overdue}` : css.rowMeta}>
-                            {t('due')} {formatDue(task.dueDate)}
+                          <span className={css.rowMeta} data-overdue={overdue || undefined}>
+                            {dueLabel(task.dueDate, t)}
                           </span>
                         )}
                       </span>
-                      {/* Высокий приоритет — точка состояния брендбука: отдельной иконки флажка
-                          в наборе нет, а рисовать свою ради одного значка неправильно. */}
-                      {task.priority === 'high' && !done && <StateDot state="warning" className={css.flag} />}
+                      <span className={css.rowMarks}>
+                        {task.relatedKrIds.length > 0 && <Icon name="inbox" size={14} />}
+                        {task.priority === 'high' && !done && (
+                          <span className={css.flag} data-priority="high"><PriorityFlag priority="high" /></span>
+                        )}
+                      </span>
                     </div>
                   )
                 })}
@@ -455,30 +509,42 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         </div>
       </aside>
 
-      {openTask !== null && openTask.content !== null && (
-        <TaskPopup
+      {openTask !== null && (
+        <TaskSheet
           task={openTask.task}
           content={openTask.content}
+          krs={krs}
           t={t}
-          onRename={title => {
-            mutate('renameTask', openTask.task.id, { title }, current => ({ ...current, title }))
-            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, title } }))
-          }}
+          onRename={title => { mutate('renameTask', openTask.task.id, { title }, current => ({ ...current, title })) }}
           onToggleDone={() => {
             const next = openTask.task.status.toLowerCase() === 'done' ? 'To Do' : 'Done'
             mutate('setStatus', openTask.task.id, { status: next }, current => ({ ...current, status: next }))
-            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, status: next } }))
           }}
-          onSaveContent={text => {
-            // Описание в строке списка не показывается, поэтому оптимистично менять нечего —
-            // отправляем как есть, дождавшись настоящего идентификатора.
-            void resolveId(openTask.task.id)
-              .then(id => unwrap(call('setDescription', { id, text })))
+          onSetDue={value => {
+            if (value === null) return
+            mutate('setDueDate', openTask.task.id, { dueDate: value }, current => ({ ...current, dueDate: value }))
+          }}
+          onSetPriority={value => {
+            const next: Priority = value ?? 'medium'
+            mutate('setPriority', openTask.task.id, { priority: next }, current => ({ ...current, priority: next }))
+          }}
+          onSetKind={value => {
+            mutate('setKind', openTask.task.id, { value, labels: openTask.task.labels },
+              current => ({ ...current, kind: value }))
+          }}
+          onSetKr={value => {
+            mutate('setKr', openTask.task.id, { value, labels: openTask.task.labels },
+              current => ({ ...current, relatedKrIds: value === null ? [] : [value] }))
+          }}
+          onSaveContent={(taskId, markdown) => {
+            // Идентификатор приходит от карточки: к этому моменту открыта может быть уже
+            // другая задача, и брать его из состояния панели значило бы писать не туда.
+            void resolveId(taskId)
+              .then(id => unwrap(call('setDescription', { id, text: markdown })))
+              .then(() => {
+                setOpenTask(current => (current?.task.id === taskId ? { ...current, content: markdown } : current))
+              })
               .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
-          }}
-          onSetDue={date => {
-            mutate('setDueDate', openTask.task.id, { dueDate: date }, current => ({ ...current, dueDate: date }))
-            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, dueDate: date } }))
           }}
           onDelete={() => {
             const id = openTask.task.id
@@ -489,7 +555,6 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
               .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)); reload() })
           }}
           onClose={() => { setOpenTask(null) }}
-          selectTitle={openTask.justCreated}
         />
       )}
     </>

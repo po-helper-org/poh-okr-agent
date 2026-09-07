@@ -44,14 +44,37 @@ export const classNames = {
 
   addRow: 'okr-add-row',
   composer: 'okr-composer',
+  composerLine: 'okr-composer-line',
   composerTitle: 'okr-composer-title',
   composerDescription: 'okr-composer-description',
-  composerFoot: 'okr-composer-foot',
-  composerChip: 'okr-composer-chip',
-  composerHint: 'okr-composer-hint',
+  composerTools: 'okr-composer-tools',
+  dateBtn: 'okr-date-btn',
+  addBtn: 'okr-add-btn',
+  pop: 'okr-pop',
+  popItem: 'okr-pop-item',
+  popGlyph: 'okr-pop-glyph',
+  popSub: 'okr-pop-sub',
+  cal: 'okr-cal',
+  calQuick: 'okr-cal-quick',
+  calHead: 'okr-cal-head',
+  calMonth: 'okr-cal-month',
+  calGrid: 'okr-cal-grid',
+  calDow: 'okr-cal-dow',
+  calDay: 'okr-cal-day',
+  calFoot: 'okr-cal-foot',
+  sheet: 'okr-sheet',
+  grip: 'okr-grip',
+  detailHead: 'okr-detail-head',
+  detailBody: 'okr-detail-body',
+  detailTitle: 'okr-detail-title',
+  detailFoot: 'okr-detail-foot',
+  editor: 'okr-editor',
+  todoBox: 'okr-todo-box',
+  todoText: 'okr-todo-text',
   sectionCard: 'okr-section-card',
   rowMain: 'okr-row-main',
   rowMeta: 'okr-row-meta',
+  rowMarks: 'okr-row-marks',
   overdue: 'okr-overdue',
   flag: 'okr-flag',
   dateChip: 'okr-date-chip',
@@ -162,6 +185,20 @@ const phaseRules = Object.entries(PHASE_COLORS)
   .map(([phase, { bg, fg }]) => `.${c.cell}[data-phase="${phase}"]{background:${bg};color:${fg};}`)
   .join('\n')
 
+/** Короткая подпись срока: сегодня и завтра словом, остальное числом. */
+export function dueLabel(due: string, t: (key: 'dateToday' | 'dateTomorrow' | 'dateYesterday') => string): string {
+  const now = new Date()
+  const day = (shift: number) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + shift)
+    const pad = (n: number) => `${n}`.padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  if (due === day(0)) return t('dateToday')
+  if (due === day(1)) return t('dateTomorrow')
+  if (due === day(-1)) return t('dateYesterday')
+  return `${due.slice(8, 10)}.${due.slice(5, 7)}`
+}
+
 export const styleText = `
 /* ——— Кнопка раздела в подвале левой панели ———
  *
@@ -210,81 +247,131 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 
 /* Быстрый ввод: постоянная строка вверху панели. Рамка подсвечивается, только когда в него
  * начали писать, — пустой composer не должен перетягивать внимание на себя. */
-.${c.composer}{margin:10px 14px 2px;padding:8px 10px;border-radius:10px;
+/* ——— Быстрый ввод ———
+ * По умолчанию одна строка. Раскрывается только по Shift+Enter: раскрытие по фокусу
+ * заставляло панель прыгать от случайного клика мимо списка. */
+.${c.composer}{margin:10px 14px 4px;padding:9px 10px;border-radius:10px;position:relative;
   border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
-  display:flex;flex-direction:column;gap:6px;
+  display:flex;flex-direction:column;gap:8px;
   transition:border-color var(--ds-transition-duration-fast) ease;}
-.${c.composer}[data-active]{border-color:var(--dsw-alias-label-caption);}
-.${c.composerTitle}{border:none;background:transparent;padding:2px 0;font:inherit;font-size:14px;
-  color:var(--dsw-alias-label-primary);outline:none;}
-.${c.composerDescription}{border:none;background:transparent;padding:0;font:inherit;font-size:13px;
-  color:var(--dsw-alias-label-secondary);outline:none;resize:vertical;min-height:44px;}
-.${c.composerFoot}{display:flex;align-items:center;gap:6px;}
-.${c.composerChip}{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;
-  border:1px solid var(--dsw-alias-border-l2);background:transparent;cursor:pointer;
-  font-size:12px;color:var(--dsw-alias-label-secondary);}
-.${c.composerChip}:hover{color:var(--dsw-alias-label-primary);
-  border-color:var(--dsw-alias-label-caption);}
-/* Подсказка о командах видна, только когда в строке уже пишут: на пустой панели это шум. */
-.${c.composerHint}{display:none;font-size:11px;color:var(--dsw-alias-label-caption);}
-.${c.composer}[data-active] .${c.composerHint}{display:inline;}
+.${c.composer}[data-open]{border-color:var(--dsw-alias-button-info-fill);}
+.${c.composerLine}{display:flex;align-items:center;gap:8px;}
+.${c.composerTitle},.${c.composerDescription}{border:none;background:transparent;padding:0;
+  font:inherit;outline:none;width:100%;color:var(--dsw-alias-label-primary);}
+/* Название всегда одна строка: перенос ломает ритм строк списка и сдвигает секции. */
+.${c.composerTitle}{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.${c.composerTitle}::placeholder,.${c.composerDescription}::placeholder{
+  color:var(--dsw-alias-label-caption);}
+.${c.composerDescription}{font-size:13px;color:var(--dsw-alias-label-secondary);resize:none;
+  min-height:22px;overflow:hidden;}
+.${c.composerTools}{display:flex;align-items:center;gap:2px;}
+.${c.dateBtn}{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;
+  border:none;background:transparent;cursor:pointer;font-size:13px;
+  color:var(--dsw-alias-label-tertiary);}
+.${c.dateBtn}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.${c.dateBtn}[data-set]{color:var(--dsw-alias-button-info-fill);}
+.${c.addBtn}{padding:6px 16px;border-radius:999px;border:none;cursor:pointer;font-size:13px;
+  background:var(--dsw-alias-button-info-fill);color:#fff;}
+.${c.addBtn}:disabled{opacity:.35;cursor:default;}
 
-/* Секция — подпись и отдельная карточка со строками. Заголовок сам по себе группу не
- * показывает: на длинном списке глаз теряет, где она кончилась. Карточка показывает. */
+/* ——— Всплывающие слои и календарь ——— */
+.${c.pop}{position:fixed;z-index:80;padding:4px;border-radius:12px;
+  background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);
+  box-shadow:0 12px 32px rgba(0,0,0,.22);pointer-events:auto;}
+.${c.popItem}{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 9px;
+  border:none;background:transparent;border-radius:7px;cursor:pointer;font-size:13px;
+  color:var(--dsw-alias-label-primary);white-space:nowrap;}
+.${c.popItem}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.${c.popGlyph}{width:22px;flex-shrink:0;text-align:center;font-size:12px;
+  color:var(--dsw-alias-label-tertiary);display:flex;justify-content:center;}
+.${c.popSub}{display:block;font-size:11px;color:var(--dsw-alias-label-caption);}
+.${c.cal}{width:268px;padding:10px;}
+.${c.calQuick}{display:flex;gap:4px;padding:2px 2px 8px;
+  border-bottom:1px solid var(--dsw-alias-border-l2);}
+.${c.calQuick} button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 2px;border:none;background:transparent;border-radius:8px;cursor:pointer;
+  font-size:10px;color:var(--dsw-alias-label-tertiary);}
+.${c.calQuick} button:hover{background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary);}
+.${c.calHead}{display:flex;align-items:center;gap:4px;padding:8px 2px 6px;}
+.${c.calMonth}{flex:1;font-size:14px;font-weight:600;}
+.${c.calGrid}{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.${c.calDow}{text-align:center;font-size:11px;color:var(--dsw-alias-label-caption);padding:2px 0 4px;}
+.${c.calDay}{height:30px;border:none;background:transparent;border-radius:8px;cursor:pointer;
+  font-size:13px;color:var(--dsw-alias-label-primary);}
+.${c.calDay}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.${c.calDay}[data-out]{color:var(--dsw-alias-label-caption);}
+.${c.calDay}[data-today]{box-shadow:inset 0 0 0 1px var(--dsw-alias-button-info-fill);}
+.${c.calDay}[data-sel]{background:var(--dsw-alias-button-info-fill);color:#fff;}
+.${c.calFoot}{display:flex;gap:8px;padding-top:10px;margin-top:6px;
+  border-top:1px solid var(--dsw-alias-border-l2);}
+.${c.calFoot} button{flex:1;padding:7px;border-radius:8px;cursor:pointer;font-size:13px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;
+  color:var(--dsw-alias-label-secondary);}
+.${c.calFoot} button[data-primary]{border-color:transparent;
+  background:var(--dsw-alias-button-info-fill);color:#fff;}
+
+/* ——— Список ——— */
+.${c.addRow}{padding:10px 14px 4px;}
 .${c.group}{padding:6px 14px 10px;}
 .${c.groupHeader}{display:flex;align-items:baseline;gap:6px;padding:6px 2px;}
 .${c.groupLabel}{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);}
+.${c.groupLabel}[data-overdue]{color:var(--dsw-alias-state-error-primary);}
 .${c.groupCount}{font-size:12px;color:var(--dsw-alias-label-caption);}
-/* Подложка секции — тонированный слой наведения, а не bg-layer-1: в светлой теме он равен
- * фону панели, и карточка просто не видна. Тонировка задана альфой, поэтому одинаково
- * работает и на светлой, и на тёмной теме. */
+/* Секция — не только заголовок, но и отдельная карточка: на длинном списке глаз теряет,
+ * где группа кончилась. Подложка — тонированный слой наведения, а не bg-layer-1: в светлой
+ * теме он равен фону панели, и карточки не видно вовсе. */
 .${c.sectionCard}{border-radius:12px;background:var(--dsw-alias-interactive-bg-hover);
   overflow:hidden;}
-.${c.sectionCard} .${c.item}:hover{background:var(--dsw-alias-interactive-bg-hover);}
 
-/* Строка задачи: круглый чекбокс, название и срок под ним, флажок приоритета справа.
- * Разделитель — только между строками, поэтому у первой его нет. */
-.${c.item}{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;
-  border:none;background:transparent;text-align:left;cursor:pointer;
-  color:var(--dsw-alias-label-primary);}
+/* Строка задачи: круглый чекбокс, название в одну строку, срок под ним, значки справа. */
+.${c.item}{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;
+  background:transparent;text-align:left;cursor:pointer;color:var(--dsw-alias-label-primary);}
 .${c.item} + .${c.item}{box-shadow:inset 0 1px 0 var(--dsw-alias-border-l2);}
-.${c.item}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.${c.item}:hover,.${c.item}[data-active]{background:var(--dsw-alias-interactive-bg-hover);}
 
-/* Круглый чекбокс: контур цветом подписи, потому что токены границ в этой теме волосяные
- * (4% чёрного) и контрол с такой рамкой выглядит отсутствующим. */
-.${c.itemCheck}{flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:50%;
-  cursor:pointer;border:1.5px solid var(--dsw-alias-label-caption);background:transparent;
-  padding:0;display:flex;align-items:center;justify-content:center;
+/* Круглый чекбокс. Контур цветом подписи, а не токеном границы: границы в этой теме
+ * волосяные (4% чёрного), и контрол с такой рамкой выглядит отсутствующим. */
+.${c.itemCheck}{flex-shrink:0;width:18px;height:18px;border-radius:50%;cursor:pointer;
+  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;padding:0;
+  display:flex;align-items:center;justify-content:center;
   transition:border-color var(--ds-transition-duration-fast) ease,
     background var(--ds-transition-duration-fast) ease;}
 .${c.itemCheck}:hover{border-color:var(--dsw-alias-label-primary);}
 .${c.itemCheck}[data-kind="control"]{border-color:#2F72B8;}
 .${c.itemCheck}[data-kind="risk"]{border-color:#B33F3F;}
-.${c.itemCheck}[data-overdue]{border-color:#B33F3F;}
+.${c.itemCheck}[data-overdue]{border-color:var(--dsw-alias-state-error-primary);}
 .${c.itemCheck}[data-done]{background:var(--dsw-alias-label-secondary);
   border-color:var(--dsw-alias-label-secondary);}
 .${c.itemCheck}[data-done]::after{content:"";width:9px;height:5px;margin-top:-2px;
-  border-left:1.5px solid var(--dsw-alias-bg-base);border-bottom:1.5px solid var(--dsw-alias-bg-base);
-  transform:rotate(-45deg);}
+  border-left:1.5px solid var(--dsw-alias-bg-base);
+  border-bottom:1.5px solid var(--dsw-alias-bg-base);transform:rotate(-45deg);}
 
-.${c.rowMain}{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
-.${c.itemTitle}{font-size:14px;line-height:1.35;overflow-wrap:anywhere;}
+.${c.rowMain}{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+/* Название всегда одна строка: перенос ломает ритм строк и сдвигает секции. */
+.${c.itemTitle}{font-size:14px;line-height:1.35;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;}
 .${c.item}[data-done] .${c.itemTitle}{color:var(--dsw-alias-label-caption);
   text-decoration:line-through;}
-.${c.rowMeta}{font-size:12px;color:var(--dsw-alias-label-caption);}
-.${c.overdue}{color:#B33F3F;}
-.${c.flag}{flex-shrink:0;margin-top:1px;color:#B33F3F;display:flex;}
-.${c.itemNote}{flex-shrink:0;width:5px;height:5px;margin-top:7px;border-radius:50%;
-  background:var(--dsw-alias-label-caption);}
+.${c.rowMeta}{font-size:12px;color:var(--dsw-alias-label-caption);white-space:nowrap;}
+.${c.rowMeta}[data-overdue]{color:var(--dsw-alias-state-error-primary);}
+.${c.rowMarks}{display:flex;align-items:center;gap:6px;flex-shrink:0;
+  color:var(--dsw-alias-label-caption);}
+.${c.flag}[data-priority="high"]{color:var(--dsw-alias-state-error-primary);}
+.${c.flag}[data-priority="medium"]{color:#C1861A;}
+.${c.flag}[data-priority="low"]{color:var(--dsw-alias-button-info-fill);}
 
-.${c.stateBlock}{display:flex;flex-direction:column;align-items:center;gap:6px;padding:48px 24px;
-  text-align:center;}
+.${c.stateBlock}{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:52px 24px;text-align:center;}
 .${c.stateTitle}{font-size:14px;color:var(--dsw-alias-label-secondary);}
 .${c.stateHint}{font-size:12px;color:var(--dsw-alias-label-caption);}
-.${c.stateMessage}{font-size:12px;color:var(--dsw-alias-label-caption);word-break:break-word;}
+.${c.stateMessage}{font-size:12px;color:var(--dsw-alias-label-caption);word-break:break-word;
+  padding:8px 16px;}
 .${c.skeletonGroup}{padding:8px 16px;}
-.${c.skeletonHead}{height:11px;width:80px;margin:10px 0;border-radius:4px;background:var(--dsw-alias-interactive-bg-hover);}
-.${c.skeletonLine}{height:14px;margin:10px 0;border-radius:4px;background:var(--dsw-alias-interactive-bg-hover);}
+.${c.skeletonHead}{height:11px;width:80px;margin:10px 0;border-radius:4px;
+  background:var(--dsw-alias-interactive-bg-hover);}
+.${c.skeletonLine}{height:14px;margin:10px 0;border-radius:4px;
+  background:var(--dsw-alias-interactive-bg-hover);}
 
 /* ——— Экран доски и детальной страницы ——— */
 .${c.screen}{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;
@@ -339,41 +426,62 @@ ${phaseRules}
 .${c.planTable}{display:flex;flex-direction:column;gap:6px;padding:0 16px;}
 .${c.planStage}{display:grid;grid-template-columns:72px 1fr 1fr;gap:6px;align-items:center;}
 
-/* ——— Попап задачи и меню блоков ——— */
-.${c.popup}{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:60;
-  width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;pointer-events:auto;
-  background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;
-  box-shadow:0 16px 48px rgba(0,0,0,.28);}
-.${c.popupHead}{display:flex;align-items:center;gap:10px;padding:0 0 12px;
+/* ——— Сайдбар задачи ———
+ * Задача открывается сайдбаром слева от панели, а не модалкой поверх неё: модалка
+ * закрывает ровно тот список, по которому в этот момент и ориентируются. */
+.${c.sheet}{position:fixed;top:0;bottom:0;display:flex;flex-direction:column;z-index:44;
+  pointer-events:auto;background:var(--dsw-alias-bg-base);
+  border-left:1px solid var(--dsw-alias-border-l2);
+  border-right:1px solid var(--dsw-alias-border-l2);
+  box-shadow:-8px 0 24px rgba(0,0,0,.10);}
+/* Ручка растягивания: узкая полоса вдоль левой границы, видимая под курсором. */
+.${c.grip}{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5;}
+.${c.grip}:hover,.${c.grip}[data-dragging]{background:var(--dsw-alias-button-info-fill);
+  opacity:.5;}
+.${c.detailHead}{display:flex;align-items:center;gap:10px;padding:12px 16px;
   border-bottom:1px solid var(--dsw-alias-border-l2);}
-.${c.dateChip}{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
-  color:var(--dsw-alias-label-secondary);}
-.${c.dateChip}[data-overdue]{color:#B33F3F;}
-.${c.dateChipInput}{background:transparent;border:none;padding:0;font:inherit;color:inherit;
-  width:118px;}
-/* Подпись видна только у незаполненного срока: с датой она была бы дублем. */
-.${c.dateChipLabel}{display:none;}
-.${c.dateChip}[data-empty] .${c.dateChipLabel}{display:inline;}
-.${c.dateChip}[data-empty] .${c.dateChipInput}{width:22px;color:transparent;}
-.${c.popupTitle}{font-size:20px;font-weight:700;line-height:1.3;
-  color:var(--dsw-alias-label-primary);outline:none;padding:14px 0 6px;}
-.${c.popupBody}{flex:1;overflow-y:auto;padding:0;}
-/* Headless-модалка не даёт внутренних отступов — задаём свои, иначе содержимое
- * прилипает к краям карточки. */
-.${c.card}{padding:16px 20px 12px;display:flex;flex-direction:column;}
-.${c.popupFoot}{display:flex;align-items:center;gap:8px;padding:10px 0 0;
+.${c.detailBody}{flex:1;overflow-y:auto;padding:14px 18px;}
+.${c.detailTitle}{font-size:20px;font-weight:700;line-height:1.3;outline:none;
+  padding-bottom:8px;color:var(--dsw-alias-label-primary);}
+.${c.detailFoot}{display:flex;align-items:center;gap:4px;padding:10px 14px;
   border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
   color:var(--dsw-alias-label-caption);}
-.${c.content}{min-height:120px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary);outline:none;}
-.${c.content}:empty::before{content:attr(data-placeholder);color:var(--dsw-alias-label-caption);}
-.${c.content} blockquote{margin:8px 0;padding-left:10px;border-left:2px solid var(--dsw-alias-border-l1);
-  color:var(--dsw-alias-label-secondary);}
-.${c.blockMenu}{position:fixed;z-index:70;min-width:190px;max-height:280px;overflow-y:auto;
-  padding:4px;background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,.24);pointer-events:auto;}
-.${c.blockMenuItem}{width:100%;display:block;text-align:left;padding:6px 8px;border:none;
-  background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;border-radius:5px;cursor:pointer;}
-.${c.blockMenuItem}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+
+/* ——— Блочный редактор описания ———
+ * Каждая строка — блок со своим типом в data-block, и тип целиком отвечает за вид.
+ * Так разметку можно собрать обратно в markdown построчно, а Backlog.md хранит именно
+ * markdown: описание, открытое в CLI или в файле, должно остаться читаемым. */
+.${c.editor}{width:100%;min-height:220px;outline:none;font-size:14px;line-height:1.6;
+  color:var(--dsw-alias-label-primary);counter-reset:okr-num;}
+.${c.editor} > *{margin:0;padding:2px 0;position:relative;}
+/* Подсказка только у полностью пустого описания: на каждой пустой строке она
+ * превращает редактор в частокол из повторяющегося текста. */
+.${c.editor}[data-empty] [data-block="text"]:empty::before{content:attr(data-placeholder);
+  color:var(--dsw-alias-label-caption);}
+.${c.editor} [data-block="h1"]{font-size:21px;font-weight:700;padding-top:10px;}
+.${c.editor} [data-block="h2"]{font-size:17px;font-weight:700;padding-top:8px;}
+.${c.editor} [data-block="h3"]{font-size:15px;font-weight:600;padding-top:6px;}
+.${c.editor} [data-block="bullet"],.${c.editor} [data-block="number"]{padding-left:22px;}
+.${c.editor} [data-block="bullet"]::before{content:"\\2022";position:absolute;left:6px;
+  color:var(--dsw-alias-button-info-fill);}
+.${c.editor} [data-block="number"]{counter-increment:okr-num;}
+.${c.editor} [data-block="number"]::before{content:counter(okr-num) ".";position:absolute;
+  left:2px;color:var(--dsw-alias-label-caption);font-size:13px;}
+.${c.editor} [data-block="quote"]{padding-left:12px;color:var(--dsw-alias-label-secondary);
+  border-left:2px solid var(--dsw-alias-border-l3);}
+.${c.editor} [data-block="divider"]{padding:0;height:1px;
+  background:var(--dsw-alias-border-l2);margin:12px 0;}
+.${c.editor} [data-block="todo"]{display:flex;align-items:flex-start;gap:8px;}
+.${c.todoBox}{flex-shrink:0;width:16px;height:16px;margin-top:4px;border-radius:4px;
+  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;cursor:pointer;
+  padding:0;display:flex;align-items:center;justify-content:center;}
+.${c.todoBox}[data-on]{background:var(--dsw-alias-button-info-fill);
+  border-color:var(--dsw-alias-button-info-fill);}
+.${c.todoBox}[data-on]::after{content:"";width:8px;height:4px;margin-top:-2px;
+  border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg);}
+.${c.editor} .${c.todoText}{flex:1;outline:none;}
+.${c.editor} [data-block="todo"][data-done] .${c.todoText}{
+  color:var(--dsw-alias-label-caption);text-decoration:line-through;}
 
 /* ——— Детальная страница ——— */
 .${c.detailTop}{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 16px;

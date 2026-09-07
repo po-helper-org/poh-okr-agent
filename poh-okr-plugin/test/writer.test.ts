@@ -148,3 +148,7 @@ test('чужие метки при смене типа и привязки не 
     assert.ok(!joined.includes('okr-phase'))
   }
 })
+
+test('приоритет существующей задачи ставится тремя уровнями', () => {
+  assert.deepEqual(writer.setPriority('PO-25', 'high'), ['task', 'edit', 'PO-25', '--priority', 'high'])
+})

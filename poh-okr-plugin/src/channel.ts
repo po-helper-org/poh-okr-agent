@@ -205,6 +205,17 @@ export async function dispatch(
         return ok({ id, status })
       }
 
+      case 'setPriority': {
+        const id = stringField(payload, 'id')
+        const priority = stringField(payload, 'priority')
+        if (!id) return fail('bad-request', 'не передан идентификатор задачи')
+        if (priority === null || !PRIORITY_SET.has(priority)) {
+          return fail('bad-request', `неизвестный приоритет ${JSON.stringify(priority)}`)
+        }
+        await reader.write(writer.setPriority(id, priority as Priority), signal)
+        return ok({ id, priority })
+      }
+
       case 'setDueDate': {
         const id = stringField(payload, 'id')
         const dueDate = stringField(payload, 'dueDate')
