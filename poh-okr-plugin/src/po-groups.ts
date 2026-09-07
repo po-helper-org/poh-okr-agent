@@ -11,7 +11,7 @@ import type { PoTask, PoTaskKind } from './model.js'
  * и часового пояса, и сравнивать его с точным временем нечем.
  */
 
-export type GroupKey = 'today' | 'week' | 'later' | 'noDate' | 'done'
+export type GroupKey = 'overdue' | 'today' | 'week' | 'later' | 'noDate' | 'done'
 
 export interface Group {
   key: GroupKey
@@ -19,7 +19,7 @@ export interface Group {
 }
 
 /** Порядок секций в панели: ближайшее сверху, выполненное в конце. */
-const ORDER: readonly GroupKey[] = ['today', 'week', 'later', 'noDate', 'done']
+const ORDER: readonly GroupKey[] = ['overdue', 'today', 'week', 'later', 'noDate', 'done']
 
 const DONE_STATUS = 'done'
 
@@ -39,15 +39,17 @@ function shiftDays(from: Date, days: number): string {
 
 /**
  * Секция задачи.
- * Просроченное попадает в «Сегодня», а не в отдельную секцию: для PO это одно и то же —
- * то, чем надо заняться сейчас. Отдельная секция просроченного только растила бы список,
- * который и так растёт сам.
+ *
+ * Просроченное вынесено в отдельную секцию, а не смешано с сегодняшним: срок, который уже
+ * прошёл, — это другой сигнал, и в общем списке он теряется среди того, что ещё можно сделать
+ * вовремя. Секция стоит первой и в интерфейсе окрашена тревожным цветом.
  */
 export function groupOf(task: PoTask, today: Date): GroupKey {
   if (task.status.toLowerCase() === DONE_STATUS) return 'done'
   if (!task.dueDate) return 'noDate'
   const now = isoDay(today)
-  if (task.dueDate <= now) return 'today'
+  if (task.dueDate < now) return 'overdue'
+  if (task.dueDate === now) return 'today'
   return task.dueDate <= shiftDays(today, 7) ? 'week' : 'later'
 }
 

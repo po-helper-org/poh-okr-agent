@@ -25,6 +25,8 @@ export const ru = {
   refresh: 'Обновить',
   delete: 'Удалить',
 
+  due: 'до',
+  groupOverdue: 'Просрочено',
   groupToday: 'Сегодня',
   groupWeek: 'На неделе',
   groupLater: 'Позже',

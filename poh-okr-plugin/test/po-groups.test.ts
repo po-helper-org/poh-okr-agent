@@ -20,9 +20,14 @@ test('срок сегодня попадает в «Сегодня»', () => {
   assert.equal(groupOf(task({ dueDate: '2026-09-05' }), TODAY), 'today')
 })
 
-test('просроченное попадает в «Сегодня», а не в отдельную секцию', () => {
-  // Для PO это одно и то же: то, чем надо заняться сейчас.
-  assert.equal(groupOf(task({ dueDate: '2026-08-01' }), TODAY), 'today')
+test('просроченное выносится в свою секцию', () => {
+  // Прошедший срок — другой сигнал, чем «сделать сегодня»: в общем списке он теряется.
+  assert.equal(groupOf(task({ dueDate: '2026-08-01' }), TODAY), 'overdue')
+})
+
+test('вчерашний срок уже просрочен, сегодняшний — ещё нет', () => {
+  assert.equal(groupOf(task({ dueDate: '2026-09-04' }), TODAY), 'overdue')
+  assert.equal(groupOf(task({ dueDate: '2026-09-05' }), TODAY), 'today')
 })
 
 test('срок внутри недели попадает в «На неделе»', () => {
@@ -63,12 +68,13 @@ test('пустые секции не возвращаются', () => {
 
 test('секции идут от ближайшего к выполненному', () => {
   const groups = groupTasks([
-    task({ id: 'PO-4', status: 'Done' }),
-    task({ id: 'PO-3' }),
-    task({ id: 'PO-2', dueDate: '2026-10-01' }),
-    task({ id: 'PO-1', dueDate: '2026-09-05' }),
+    task({ id: 'PO-5', status: 'Done' }),
+    task({ id: 'PO-4' }),
+    task({ id: 'PO-3', dueDate: '2026-10-01' }),
+    task({ id: 'PO-2', dueDate: '2026-09-05' }),
+    task({ id: 'PO-1', dueDate: '2026-08-20' }),
   ], 'task', TODAY)
-  assert.deepEqual(groups.map(g => g.key), ['today', 'later', 'noDate', 'done'])
+  assert.deepEqual(groups.map(g => g.key), ['overdue', 'today', 'later', 'noDate', 'done'])
 })
 
 test('внутри секции ближайший срок выше', () => {

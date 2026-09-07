@@ -9,12 +9,15 @@
  * детальная страница — из сайдбара ключевого результата, и возврат с неё ведёт на доску,
  * а не в панель (требование G-05).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsStore } from '@deepseek-ai/dsh-client-store'
+import {
+  Button, IconPlusOutline16, IconCloseOutline16, IconRefreshOutline16, Pill, StateDot,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { Board as BoardModel, KeyResult, PoTask, PoTaskKind } from '../model.js'
+import { poTaskLabel, type Board as BoardModel, type KeyResult, type PoTask, type PoTaskKind } from '../model.js'
 import type { RawTaskDetail } from '../backlog-json.js'
-import { groupTasks, type GroupKey } from '../po-groups.js'
+import { groupTasks, isoDay, type GroupKey } from '../po-groups.js'
 import { Board } from './Board.js'
 import { DetailPage } from './DetailPage.js'
 import { KrSidebar } from './KrSidebar.js'
@@ -43,6 +46,7 @@ const TABS: ReadonlyArray<[PoTaskKind, OkrLocaleKey]> = [
 ]
 
 const GROUP_LABELS: Readonly<Record<GroupKey, OkrLocaleKey>> = {
+  overdue: 'groupOverdue',
   today: 'groupToday',
   week: 'groupWeek',
   later: 'groupLater',
@@ -54,6 +58,13 @@ type Route =
   | { view: 'panel' }
   | { view: 'board' }
   | { view: 'detail'; kr: KeyResult; objectiveTitle: string; detail: RawTaskDetail }
+
+/** `2026-09-19` → `19.09`. Год не показываем: в панели задач он почти всегда текущий. */
+function formatDue(iso: string): string {
+  const [year, month, day] = iso.split('-')
+  if (year === undefined || month === undefined || day === undefined) return iso
+  return `${day}.${month}`
+}
 
 type Load<T> =
   | { phase: 'loading' }
@@ -78,14 +89,19 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null; justCreated: boolean } | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   /**
-   * Задача, которую надо открыть на редактирование, как только список перечитается.
+   * Счётчик и обещания идентификаторов для записей, заведённых оптимистично.
    *
-   * Требование T-07: кнопка быстрого добавления заводит запись и сразу открывает её.
-   * Открыть карточку прямо в обработчике нельзя — списка с новой задачей ещё нет, а
-   * карточке нужен сам объект задачи. Искать её потом по названию тоже нельзя: у всех
-   * новых записей название одинаковое, поэтому канал возвращает идентификатор.
+   * Новая задача появляется в списке и открывается сразу, до ответа CLI, — иначе между
+   * нажатием и карточкой проходят секунды на запуск процесса. До ответа настоящего
+   * идентификатора нет, и правки такой записи некуда отправлять: временный идентификатор
+   * CLI отвергнет. Поэтому каждая оптимистичная запись несёт обещание своего настоящего
+   * идентификатора, а правки дожидаются его — счёт идёт на доли секунды, и человек этого
+   * не замечает.
    */
-  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null)
+  /** Причина последней неудавшейся правки. Список при этом остаётся на экране. */
+  const [error, setError] = useState<string | null>(null)
+  const tempCounter = useRef(0)
+  const pendingIds = useRef(new Map<string, Promise<string>>())
 
   const reload = useCallback(() => { setReloadToken(token => token + 1) }, [])
 
@@ -125,17 +141,6 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     return () => { controller.abort() }
   }, [route.view, call, reloadToken])
 
-  useEffect(() => {
-    if (pendingOpenId === null || tasks.phase !== 'ready') return
-    const created = tasks.value.find(task => task.id === pendingOpenId)
-    if (created === undefined) return
-    setPendingOpenId(null)
-    openTaskCard(created, true)
-    // openTaskCard пересоздаётся на каждый рендер и в зависимости не идёт: он читает только
-    // `call`, а добавление его сюдагоняло бы эффект вхолостую на каждый рендер.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingOpenId, tasks])
-
   // Esc закрывает верхний открытый слой: меню блоков живёт внутри попапа, дальше попап,
   // сайдбар, экран, панель (требование G-01).
   useEffect(() => {
@@ -156,6 +161,11 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
   const openTaskCard = (task: PoTask, justCreated = false) => {
     setOpenTask({ task, content: null, justCreated })
+    // У только что заведённой записи описания заведомо нет — читать его незачем.
+    if (justCreated) {
+      setOpenTask({ task, content: '', justCreated })
+      return
+    }
     unwrap<RawTaskDetail>(call('task', { id: task.id }))
       .then(detail => {
         setOpenTask(current => (current?.task.id === task.id
@@ -169,10 +179,91 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
       })
   }
 
-  const write = (endpoint: string, payload: unknown) => {
-    unwrap(call(endpoint, payload)).then(() => { reload() }).catch((cause: unknown) => {
-      setTasks({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) })
-    })
+  /** Правит уже загруженный список на месте. Вне состояния «готово» правки не к чему применять. */
+  const patchTasks = (update: (list: PoTask[]) => PoTask[]) => {
+    setTasks(current => (current.phase === 'ready' ? { phase: 'ready', value: update(current.value) } : current))
+  }
+
+  /** Настоящий идентификатор записи: у оптимистичной он приходит обещанием от CLI. */
+  const resolveId = async (id: string): Promise<string> => {
+    const pending = pendingIds.current.get(id)
+    return pending === undefined ? id : pending
+  }
+
+  /**
+   * Правка с немедленным откликом: список меняется сразу, CLI отвечает следом.
+   *
+   * Ждать ответа нельзя: каждое действие — это запуск процесса `backlog`, и отметка
+   * выполнения занимала бы секунды. Если запись не прошла, список возвращается к прежнему
+   * виду и показывается причина: молча разойтись с Backlog.md хуже, чем показать ошибку.
+   */
+  const mutate = (
+    endpoint: string,
+    id: string,
+    payload: Record<string, unknown>,
+    optimistic: (task: PoTask) => PoTask,
+  ) => {
+    const before = tasks.phase === 'ready' ? tasks.value.find(task => task.id === id) : undefined
+    patchTasks(list => list.map(task => (task.id === id ? optimistic(task) : task)))
+
+    void resolveId(id)
+      .then(realId => unwrap(call(endpoint, { ...payload, id: realId })))
+      .catch((cause: unknown) => {
+        if (before !== undefined) patchTasks(list => list.map(task => (task.id === id ? before : task)))
+        setError(cause instanceof Error ? cause.message : String(cause))
+      })
+  }
+
+  /**
+   * Заводит запись и открывает её, не дожидаясь CLI.
+   *
+   * Требование T-07 — «создаёт запись и сразу открывает её в режиме редактирования».
+   * Буквально сразу: строка появляется в списке, карточка открывается с пустым контекстом
+   * (у новой записи его и не может быть), а настоящий идентификатор подставляется, когда
+   * ответит CLI. Перечитывать список после этого незачем — в нём уже ровно то, что создано.
+   */
+  const addTask = () => {
+    tempCounter.current += 1
+    const tempId = `new-${tempCounter.current}`
+    const draft: PoTask = {
+      id: tempId,
+      title: t('newTask'),
+      status: 'To Do',
+      priority: 'medium',
+      labels: [poTaskLabel(tab)],
+      kind: tab,
+      relatedKrIds: [],
+    }
+
+    patchTasks(list => [...list, draft])
+    setOpenTask({ task: draft, content: '', justCreated: true })
+
+    const created = unwrap<{ id: string | null }>(call('createPoTask', { title: draft.title, kind: tab }))
+      .then(result => {
+        if (result.id === null) {
+          // Идентификатора в выводе CLI не нашлось. Запись создана, но связать её с
+          // показанной строкой нечем — перечитываем список, чтобы экран не разошёлся с файлами.
+          reload()
+          throw new Error('CLI не вернул идентификатор созданной задачи')
+        }
+        const realId = result.id
+        patchTasks(list => list.map(task => (task.id === tempId ? { ...task, id: realId } : task)))
+        setOpenTask(current => (current?.task.id === tempId
+          ? { ...current, task: { ...current.task, id: realId } }
+          : current))
+        pendingIds.current.delete(tempId)
+        return realId
+      })
+      .catch((cause: unknown) => {
+        // Строка-призрак хуже пустого списка: убираем её и говорим причину.
+        patchTasks(list => list.filter(task => task.id !== tempId))
+        setOpenTask(current => (current?.task.id === tempId ? null : current))
+        pendingIds.current.delete(tempId)
+        setError(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      })
+
+    pendingIds.current.set(tempId, created)
   }
 
   const continueInChat = (kr: KeyResult) => {
@@ -240,7 +331,9 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     )
   }
 
-  const groups = tasks.phase === 'ready' ? groupTasks(tasks.value, tab, new Date()) : []
+  const now = new Date()
+  const today = isoDay(now)
+  const groups = tasks.phase === 'ready' ? groupTasks(tasks.value, tab, now) : []
   const empty = tasks.phase === 'ready' && groups.length === 0
 
   return (
@@ -248,41 +341,28 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
       <aside className={css.panel} role="dialog" aria-label={t('panelTitle')}>
         <div className={css.header}>
           <div className={css.headerTitle}>{t('panelTitle')}</div>
-          <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>⟳</button>
-          <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>✕</button>
+          <Button variant="toolbar" size="sm" aria-label={t('refresh')} onClick={reload}
+            icon={<IconRefreshOutline16 />} />
+          <Button variant="toolbar" size="sm" aria-label={t('close')} onClick={() => { actions.close() }}
+            icon={<IconCloseOutline16 />} />
         </div>
 
-        <div className={css.tabBar}>
+        <div className={css.tabsRow}>
           {TABS.map(([kind, label]) => (
-            <button
-              key={kind}
-              type="button"
-              className={css.tab}
-              data-active={tab === kind || undefined}
-              onClick={() => { setTab(kind) }}
-            >{t(label)}</button>
+            <Pill key={kind} active={tab === kind} onClick={() => { setTab(kind) }}>{t(label)}</Pill>
           ))}
         </div>
 
         <div className={css.body}>
           <div className={css.addRow}>
-            <button
-              type="button"
-              className={css.addButton}
-              onClick={() => {
-                unwrap<{ id: string | null }>(call('createPoTask', { title: t('newTask'), kind: tab }))
-                  .then(created => {
-                    // Идентификатора может не быть, если вывод CLI изменится: запись всё равно
-                    // создана, поэтому список обновляем в любом случае, а карточку не открываем.
-                    if (created.id !== null) setPendingOpenId(created.id)
-                    reload()
-                  })
-                  .catch((cause: unknown) => {
-                    setTasks({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) })
-                  })
-              }}
-            >+&nbsp;&nbsp;{t('addTask')}</button>
+            <Button variant="outline" className={css.fullWidth} icon={<IconPlusOutline16 />} onClick={addTask}>
+              {t('addTask')}
+            </Button>
           </div>
+
+          {error !== null && (
+            <div className={css.stateMessage} role="alert">{error}</div>
+          )}
 
           {tasks.phase === 'loading' && (
             <div className={css.skeletonGroup}>
@@ -311,44 +391,58 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
           {groups.map(group => (
             <div key={group.key} className={css.group}>
               <div className={css.groupHeader}>
-                <span className={css.groupLabel}>{t(GROUP_LABELS[group.key])}</span>
+                <span
+                  className={group.key === 'overdue' ? `${css.groupLabel} ${css.overdue}` : css.groupLabel}
+                >{t(GROUP_LABELS[group.key])}</span>
                 <span className={css.groupCount}>{group.tasks.length}</span>
               </div>
-              {group.tasks.map(task => {
-                const done = task.status.toLowerCase() === 'done'
-                return (
-                  <div
-                    key={task.id}
-                    className={css.item}
-                    data-done={done || undefined}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { openTaskCard(task) }}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter') openTaskCard(task)
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className={css.itemCheck}
-                      data-kind={task.kind}
+              <div className={css.sectionCard}>
+                {group.tasks.map(task => {
+                  const done = task.status.toLowerCase() === 'done'
+                  const overdue = !done && task.dueDate !== undefined && task.dueDate <= today
+                  return (
+                    <div
+                      key={task.id}
+                      className={css.item}
                       data-done={done || undefined}
-                      aria-pressed={done}
-                      aria-label={task.title}
-                      onClick={event => {
-                        // Клик по чекбоксу отмечает выполнение, не открывая карточку
-                        // (требование T-05).
-                        event.stopPropagation()
-                        write('setStatus', { id: task.id, status: done ? 'To Do' : 'Done' })
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { openTaskCard(task) }}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') openTaskCard(task)
                       }}
-                    />
-                    <span className={css.itemTitle}>{task.title}</span>
-                    {task.dueDate !== undefined && (
-                      <span className={`${css.itemMeta} ${css.mono}`}>{task.dueDate}</span>
-                    )}
-                  </div>
-                )
-              })}
+                    >
+                      <button
+                        type="button"
+                        className={css.itemCheck}
+                        data-kind={task.kind}
+                        data-done={done || undefined}
+                        data-overdue={overdue || undefined}
+                        aria-pressed={done}
+                        aria-label={task.title}
+                        onClick={event => {
+                          // Клик по чекбоксу отмечает выполнение, не открывая карточку
+                          // (требование T-05).
+                          event.stopPropagation()
+                          const next = done ? 'To Do' : 'Done'
+                          mutate('setStatus', task.id, { status: next }, current => ({ ...current, status: next }))
+                        }}
+                      />
+                      <span className={css.rowMain}>
+                        <span className={css.itemTitle}>{task.title}</span>
+                        {task.dueDate !== undefined && (
+                          <span className={overdue ? `${css.rowMeta} ${css.overdue}` : css.rowMeta}>
+                            {t('due')} {formatDue(task.dueDate)}
+                          </span>
+                        )}
+                      </span>
+                      {/* Высокий приоритет — точка состояния брендбука: отдельной иконки флажка
+                          в наборе нет, а рисовать свою ради одного значка неправильно. */}
+                      {task.priority === 'high' && !done && <StateDot state="warning" className={css.flag} />}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -367,14 +461,34 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
           task={openTask.task}
           content={openTask.content}
           t={t}
-          onRename={title => { write('renameTask', { id: openTask.task.id, title }) }}
-          onToggleDone={() => {
-            const done = openTask.task.status.toLowerCase() === 'done'
-            write('setStatus', { id: openTask.task.id, status: done ? 'To Do' : 'Done' })
+          onRename={title => {
+            mutate('renameTask', openTask.task.id, { title }, current => ({ ...current, title }))
+            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, title } }))
           }}
-          onSaveContent={text => { write('setDescription', { id: openTask.task.id, text }) }}
-          onSetDue={date => { write('setDueDate', { id: openTask.task.id, dueDate: date }) }}
-          onDelete={() => { write('deleteTask', { id: openTask.task.id }); setOpenTask(null) }}
+          onToggleDone={() => {
+            const next = openTask.task.status.toLowerCase() === 'done' ? 'To Do' : 'Done'
+            mutate('setStatus', openTask.task.id, { status: next }, current => ({ ...current, status: next }))
+            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, status: next } }))
+          }}
+          onSaveContent={text => {
+            // Описание в строке списка не показывается, поэтому оптимистично менять нечего —
+            // отправляем как есть, дождавшись настоящего идентификатора.
+            void resolveId(openTask.task.id)
+              .then(id => unwrap(call('setDescription', { id, text })))
+              .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+          }}
+          onSetDue={date => {
+            mutate('setDueDate', openTask.task.id, { dueDate: date }, current => ({ ...current, dueDate: date }))
+            setOpenTask(current => (current === null ? null : { ...current, task: { ...current.task, dueDate: date } }))
+          }}
+          onDelete={() => {
+            const id = openTask.task.id
+            setOpenTask(null)
+            patchTasks(list => list.filter(task => task.id !== id))
+            void resolveId(id)
+              .then(real => unwrap(call('deleteTask', { id: real })))
+              .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)); reload() })
+          }}
           onClose={() => { setOpenTask(null) }}
           selectTitle={openTask.justCreated}
         />

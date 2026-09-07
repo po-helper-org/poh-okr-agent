@@ -13,6 +13,9 @@
  * а не в виде вставки текста.
  */
 import { useEffect, useRef, useState } from 'react'
+import {
+  Button, IconAlarmClockOutline16, IconListPenOutline16, IconTrashOutline16, Modal, StateDot,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PoTask } from '../model.js'
 import type { OkrLocaleKey } from './locales.js'
 import { classNames as css } from './styles.js'
@@ -103,70 +106,89 @@ export function TaskPopup(props: TaskPopupProps) {
 
   const commit = () => { if (draft !== content) onSaveContent(draft) }
 
+  const overdue = !done && task.dueDate !== undefined && task.dueDate <= new Date().toISOString().slice(0, 10)
+
   return (
-    <>
-      <div className={css.backdrop} onClick={() => { commit(); onClose() }} />
-      <div className={css.popup} role="dialog" aria-label={task.title}>
-        <div className={css.popupHead}>
-          <button
-            type="button"
-            className={css.itemCheck}
-            data-kind={task.kind}
-            data-done={done || undefined}
-            aria-pressed={done}
-            aria-label={task.title}
-            onClick={onToggleDone}
-          />
+    <Modal
+      open
+      headless
+      title={task.title}
+      onClose={() => { commit(); onClose() }}
+    >
+      {/* В headless-режиме модалка кладёт детей прямо в диалог и своих горизонтальных
+          отступов не даёт (contentClassName в этом режиме не применяется) — поэтому
+          содержимое обёрнуто своим слоем с отступами. */}
+      <div className={css.card}>
+      {/* Шапка карточки по образцу брендбука: состояние, срок и приоритет одной строкой,
+          закрытие берёт на себя сам Modal. */}
+      <div className={css.popupHead}>
+        <button
+          type="button"
+          className={css.itemCheck}
+          data-kind={task.kind}
+          data-done={done || undefined}
+          data-overdue={overdue || undefined}
+          aria-pressed={done}
+          aria-label={task.title}
+          onClick={onToggleDone}
+        />
+        {/* Пока срок не задан, поле показывает подпись, а не пустой шаблон «дд.мм.гггг»:
+            сырой формат в шапке читается как незаполненная форма, а не как «срока нет». */}
+        <label className={css.dateChip} data-overdue={overdue || undefined} data-empty={task.dueDate === undefined || undefined}>
+          <IconAlarmClockOutline16 />
+          <span className={css.dateChipLabel}>{t('fieldDue')}</span>
           <input
-            className={`${css.fieldInput} ${css.mono}`}
-            style={{ width: 132 }}
+            className={css.dateChipInput}
             type="date"
+            aria-label={t('fieldDue')}
             value={task.dueDate ?? ''}
             onChange={event => { if (event.target.value !== '') onSetDue(event.target.value) }}
           />
-          <button type="button" className={css.iconButton} onClick={() => { commit(); onClose() }} aria-label={t('close')}>✕</button>
-        </div>
+        </label>
+        <span style={{ flex: 1 }} />
+        {task.priority === 'high' && !done && <StateDot state="warning" />}
+      </div>
 
-        <div
-          ref={titleRef}
-          className={css.popupTitle}
-          style={{ padding: '10px 16px 0' }}
-          contentEditable
-          suppressContentEditableWarning
-          spellCheck={false}
-          onBlur={event => {
-            const next = event.currentTarget.textContent?.trim() ?? ''
-            if (next !== '' && next !== task.title) onRename(next)
-            else event.currentTarget.textContent = task.title
+      <div
+        ref={titleRef}
+        className={css.popupTitle}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={false}
+        onBlur={event => {
+          const next = event.currentTarget.textContent?.trim() ?? ''
+          if (next !== '' && next !== task.title) onRename(next)
+          else event.currentTarget.textContent = task.title
+        }}
+      >{task.title}</div>
+
+      <textarea
+        ref={areaRef}
+        className={css.fieldArea}
+        style={{ minHeight: 220, border: 'none', background: 'transparent', padding: 0 }}
+        placeholder={t('taskContext')}
+        value={draft}
+        onChange={event => { setDraft(event.target.value) }}
+        onBlur={commit}
+      />
+
+      <div className={css.popupFoot}>
+        <Button
+          variant="toolbar"
+          size="sm"
+          aria-label={t('blockText')}
+          icon={<IconListPenOutline16 />}
+          onClick={event => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            setMenu({ x: rect.left, y: rect.bottom + 4 })
           }}
-        >{task.title}</div>
+        />
+        <span className={css.mono}>{task.id}</span>
+        <span style={{ flex: 1 }} />
+        <Button variant="toolbar" size="sm" aria-label={t('delete')}
+          icon={<IconTrashOutline16 />} onClick={onDelete} />
+      </div>
 
-        <div className={css.popupBody}>
-          <textarea
-            ref={areaRef}
-            className={css.fieldArea}
-            style={{ minHeight: 200 }}
-            placeholder={t('taskContext')}
-            value={draft}
-            onChange={event => { setDraft(event.target.value) }}
-            onBlur={commit}
-          />
-        </div>
-
-        <div className={css.popupFoot}>
-          <button
-            type="button"
-            className={css.iconButton}
-            aria-label={t('blockText')}
-            onClick={event => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              setMenu({ x: rect.left, y: rect.bottom + 4 })
-            }}
-          >+</button>
-          <span className={css.mono}>{task.id}</span>
-          <span style={{ flex: 1 }} />
-          <button type="button" className={css.iconButton} aria-label={t('delete')} onClick={onDelete}>✕</button>
-        </div>
       </div>
 
       {menu !== null && (
@@ -185,6 +207,6 @@ export function TaskPopup(props: TaskPopupProps) {
           </div>
         </>
       )}
-    </>
+    </Modal>
   )
 }

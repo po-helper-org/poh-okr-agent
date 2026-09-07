@@ -43,6 +43,15 @@ export const classNames = {
   fullWidth: 'okr-full-width',
 
   addRow: 'okr-add-row',
+  sectionCard: 'okr-section-card',
+  rowMain: 'okr-row-main',
+  rowMeta: 'okr-row-meta',
+  overdue: 'okr-overdue',
+  flag: 'okr-flag',
+  dateChip: 'okr-date-chip',
+  dateChipLabel: 'okr-date-chip-label',
+  dateChipInput: 'okr-date-chip-input',
+  tabsRow: 'okr-tabs-row',
   addButton: 'okr-add-button',
   group: 'okr-group',
   groupHeader: 'okr-group-header',
@@ -92,6 +101,7 @@ export const classNames = {
   planStage: 'okr-plan-stage',
 
   popup: 'okr-popup',
+  card: 'okr-card',
   popupHead: 'okr-popup-head',
   popupTitle: 'okr-popup-title',
   popupBody: 'okr-popup-body',
@@ -183,42 +193,62 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.iconButton}{display:flex;align-items:center;justify-content:center;width:28px;height:28px;
   border:none;background:transparent;color:var(--dsw-alias-label-caption);border-radius:6px;cursor:pointer;}
 .${c.iconButton}:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
-.${c.tabBar}{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--dsw-alias-border-l2);}
-.${c.tab}{flex:1;border:none;background:transparent;cursor:pointer;padding:10px 4px;
-  font-size:13px;color:var(--dsw-alias-label-caption);border-bottom:2px solid transparent;}
-.${c.tab}[data-active]{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-label-primary);}
+.${c.tabsRow}{display:flex;gap:6px;padding:10px 14px 2px;}
+/* Вкладки — чипы брендбука; подчёркнутых табов в нём нет. */
+.${c.tabBar}{display:flex;gap:2px;padding:0 12px;}
 .${c.body}{flex:1;overflow-y:auto;padding:8px 0 16px;}
 .${c.footer}{padding:12px 16px;border-top:1px solid var(--dsw-alias-border-l2);}
 .${c.fullWidth}{width:100%;}
 
-.${c.addRow}{padding:8px 16px;}
-.${c.addButton}{width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;
-  border:1px dashed var(--dsw-alias-border-l2);border-radius:8px;background:transparent;
-  color:var(--dsw-alias-label-caption);cursor:pointer;font-size:13px;}
-.${c.addButton}:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l1);}
+.${c.addRow}{padding:10px 14px 4px;}
 
-.${c.group}{margin-top:8px;}
-.${c.groupHeader}{display:flex;align-items:center;gap:8px;padding:6px 16px;}
-.${c.groupLabel}{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dsw-alias-label-caption);}
-.${c.groupCount}{font-size:11px;color:var(--dsw-alias-label-caption);}
-.${c.item}{display:flex;align-items:center;gap:10px;width:100%;padding:8px 16px;border:none;
-  background:transparent;text-align:left;cursor:pointer;color:var(--dsw-alias-label-primary);}
-.${c.item}:hover{background:var(--dsw-alias-bg-layer-1);}
-/* Рамка чекбокса — цветом подписи, а не токеном границы: границы в этой теме волосяные
- * (4–12% чёрного) и годятся для разделителей, но контрол с такой рамкой выглядит
- * отсутствующим — на светлом фоне его попросту не видно. */
-.${c.itemCheck}{flex-shrink:0;width:16px;height:16px;border-radius:4px;cursor:pointer;
-  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;padding:0;}
-.${c.itemCheck}:hover{border-color:var(--dsw-alias-label-secondary);}
+/* Секция — подпись и отдельная карточка со строками. Заголовок сам по себе группу не
+ * показывает: на длинном списке глаз теряет, где она кончилась. Карточка показывает. */
+.${c.group}{padding:6px 14px 10px;}
+.${c.groupHeader}{display:flex;align-items:baseline;gap:6px;padding:6px 2px;}
+.${c.groupLabel}{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);}
+.${c.groupCount}{font-size:12px;color:var(--dsw-alias-label-caption);}
+/* Подложка секции — тонированный слой наведения, а не bg-layer-1: в светлой теме он равен
+ * фону панели, и карточка просто не видна. Тонировка задана альфой, поэтому одинаково
+ * работает и на светлой, и на тёмной теме. */
+.${c.sectionCard}{border-radius:12px;background:var(--dsw-alias-interactive-bg-hover);
+  overflow:hidden;}
+.${c.sectionCard} .${c.item}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+
+/* Строка задачи: круглый чекбокс, название и срок под ним, флажок приоритета справа.
+ * Разделитель — только между строками, поэтому у первой его нет. */
+.${c.item}{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;
+  border:none;background:transparent;text-align:left;cursor:pointer;
+  color:var(--dsw-alias-label-primary);}
+.${c.item} + .${c.item}{box-shadow:inset 0 1px 0 var(--dsw-alias-border-l2);}
+.${c.item}:hover{background:var(--dsw-alias-interactive-bg-hover);}
+
+/* Круглый чекбокс: контур цветом подписи, потому что токены границ в этой теме волосяные
+ * (4% чёрного) и контрол с такой рамкой выглядит отсутствующим. */
+.${c.itemCheck}{flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:50%;
+  cursor:pointer;border:1.5px solid var(--dsw-alias-label-caption);background:transparent;
+  padding:0;display:flex;align-items:center;justify-content:center;
+  transition:border-color var(--ds-transition-duration-fast) ease,
+    background var(--ds-transition-duration-fast) ease;}
+.${c.itemCheck}:hover{border-color:var(--dsw-alias-label-primary);}
 .${c.itemCheck}[data-kind="control"]{border-color:#2F72B8;}
 .${c.itemCheck}[data-kind="risk"]{border-color:#B33F3F;}
-.${c.itemCheck}[data-done]{background:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-label-secondary);}
-.${c.itemTitle}{flex:1;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;}
-.${c.item}[data-done] .${c.itemTitle}{color:var(--dsw-alias-label-caption);text-decoration:line-through;}
-.${c.itemMeta}{flex-shrink:0;font-size:11px;color:var(--dsw-alias-label-caption);}
-.${c.itemToday}{color:var(--dsw-alias-label-primary);font-weight:600;}
-.${c.itemNote}{flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--dsw-alias-label-caption);}
+.${c.itemCheck}[data-overdue]{border-color:#B33F3F;}
+.${c.itemCheck}[data-done]{background:var(--dsw-alias-label-secondary);
+  border-color:var(--dsw-alias-label-secondary);}
+.${c.itemCheck}[data-done]::after{content:"";width:9px;height:5px;margin-top:-2px;
+  border-left:1.5px solid var(--dsw-alias-bg-base);border-bottom:1.5px solid var(--dsw-alias-bg-base);
+  transform:rotate(-45deg);}
+
+.${c.rowMain}{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.${c.itemTitle}{font-size:14px;line-height:1.35;overflow-wrap:anywhere;}
+.${c.item}[data-done] .${c.itemTitle}{color:var(--dsw-alias-label-caption);
+  text-decoration:line-through;}
+.${c.rowMeta}{font-size:12px;color:var(--dsw-alias-label-caption);}
+.${c.overdue}{color:#B33F3F;}
+.${c.flag}{flex-shrink:0;margin-top:1px;color:#B33F3F;display:flex;}
+.${c.itemNote}{flex-shrink:0;width:5px;height:5px;margin-top:7px;border-radius:50%;
+  background:var(--dsw-alias-label-caption);}
 
 .${c.stateBlock}{display:flex;flex-direction:column;align-items:center;gap:6px;padding:48px 24px;
   text-align:center;}
@@ -287,12 +317,26 @@ ${phaseRules}
   width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;pointer-events:auto;
   background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;
   box-shadow:0 16px 48px rgba(0,0,0,.28);}
-.${c.popupHead}{display:flex;align-items:center;gap:8px;padding:12px 16px;
+.${c.popupHead}{display:flex;align-items:center;gap:10px;padding:0 0 12px;
   border-bottom:1px solid var(--dsw-alias-border-l2);}
-.${c.popupTitle}{flex:1;font-size:18px;font-weight:600;color:var(--dsw-alias-label-primary);outline:none;}
-.${c.popupBody}{flex:1;overflow-y:auto;padding:12px 16px;}
-.${c.popupFoot}{display:flex;align-items:center;gap:8px;padding:10px 16px;
-  border-top:1px solid var(--dsw-alias-border-l2);font-size:11px;color:var(--dsw-alias-label-caption);}
+.${c.dateChip}{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
+  color:var(--dsw-alias-label-secondary);}
+.${c.dateChip}[data-overdue]{color:#B33F3F;}
+.${c.dateChipInput}{background:transparent;border:none;padding:0;font:inherit;color:inherit;
+  width:118px;}
+/* Подпись видна только у незаполненного срока: с датой она была бы дублем. */
+.${c.dateChipLabel}{display:none;}
+.${c.dateChip}[data-empty] .${c.dateChipLabel}{display:inline;}
+.${c.dateChip}[data-empty] .${c.dateChipInput}{width:22px;color:transparent;}
+.${c.popupTitle}{font-size:20px;font-weight:700;line-height:1.3;
+  color:var(--dsw-alias-label-primary);outline:none;padding:14px 0 6px;}
+.${c.popupBody}{flex:1;overflow-y:auto;padding:0;}
+/* Headless-модалка не даёт внутренних отступов — задаём свои, иначе содержимое
+ * прилипает к краям карточки. */
+.${c.card}{padding:16px 20px 12px;display:flex;flex-direction:column;}
+.${c.popupFoot}{display:flex;align-items:center;gap:8px;padding:10px 0 0;
+  border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
+  color:var(--dsw-alias-label-caption);}
 .${c.content}{min-height:120px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary);outline:none;}
 .${c.content}:empty::before{content:attr(data-placeholder);color:var(--dsw-alias-label-caption);}
 .${c.content} blockquote{margin:8px 0;padding-left:10px;border-left:2px solid var(--dsw-alias-border-l1);
