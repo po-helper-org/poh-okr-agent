@@ -383,8 +383,26 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
       .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
   }
 
+  /**
+   * Уводит в чат с готовой командой и закрывает раздел.
+   *
+   * Без закрытия чат остаётся за оверлеем панели: команда подставлена, а увидеть её
+   * нельзя. Раздел закрывается только после успеха — если цепочка не собралась (нет
+   * рабочего пространства, служба недоступна), панель остаётся на месте с причиной.
+   */
+  const openChatAndClose = (draft: string) => {
+    openChatWithDraft(draft)
+      .then(() => {
+        setOpenObjective(null)
+        setOpenKr(null)
+        setRoute({ view: 'panel' })
+        actions.close()
+      })
+      .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+  }
+
   const continueInChat = (kr: KeyResult) => {
-    void openChatWithDraft(`Работаем над ключевым результатом ${kr.id} («${kr.title}»). Открой его: backlog task ${kr.id} --plain`)
+    openChatAndClose(`Работаем над ключевым результатом ${kr.id} («${kr.title}»). Открой его: backlog task ${kr.id} --plain`)
   }
 
   if (route.view === 'detail') {
@@ -436,8 +454,8 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             t={t}
             onOpenKr={(kr, objectiveTitle) => { setOpenObjective(null); setOpenKr({ kr, objectiveTitle }) }}
             onOpenObjective={(id, title) => { setOpenKr(null); setOpenObjective({ id, title }) }}
-            onPlan={() => { void openChatWithDraft(`/okr-draft ${quarter}`) }}
-            onPresent={() => { void openChatWithDraft(`/okr-equator ${quarter}`) }}
+            onPlan={() => { openChatAndClose(`/okr-draft ${quarter}`) }}
+            onPresent={() => { openChatAndClose(`/okr-equator ${quarter}`) }}
             onClose={() => { setRoute({ view: 'panel' }) }}
           />
         )}
