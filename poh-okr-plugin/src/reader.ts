@@ -26,6 +26,7 @@ import {
   type RunCommand,
 } from './ports.js'
 import { buildOkrTree, parseNexus, type OkrTree } from './nexus-okr.js'
+import { milestoneIdFromFile, parseMilestoneFile, type MilestoneCard } from './milestone-file.js'
 import { parseCreatedId } from './parse-created.js'
 import { createBoardDoc as writerCreateBoardDoc, updateBoardDoc as writerUpdateBoardDoc } from './writer.js'
 
@@ -244,6 +245,23 @@ export class BacklogReader {
       if (node !== null) nodes.push(node)
     }
     return buildOkrTree(nodes)
+  }
+
+  /**
+   * Карточка объектива: название, срок и описание.
+   *
+   * У `backlog milestone` нет подкоманды просмотра — список отдаёт только название и
+   * счётчик, поэтому остальное читается из файла объектива. Файл ищется по префиксу
+   * идентификатора в имени: связи «идентификатор → путь» CLI наружу не даёт.
+   */
+  async readObjective(id: string, signal?: AbortSignal): Promise<MilestoneCard | null> {
+    await this.ensureVersion(signal)
+    const root = `${this.config.workspaceRoot}/backlog/milestones`
+    const names = await this.listDirectory(root)
+    const name = names.find(item => milestoneIdFromFile(item) === id)
+    if (name === undefined) return null
+    const text = await this.readTextFile(`${root}/${name}`)
+    return text === null ? null : parseMilestoneFile(text)
   }
 
   /** Типы задач нужны каналу, чтобы собирать команды создания. */

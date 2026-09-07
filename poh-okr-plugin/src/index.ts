@@ -23,6 +23,7 @@ export {
   type Block,
   type BlockType,
 } from './markdown-blocks.js'
+export { currentQuarter, milestoneIdFromFile, parseMilestoneFile, type MilestoneCard } from './milestone-file.js'
 export { parseCreatedId } from './parse-created.js'
 export { parseMilestoneList, type MilestoneRow } from './parse-milestones.js'
 export {

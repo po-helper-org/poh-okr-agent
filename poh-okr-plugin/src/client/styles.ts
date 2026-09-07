@@ -111,6 +111,9 @@ export const classNames = {
   objRow: 'okr-obj-row',
   objTitle: 'okr-obj-title',
   objActions: 'okr-obj-actions',
+  objRowButton: 'okr-obj-row-button',
+  objCount: 'okr-obj-count',
+  boardAction: 'okr-board-action',
   krRow: 'okr-kr-row',
   krTitle: 'okr-kr-title',
   cell: 'okr-cell',
@@ -432,7 +435,18 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.sprintLabel}:focus{color:var(--dsw-alias-label-primary);}
 .${c.objRow}{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:8px 12px;
   position:sticky;left:0;background:var(--dsw-alias-interactive-bg-hover);border-top:1px solid var(--dsw-alias-border-l1);}
-.${c.objTitle}{flex:1;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);outline:none;}
+.${c.objTitle}{flex:1;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);
+  text-align:left;}
+.${c.objRowButton}{border:none;cursor:pointer;width:100%;}
+.${c.objRowButton}:hover{background:var(--dsw-alias-border-l2);}
+.${c.objCount}{font-size:12px;color:var(--dsw-alias-label-caption);}
+/* Кнопки действий доски: они уводят в чат, поэтому выглядят как обычные действия,
+ * а не как элементы управления самой доской. */
+.${c.boardAction}{padding:6px 14px;border-radius:999px;cursor:pointer;font-size:13px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;
+  color:var(--dsw-alias-label-secondary);white-space:nowrap;}
+.${c.boardAction}:hover{background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary);}
 .${c.objActions}{display:flex;gap:2px;}
 .${c.krRow}{display:contents;}
 .${c.krTitle}{position:sticky;left:0;z-index:1;min-width:260px;max-width:360px;padding:8px 12px;

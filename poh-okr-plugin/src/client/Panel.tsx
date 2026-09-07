@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PropsStore } from '@deepseek-ai/dsh-client-store'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   poTaskLabel,
@@ -22,7 +23,9 @@ import {
 } from '../model.js'
 import type { RawTaskDetail } from '../backlog-json.js'
 import { groupTasks, isoDay, type GroupKey } from '../po-groups.js'
+import { currentQuarter } from '../milestone-file.js'
 import { Board } from './Board.js'
+import { ObjectiveSheet } from './ObjectiveSheet.js'
 import { Composer, type ComposerDraft } from './Composer.js'
 import { DetailPage } from './DetailPage.js'
 import { KrSidebar } from './KrSidebar.js'
@@ -72,6 +75,35 @@ type Load<T> =
 
 const PANEL_WIDTH_KEY = 'okr-panel-width'
 const MIN_PANEL = 340
+const BOARD_CACHE_KEY = 'okr-board-cache'
+
+/**
+ * Последняя доска, показанная в этом браузере.
+ *
+ * Доска собирается несколькими вызовами CLI, и открывать её на пустой экран с надписью
+ * «Загружаю» неправильно: состав целей меняется раз в квартал, а смотрят на доску часто.
+ * Кэш рисуется сразу, свежие данные приезжают следом и заменяют его.
+ */
+function readBoardCache(): BoardModel | null {
+  try {
+    const raw = window.localStorage.getItem(BOARD_CACHE_KEY)
+    if (raw === null) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const board = parsed as BoardModel
+    // Форма проверяется, а не принимается на веру: в хранилище мог остаться снимок от
+    // прежней версии плагина, и доска упала бы на первом же обращении к полю.
+    return Array.isArray(board.objectives) && Array.isArray(board.sprintLabels) ? board : null
+  } catch {
+    return null
+  }
+}
+
+function writeBoardCache(board: BoardModel): void {
+  try {
+    window.localStorage.setItem(BOARD_CACHE_KEY, JSON.stringify(board))
+  } catch { /* приватное окно или переполненное хранилище — кэш необязателен */ }
+}
 
 export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrPanelProps) {
   const open = useStore(state => state.open)
@@ -79,7 +111,11 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   const [route, setRoute] = useState<Route>({ view: 'panel' })
   const [tab, setTab] = useState<PoTaskKind>('task')
   const [tasks, setTasks] = useState<Load<PoTask[]>>({ phase: 'loading' })
-  const [board, setBoard] = useState<Load<BoardModel>>({ phase: 'loading' })
+  const [board, setBoard] = useState<Load<BoardModel>>(() => {
+    const cached = readBoardCache()
+    return cached === null ? { phase: 'loading' } : { phase: 'ready', value: cached }
+  })
+  const [openObjective, setOpenObjective] = useState<{ id: string; title: string } | null>(null)
   const [openKr, setOpenKr] = useState<{ kr: KeyResult; objectiveTitle: string } | null>(null)
   const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -156,6 +192,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     if (!open) {
       setRoute({ view: 'panel' })
       setOpenKr(null)
+      setOpenObjective(null)
       setOpenTask(null)
       setError(null)
     }
@@ -180,10 +217,19 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     if (!open) return
     const controller = new AbortController()
     unwrap<BoardModel>(call('board', {}, controller.signal))
-      .then(value => { if (!controller.signal.aborted) setBoard({ phase: 'ready', value }) })
+      .then(value => {
+        if (controller.signal.aborted) return
+        setBoard({ phase: 'ready', value })
+        writeBoardCache(value)
+      })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setBoard({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) })
+        // Кэш на экране важнее сообщения об ошибке обновления: устаревшая доска полезнее
+        // пустого экрана, а причина всё равно попадает в общую строку ошибок.
+        setBoard(current => (current.phase === 'ready'
+          ? current
+          : { phase: 'error', message: cause instanceof Error ? cause.message : String(cause) }))
+        setError(cause instanceof Error ? cause.message : String(cause))
       })
     return () => { controller.abort() }
   }, [open, call, reloadToken])
@@ -194,6 +240,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (openTask !== null) { setOpenTask(null); return }
+      if (openObjective !== null) { setOpenObjective(null); return }
       if (openKr !== null) { setOpenKr(null); return }
       if (route.view === 'detail') { setRoute({ view: 'board' }); return }
       if (route.view === 'board') { setRoute({ view: 'panel' }); return }
@@ -201,7 +248,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [open, openTask, openKr, route.view, actions])
+  }, [open, openTask, openKr, openObjective, route.view, actions])
 
   if (!open) return null
 
@@ -355,32 +402,61 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   }
 
   if (route.view === 'board') {
+    const quarter = currentQuarter(new Date())
     return (
       <>
-        {board.phase === 'loading' && (
+        {board.phase !== 'ready' && (
           <div className={css.screen}>
-            <div className={css.stateBlock}><span className={css.stateTitle}>{t('loading')}</span></div>
-          </div>
-        )}
-        {board.phase === 'error' && (
-          <div className={css.screen}>
+            <div className={css.boardHeader}>
+              {/* Кнопка возврата есть и во время загрузки: без неё экран-заглушка
+                  оказывался тупиком, из которого нечем выйти. */}
+              <button
+                type="button"
+                className={css.iconButton}
+                onClick={() => { setRoute({ view: 'panel' }) }}
+                aria-label={t('back')}
+              ><Icon name="chevronLeft" /></button>
+              <div className={css.headerTitle}>{t('boardTitle')}</div>
+            </div>
             <div className={css.stateBlock}>
-              <span className={css.stateTitle}>{t('errorTitle')}</span>
-              <span className={css.stateMessage}>{board.message}</span>
-              <button type="button" className={css.addBtn} onClick={reload}>{t('retry')}</button>
+              <span className={css.stateTitle}>
+                {board.phase === 'loading' ? t('loading') : t('errorTitle')}
+              </span>
+              {board.phase === 'error' && <span className={css.stateMessage}>{board.message}</span>}
+              {board.phase === 'error' && (
+                <button type="button" className={css.addBtn} onClick={reload}>{t('retry')}</button>
+              )}
             </div>
           </div>
         )}
+
         {board.phase === 'ready' && (
           <Board
             board={board.value}
             t={t}
-            call={call}
-            reload={reload}
-            onOpenKr={(kr, objectiveTitle) => { setOpenKr({ kr, objectiveTitle }) }}
+            onOpenKr={(kr, objectiveTitle) => { setOpenObjective(null); setOpenKr({ kr, objectiveTitle }) }}
+            onOpenObjective={(id, title) => { setOpenKr(null); setOpenObjective({ id, title }) }}
+            onPlan={() => { void openChatWithDraft(`/okr-draft ${quarter}`) }}
+            onPresent={() => { void openChatWithDraft(`/okr-equator ${quarter}`) }}
             onClose={() => { setRoute({ view: 'panel' }) }}
           />
         )}
+
+        {openObjective !== null && board.phase === 'ready' && (
+          <ObjectiveSheet
+            id={openObjective.id}
+            title={openObjective.title}
+            krs={board.value.objectives.find(item => item.id === openObjective.id)?.krs ?? []}
+            t={t}
+            call={call}
+            onOpenKr={kr => {
+              setOpenKr({ kr, objectiveTitle: openObjective.title })
+              setOpenObjective(null)
+            }}
+            onClose={() => { setOpenObjective(null) }}
+          />
+        )}
+
         {openKr !== null && (
           <KrSidebar
             kr={openKr.kr}
@@ -526,11 +602,12 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         </div>
 
         <div className={css.footer}>
-          <button
-            type="button"
-            className={`${css.addButton} ${css.fullWidth}`}
-            onClick={() => { setBoard({ phase: 'loading' }); setRoute({ view: 'board' }) }}
-          >{t('openBoard')}</button>
+          <Button
+            variant="outline"
+            className={css.fullWidth}
+            icon={<Icon name="weekAhead" />}
+            onClick={() => { setRoute({ view: 'board' }) }}
+          >{t('openBoard')}</Button>
         </div>
       </aside>
 

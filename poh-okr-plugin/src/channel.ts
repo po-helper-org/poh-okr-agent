@@ -90,6 +90,16 @@ export async function dispatch(
       case 'board':
         return ok(await reader.readBoard(signal))
 
+      // Карточка объектива для его детальной страницы: milestone — такая же сущность
+      // с полями, как и ключевой результат, просто хранится отдельным файлом.
+      case 'objective': {
+        const id = stringField(payload, 'id')
+        if (!id) return fail('bad-request', 'не передан идентификатор объектива')
+        const card = await reader.readObjective(id, signal)
+        if (card === null) return fail('objective-not-found', `объектив «${id}» не найден`)
+        return ok(card)
+      }
+
       case 'poTasks':
         return ok(await reader.listPoTasks(signal))
 

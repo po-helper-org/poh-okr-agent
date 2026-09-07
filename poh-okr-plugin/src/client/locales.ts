@@ -54,6 +54,10 @@ export const ru = {
   errorTitle: 'Не удалось получить данные',
 
   boardTitle: 'Доска целей',
+  planOkr: 'Планирование OKR',
+  generateDeck: 'Сгенерировать презентацию',
+  objectiveTitle: 'Объектив',
+  krCount: 'Ключевых результатов',
   addObjective: 'Добавить объектив',
   addKr: 'Добавить ключевой результат',
   knowledgeBase: 'База знаний',
