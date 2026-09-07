@@ -66,8 +66,11 @@ export const classNames = {
   grip: 'okr-grip',
   detailHead: 'okr-detail-head',
   detailBody: 'okr-detail-body',
+  navBody: 'okr-nav-body',
   detailTitle: 'okr-detail-title',
   detailFoot: 'okr-detail-foot',
+  sectionHead: 'okr-section-head',
+  sectionTitle: 'okr-section-title',
   editor: 'okr-editor',
   todoBox: 'okr-todo-box',
   todoText: 'okr-todo-text',
@@ -498,9 +501,20 @@ ${phaseRules}
 .${c.detailHead}{display:flex;align-items:center;gap:10px;padding:12px 16px;
   border-bottom:1px solid var(--dsw-alias-border-l2);}
 .${c.detailBody}{flex:1;overflow-y:auto;padding:14px 18px;}
+/* Запас снизу для карточки с навигацией по разделам: без него последний раздел
+ * упирается в конец прокрутки и не встаёт под чипы, а подсветка чипа возвращается
+ * к предыдущему разделу. */
+.${c.navBody}{padding-bottom:52vh;}
 .${c.detailTitle}{font-size:20px;font-weight:700;line-height:1.3;outline:none;
   padding-bottom:8px;color:var(--dsw-alias-label-primary);}
-.${c.detailFoot}{display:flex;align-items:center;gap:4px;padding:10px 14px;
+/* Разделы карточки идут одной прокруткой и разделяются линией: чипы сверху ведут к ним,
+ * а не прячут соседние. Верхний отступ прокрутки даёт заголовку встать под чипами,
+ * а не вплотную к ним. */
+.${c.sectionHead}{margin-top:18px;padding-top:14px;scroll-margin-top:8px;
+  border-top:1px solid var(--dsw-alias-border-l2);}
+.${c.sectionTitle}{font-size:13px;font-weight:600;padding:0 16px 4px;
+  color:var(--dsw-alias-label-primary);}
+.${c.detailFoot}{display:flex;align-items:center;gap:8px;padding:10px 14px;
   border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
   color:var(--dsw-alias-label-caption);}
 
