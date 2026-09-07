@@ -200,7 +200,7 @@ export function TaskSheet(props: TaskSheetProps) {
           title={t('fieldPriority')}
           data-on={task.priority !== null || undefined}
           onClick={event => { openFrom(event, 'priority') }}
-        ><PriorityFlag priority={task.priority} size={16} /></button>
+        ><PriorityFlag priority={task.priority} size={16} className={css.flag} /></button>
         <span style={{ flex: 1 }} />
         <button type="button" className={css.iconButton} aria-label={t('close')} onClick={close}>
           <Icon name="chevronRight" />
@@ -274,21 +274,27 @@ export function TaskSheet(props: TaskSheetProps) {
           {menu === 'priority' && PRIORITIES.filter(item => item.id !== 'none').map(item => (
             <PopoverItem
               key={item.id ?? 'none'}
-              glyph={item.id === 'none' ? <Icon name="ban" size={15} /> : <PriorityFlag priority={item.id} size={15} />}
+              selected={item.id === task.priority}
+              // «Без приоритета» — тот же флажок серым: четыре уровня различаются цветом,
+              // и перечёркнутый круг выпадал из этого ряда.
+              glyph={<PriorityFlag priority={item.id === 'none' ? null : item.id} size={15} className={css.flag} />}
               label={t(item.key)}
               onSelect={() => { props.onSetPriority(item.id === 'none' ? null : item.id as Priority); setMenu(null) }}
             />
           ))}
           {menu === 'kind' && PO_TASK_KINDS.map(item => (
-            <PopoverItem key={item} glyph={<Icon name="tag" size={15} />} label={t(KIND_LABEL[item])}
+            <PopoverItem key={item} selected={item === task.kind} glyph={<Icon name="tag" size={15} />}
+              label={t(KIND_LABEL[item])}
               onSelect={() => { props.onSetKind(item); setMenu(null) }} />
           ))}
           {menu === 'kr' && (
             <>
               <PopoverItem glyph={<Icon name="ban" size={15} />} label={t('krNone')}
+                selected={task.relatedKrIds.length === 0}
                 onSelect={() => { props.onSetKr(null); setMenu(null) }} />
               {krs.map(kr => (
-                <PopoverItem key={kr.id} glyph={<Icon name="inbox" size={15} />} label={kr.title} sub={kr.id}
+                <PopoverItem key={kr.id} selected={task.relatedKrIds.includes(kr.id)}
+                  glyph={<Icon name="inbox" size={15} />} label={kr.title} sub={kr.id}
                   onSelect={() => { props.onSetKr(kr.id); setMenu(null) }} />
               ))}
               <PopoverItem glyph={<Icon name="weekAhead" size={15} />} label={t('importKrs')}

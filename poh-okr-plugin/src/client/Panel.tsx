@@ -554,6 +554,9 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
           onSetKind={value => {
             mutate('setKind', openTask.task.id, { value, labels: openTask.task.labels },
               current => ({ ...current, kind: value }))
+            // Панель переключается на вкладку нового типа: иначе строка молча исчезает
+            // с текущей, и правка выглядит как потерянная.
+            setTab(value)
           }}
           onSetKr={value => {
             mutate('setKr', openTask.task.id, { value, labels: openTask.task.labels },

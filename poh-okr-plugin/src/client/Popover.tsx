@@ -72,11 +72,17 @@ export function Popover({ anchor, onClose, children }: PopoverProps) {
 
 /** Строка меню внутри слоя. */
 export function PopoverItem(
-  { glyph, label, sub, onSelect }:
-  { glyph?: ReactNode; label: ReactNode; sub?: string; onSelect: () => void },
+  { glyph, label, sub, selected, onSelect }:
+  { glyph?: ReactNode; label: ReactNode; sub?: string; selected?: boolean; onSelect: () => void },
 ) {
   return (
-    <button type="button" className={css.popItem} onClick={onSelect}>
+    <button
+      type="button"
+      className={css.popItem}
+      data-selected={selected === true || undefined}
+      aria-current={selected === true || undefined}
+      onClick={onSelect}
+    >
       {glyph !== undefined && <span className={css.popGlyph}>{glyph}</span>}
       <span>
         {label}

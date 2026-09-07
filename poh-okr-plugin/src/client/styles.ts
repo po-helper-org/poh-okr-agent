@@ -377,9 +377,16 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.rowMeta}[data-overdue]{color:var(--dsw-alias-state-error-primary);}
 .${c.rowMarks}{display:flex;align-items:center;gap:6px;flex-shrink:0;
   color:var(--dsw-alias-label-caption);}
+/* Цвет флажка — единственный быстрый признак уровня: форма у всех одинаковая, и без
+ * цвета выбор приоритета выглядит как «ничего не произошло». Серый — приоритет не задан. */
 .${c.flag}[data-priority="high"]{color:var(--dsw-alias-state-error-primary);}
-.${c.flag}[data-priority="medium"]{color:#C1861A;}
-.${c.flag}[data-priority="low"]{color:var(--dsw-alias-button-info-fill);}
+.${c.flag}[data-priority="medium"]{color:var(--dsw-alias-button-info-fill);}
+.${c.flag}[data-priority="low"]{color:#2F9E6E;}
+.${c.flag}[data-priority="none"]{color:var(--dsw-alias-label-caption);}
+
+/* Выбранный пункт меню помечается: без отметки непонятно, что уже выставлено. */
+.${c.popItem}[data-selected]{background:var(--dsw-alias-interactive-bg-hover);}
+.${c.popItem}[data-selected] .${c.popGlyph}{color:var(--dsw-alias-button-info-fill);}
 
 .${c.stateBlock}{display:flex;flex-direction:column;align-items:center;gap:6px;
   padding:52px 24px;text-align:center;}

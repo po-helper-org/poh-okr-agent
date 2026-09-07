@@ -48,10 +48,16 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }): Re
  * Флажок приоритета: высокий и средний залиты, низкий контурный.
  * Заливка отличает их быстрее цвета — на мелком значке оттенок читается хуже формы.
  */
-export function PriorityFlag({ priority, size = 14 }: { priority: string | null; size?: number }): ReactNode {
+export function PriorityFlag(
+  { priority, size = 14, className }: { priority: string | null; size?: number; className?: string },
+): ReactNode {
+  // Залиты высокий и средний, низкий и незаданный — контурные: на мелком значке форма
+  // читается быстрее оттенка, а цвет уточняет уровень.
   const filled = priority === 'high' || priority === 'medium'
   return (
     <svg
+      className={className}
+      data-priority={priority ?? 'none'}
       width={size}
       height={size}
       viewBox="0 0 16 16"

@@ -159,14 +159,17 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
     <div className={css.composer} data-open={open || undefined}>
       {open ? titleInput : (
         <div className={css.composerLine}>
-          <span style={{ color: 'var(--dsw-alias-label-caption)', display: 'flex' }}>
-            <Icon name="calendar" size={0} />
-          </span>
           {titleInput}
           {dateButton}
-          <span style={{ color: 'var(--dsw-alias-label-caption)', display: 'flex' }}>
-            <Icon name="chevronDown" size={15} />
-          </span>
+          {/* Шеврон раскрывает расширенный режим. Раньше это была картинка без действия:
+              на кнопку жмут, а она не кнопка. */}
+          <button
+            type="button"
+            className={css.iconButton}
+            aria-label={t('expand')}
+            aria-expanded={false}
+            onClick={() => { setOpen(true) }}
+          ><Icon name="chevronDown" size={15} /></button>
         </div>
       )}
 
@@ -199,12 +202,14 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
                 title={t('fieldPriority')}
                 data-on={draft.priority !== null || undefined}
                 onClick={event => { openFrom(event, 'priority') }}
-              ><PriorityFlag priority={draft.priority} size={16} /></button>
+              ><PriorityFlag priority={draft.priority} size={16} className={css.flag} /></button>
               {/* Ящик — привязка к ключевому результату: операционная задача помогает его достичь. */}
               <button
                 type="button"
                 className={css.iconButton}
-                title={t('fieldKr')}
+                title={draft.krId === null
+                  ? t('fieldKr')
+                  : `${t('fieldKr')}: ${krs.find(kr => kr.id === draft.krId)?.title ?? draft.krId}`}
                 data-on={draft.krId !== null || undefined}
                 onClick={event => { openFrom(event, 'kr') }}
               ><Icon name="inbox" /></button>
@@ -249,7 +254,10 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
           {menu === 'priority' && PRIORITIES.map(item => (
             <PopoverItem
               key={item.id ?? 'none'}
-              glyph={item.id === 'none' ? <Icon name="ban" size={15} /> : <PriorityFlag priority={item.id} size={15} />}
+              selected={(item.id === 'none' ? null : item.id) === draft.priority}
+              // «Без приоритета» — тот же флажок серым: четыре уровня различаются цветом,
+              // и перечёркнутый круг выпадал из этого ряда.
+              glyph={<PriorityFlag priority={item.id === 'none' ? null : item.id} size={15} className={css.flag} />}
               label={t(item.key)}
               onSelect={() => {
                 setDraft(current => ({ ...current, priority: item.id === 'none' ? null : item.id as Priority }))
@@ -261,6 +269,7 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
           {menu === 'kind' && PO_TASK_KINDS.map(item => (
             <PopoverItem
               key={item}
+              selected={item === kind}
               glyph={<Icon name="tag" size={15} />}
               label={t(KIND_LABEL[item])}
               onSelect={() => {
@@ -273,10 +282,12 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
           {menu === 'kr' && (
             <>
               <PopoverItem glyph={<Icon name="ban" size={15} />} label={t('krNone')}
+                selected={draft.krId === null}
                 onSelect={() => { setDraft(current => ({ ...current, krId: null })); dropTrigger(); closeMenu() }} />
               {krs.map(kr => (
                 <PopoverItem
                   key={kr.id}
+                  selected={kr.id === draft.krId}
                   glyph={<Icon name="inbox" size={15} />}
                   label={kr.title}
                   sub={kr.id}

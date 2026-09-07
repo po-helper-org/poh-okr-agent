@@ -121,6 +121,7 @@ export const ru = {
   importKrsHint: 'из нексусов воркспейса в Backlog.md',
   importKrsNothing: 'Всё уже перенесено — новых целей в нексусах не нашлось',
   more: 'Ещё',
+  expand: 'Развернуть',
   blockNumbered2: 'Нумерованный список',
   editorPlaceholder: 'Текст, «/» — команды',
 } as const
