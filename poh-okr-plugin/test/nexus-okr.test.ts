@@ -8,7 +8,7 @@ const KR = [
   'node_id: kr-2-1',
   'node_type: key-result',
   'paf_step: null',
-  "owner: Ишманов Алексей Юрьевич",
+  'owner: Иванов Иван Иванович',
   'title: РЕСТОРАНЫ в полнотекстовый поиск',
   'serves: obj-2026q3-2',
   '---',

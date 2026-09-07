@@ -13,7 +13,7 @@ test('KR заводится типом и привязкой к объектив
 test('операционная задача связывается с KR зависимостью, а не родительством', () => {
   // Подзадача получила бы идентификатор PO-20.1 и въехала в иерархию KR — у операционной
   // задачи свой жизненный цикл, она не часть ключевого результата.
-  const args = writer.createPoTask({ title: 'Созвон с Кузнецовым', kind: 'control', taskType: 'potask', relatedKrId: 'PO-20' })
+  const args = writer.createPoTask({ title: 'Созвон с заказчиком', kind: 'control', taskType: 'potask', relatedKrId: 'PO-20' })
   assert.ok(args.includes('--dep'))
   assert.ok(!args.includes('-p'))
   assert.deepEqual(args.slice(-2), ['--dep', 'PO-20'])

@@ -350,21 +350,21 @@ function dueLabel(due) {
 const KRS = [
   { id: 'PO-40', obj: 'Удержание пользователей', title: 'Доля отказов на оплате ниже 2%' },
   { id: 'PO-41', obj: 'Удержание пользователей', title: 'Повторные покупки +15%' },
-  { id: 'PO-42', obj: 'Запуск кино', title: 'Кино на Production во всех регионах' },
-  { id: 'PO-43', obj: 'Платформа', title: 'Переезд web_db на PostgreSQL' },
+  { id: 'PO-42', obj: 'Запуск кино', title: 'Раскатить фичу во всех регионах' },
+  { id: 'PO-43', obj: 'Платформа', title: 'Переезд базы на PostgreSQL' },
 ]
 
 const SEED = [
   { id: 'PO-25', kind: 'task', title: 'Занести все эпики в JIRA', due: shiftDays(-14), priority: 'high', done: false, desc: '', kr: 'PO-42' },
-  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, которые купили на TLND', due: shiftDays(-2), priority: null, done: false, kr: 'PO-40', desc: '## Что решаем\nИсключить тех, кто уже купил на TLND.\n\n- [x] согласовать с Кардоной\n- [ ] список исключений от маркетинга\n\n---\n\n> Решение зафиксировано на встрече 5 сентября.' },
-  { id: 'PO-31', kind: 'task', title: 'Созвон по админкам ТС', due: TODAY, priority: 'medium', done: false, desc: '' },
+  { id: 'PO-26', kind: 'task', title: 'Исключить пользователей витрины из рассылки', due: shiftDays(-2), priority: null, done: false, kr: 'PO-40', desc: '## Что решаем\nИсключить тех, кто уже оформил заказ.\n\n- [x] согласовать с заказчиком\n- [ ] список исключений от маркетинга\n\n---\n\n> Решение зафиксировано на встрече 5 сентября.' },
+  { id: 'PO-31', kind: 'task', title: 'Созвон по административным панелям', due: TODAY, priority: 'medium', done: false, desc: '' },
   { id: 'PO-32', kind: 'task', title: 'По FAQ — занести истории на итерацию 2', due: shiftDays(3), priority: null, done: false, desc: '' },
-  { id: 'PO-27', kind: 'task', title: 'Взять AI-харнесс под проектное управление', due: null, priority: 'low', done: false, desc: '' },
+  { id: 'PO-27', kind: 'task', title: 'Взять внутренний инструмент под проектное управление', due: null, priority: 'low', done: false, desc: '' },
   { id: 'PO-30', kind: 'task', title: 'PoC BI', due: null, priority: null, done: true, desc: '' },
-  { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент без Тимура', due: shiftDays(1), priority: 'high', done: false, desc: '' },
+  { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент на время отпуска', due: shiftDays(1), priority: 'high', done: false, desc: '' },
   { id: 'PO-33', kind: 'control', title: 'Слава собрал контекст по нестабильным моментам', due: null, priority: null, done: true, desc: '' },
   { id: 'PO-29', kind: 'risk', title: 'Подрядчик не подтвердил сроки', due: shiftDays(-1), priority: 'high', done: false, desc: 'Ждём ответа до пятницы, иначе двигаем релиз.', kr: 'PO-43' },
-  { id: 'PO-34', kind: 'risk', title: 'Спекулянты держат места бесконечной бронью', due: null, priority: 'medium', done: false, desc: '' },
+  { id: 'PO-34', kind: 'risk', title: 'Бесконечная бронь удерживает места', due: null, priority: 'medium', done: false, desc: '' },
 ]
 
 const STORAGE = 'okr-panel-prototype-3'
