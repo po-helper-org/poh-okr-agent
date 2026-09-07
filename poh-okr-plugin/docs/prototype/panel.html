@@ -205,9 +205,43 @@ svg{display:block;flex-shrink:0}
 .detail-body{flex:1;overflow-y:auto;padding:14px 18px}
 .detail-title{font-size:20px;font-weight:700;line-height:1.3;outline:none;
   padding-bottom:8px;white-space:pre-wrap}
-.detail-desc{width:100%;min-height:240px;border:none;background:transparent;padding:0;
-  font:inherit;font-size:14px;line-height:1.55;color:var(--dsw-alias-label-primary);
-  outline:none;resize:none}
+/* ——— Блочный редактор описания ———
+ * Каждая строка — самостоятельный блок со своим типом в data-block, и тип целиком отвечает
+ * за вид. Так разметку можно собрать обратно в markdown построчно, а Backlog.md хранит
+ * именно markdown: описание, открытое в CLI или в файле, должно остаться читаемым. */
+.editor{width:100%;min-height:240px;outline:none;font-size:14px;line-height:1.6;
+  color:var(--dsw-alias-label-primary);counter-reset:okr-num}
+.editor > *{margin:0;padding:2px 0;position:relative}
+/* Подсказка только у полностью пустого описания: на каждой пустой строке она превращает
+ * редактор в частокол из повторяющегося текста. */
+.editor[data-empty] [data-block="text"]:empty::before{content:attr(data-placeholder);
+  color:var(--dsw-alias-label-caption)}
+.editor [data-block="h1"]{font-size:21px;font-weight:700;padding-top:10px}
+.editor [data-block="h2"]{font-size:17px;font-weight:700;padding-top:8px}
+.editor [data-block="h3"]{font-size:15px;font-weight:600;padding-top:6px}
+.editor [data-block="bullet"],.editor [data-block="number"]{padding-left:22px}
+.editor [data-block="bullet"]::before{content:"\2022";position:absolute;left:6px;
+  color:var(--dsw-alias-button-info-fill)}
+.editor [data-block="number"]{counter-increment:okr-num}
+.editor [data-block="number"]::before{content:counter(okr-num) ".";position:absolute;left:2px;
+  color:var(--dsw-alias-label-caption);font-size:13px}
+.editor [data-block="quote"]{padding-left:12px;color:var(--dsw-alias-label-secondary);
+  border-left:2px solid var(--dsw-alias-border-l3)}
+.editor [data-block="divider"]{padding:0;height:1px;background:var(--dsw-alias-border-l2);
+  margin:12px 0}
+.editor [data-block="todo"]{display:flex;align-items:flex-start;gap:8px}
+.editor .todo-box{flex-shrink:0;width:16px;height:16px;margin-top:4px;border-radius:4px;
+  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;cursor:pointer;
+  padding:0;display:flex;align-items:center;justify-content:center}
+.editor .todo-box[data-on]{background:var(--dsw-alias-button-info-fill);
+  border-color:var(--dsw-alias-button-info-fill)}
+.editor .todo-box[data-on]::after{content:"";width:8px;height:4px;margin-top:-2px;
+  border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg)}
+.editor [data-block="todo"] .todo-text{flex:1;outline:none}
+.editor [data-block="todo"][data-done] .todo-text{color:var(--dsw-alias-label-caption);
+  text-decoration:line-through}
+.pop .glyph{width:22px;flex-shrink:0;text-align:center;font-size:12px;
+  color:var(--dsw-alias-label-tertiary)}
 .detail-foot{display:flex;align-items:center;gap:4px;padding:10px 14px;
   border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
   color:var(--dsw-alias-label-caption)}
@@ -312,20 +346,28 @@ function dueLabel(due) {
   return due.slice(8, 10) + '.' + due.slice(5, 7)
 }
 
+/** Ключевые результаты доски: к ним привязываются операционные задачи (иконка ящика). */
+const KRS = [
+  { id: 'PO-40', obj: 'Удержание пользователей', title: 'Доля отказов на оплате ниже 2%' },
+  { id: 'PO-41', obj: 'Удержание пользователей', title: 'Повторные покупки +15%' },
+  { id: 'PO-42', obj: 'Запуск кино', title: 'Кино на Production во всех регионах' },
+  { id: 'PO-43', obj: 'Платформа', title: 'Переезд web_db на PostgreSQL' },
+]
+
 const SEED = [
-  { id: 'PO-25', kind: 'task', title: 'Занести все эпики в JIRA', due: shiftDays(-14), priority: 'high', done: false, desc: '' },
-  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, которые купили на TLND', due: shiftDays(-2), priority: null, done: false, desc: 'Согласовано с Кардоной. Нужен список исключений от маркетинга.' },
+  { id: 'PO-25', kind: 'task', title: 'Занести все эпики в JIRA', due: shiftDays(-14), priority: 'high', done: false, desc: '', kr: 'PO-42' },
+  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, которые купили на TLND', due: shiftDays(-2), priority: null, done: false, kr: 'PO-40', desc: '## Что решаем\nИсключить тех, кто уже купил на TLND.\n\n- [x] согласовать с Кардоной\n- [ ] список исключений от маркетинга\n\n---\n\n> Решение зафиксировано на встрече 5 сентября.' },
   { id: 'PO-31', kind: 'task', title: 'Созвон по админкам ТС', due: TODAY, priority: 'medium', done: false, desc: '' },
   { id: 'PO-32', kind: 'task', title: 'По FAQ — занести истории на итерацию 2', due: shiftDays(3), priority: null, done: false, desc: '' },
   { id: 'PO-27', kind: 'task', title: 'Взять AI-харнесс под проектное управление', due: null, priority: 'low', done: false, desc: '' },
   { id: 'PO-30', kind: 'task', title: 'PoC BI', due: null, priority: null, done: true, desc: '' },
   { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент без Тимура', due: shiftDays(1), priority: 'high', done: false, desc: '' },
   { id: 'PO-33', kind: 'control', title: 'Слава собрал контекст по нестабильным моментам', due: null, priority: null, done: true, desc: '' },
-  { id: 'PO-29', kind: 'risk', title: 'Подрядчик не подтвердил сроки', due: shiftDays(-1), priority: 'high', done: false, desc: 'Ждём ответа до пятницы, иначе двигаем релиз.' },
+  { id: 'PO-29', kind: 'risk', title: 'Подрядчик не подтвердил сроки', due: shiftDays(-1), priority: 'high', done: false, desc: 'Ждём ответа до пятницы, иначе двигаем релиз.', kr: 'PO-43' },
   { id: 'PO-34', kind: 'risk', title: 'Спекулянты держат места бесконечной бронью', due: null, priority: 'medium', done: false, desc: '' },
 ]
 
-const STORAGE = 'okr-panel-prototype-2'
+const STORAGE = 'okr-panel-prototype-3'
 let tasks = load()
 let tab = 'task'
 let openId = null
@@ -474,100 +516,337 @@ function priorityMenu(current, onPick) {
   }, el('span', { html: p.id ? flagSvg(p.id, 15) : svg('ban', 15) }), p.label)))
 }
 
+
+/* ——— Блочный редактор описания ————————————————————————————————————————————
+ * Хранилище — markdown: описание задачи в Backlog.md читают и человек, и навыки, и CLI.
+ * Поэтому редактор собирается из markdown и разбирается обратно в него, а собственной
+ * разметки не заводит.
+ */
+
+const BLOCKS = [
+  { id: 'text', label: 'Текст', glyph: 'T' },
+  { id: 'h1', label: 'Заголовок 1', glyph: 'H1' },
+  { id: 'h2', label: 'Заголовок 2', glyph: 'H2' },
+  { id: 'h3', label: 'Заголовок 3', glyph: 'H3' },
+  { id: 'bullet', label: 'Маркированный список', glyph: '•' },
+  { id: 'number', label: 'Нумерованный список', glyph: '1.' },
+  { id: 'todo', label: 'Пункт списка дел', glyph: '☑' },
+  { id: 'quote', label: 'Цитата', glyph: '❝' },
+  { id: 'divider', label: 'Горизонтальная линия', glyph: '—' },
+]
+
+/** Одна строка markdown → тип блока и его текст. */
+function parseLine(line) {
+  if (/^(-{3,}|\*{3,})$/.test(line.trim())) return { type: 'divider', text: '', done: false }
+  const todo = /^[-*]\s+\[( |x|X)\]\s+(.*)$/.exec(line)
+  if (todo) return { type: 'todo', text: todo[2], done: todo[1].toLowerCase() === 'x' }
+  const rules = [
+    [/^###\s+(.*)$/, 'h3'], [/^##\s+(.*)$/, 'h2'], [/^#\s+(.*)$/, 'h1'],
+    [/^>\s?(.*)$/, 'quote'], [/^[-*]\s+(.*)$/, 'bullet'], [/^\d+\.\s+(.*)$/, 'number'],
+  ]
+  for (const [re, type] of rules) {
+    const m = re.exec(line)
+    if (m) return { type, text: m[1], done: false }
+  }
+  return { type: 'text', text: line, done: false }
+}
+
+function blockNode(spec) {
+  const node = el('div', { 'data-block': spec.type })
+  if (spec.type === 'divider') {
+    node.setAttribute('contenteditable', 'false')
+    return node
+  }
+  if (spec.type === 'todo') {
+    node.toggleAttribute('data-done', Boolean(spec.done))
+    const box = el('button', {
+      class: 'todo-box', type: 'button', contenteditable: 'false', 'data-on': spec.done || null,
+      onclick: () => {
+        const on = !node.hasAttribute('data-done')
+        node.toggleAttribute('data-done', on)
+        box.toggleAttribute('data-on', on)
+      },
+    })
+    node.append(box, el('span', { class: 'todo-text', contenteditable: 'true' }, spec.text))
+    return node
+  }
+  node.setAttribute('data-placeholder', 'Текст, «/» — команды')
+  node.textContent = spec.text
+  return node
+}
+
+function renderEditor(markdown) {
+  const root = el('div', { class: 'editor', contenteditable: 'true', spellcheck: 'false' })
+  const lines = String(markdown || '').split('\n')
+  const specs = lines.length === 1 && lines[0] === ''
+    ? [{ type: 'text', text: '' }]
+    : lines.map(parseLine)
+  root.append(...specs.map(blockNode))
+  wireEditor(root)
+  markEmpty(root)
+  return root
+}
+
+/** Помечает пустое описание, чтобы показать подсказку ровно один раз. */
+function markEmpty(root) {
+  const empty = root.children.length === 1
+    && root.children[0].getAttribute('data-block') === 'text'
+    && blockText(root.children[0]).trim() === ''
+  root.toggleAttribute('data-empty', empty)
+}
+
+function editorMarkdown(root) {
+  const out = []
+  for (const node of root.children) {
+    const type = node.getAttribute('data-block')
+    const text = blockText(node)
+    if (type === 'divider') out.push('---')
+    else if (type === 'h1') out.push('# ' + text)
+    else if (type === 'h2') out.push('## ' + text)
+    else if (type === 'h3') out.push('### ' + text)
+    else if (type === 'bullet') out.push('- ' + text)
+    else if (type === 'number') out.push('1. ' + text)
+    else if (type === 'quote') out.push('> ' + text)
+    else if (type === 'todo') out.push('- [' + (node.hasAttribute('data-done') ? 'x' : ' ') + '] ' + text)
+    else out.push(text)
+  }
+  // Хвостовые пустые строки не несут смысла и копились бы при каждом сохранении.
+  while (out.length && out[out.length - 1].trim() === '') out.pop()
+  return out.join('\n')
+}
+
+function blockText(node) {
+  return node.getAttribute('data-block') === 'todo'
+    ? ((node.querySelector('.todo-text') || {}).textContent || '')
+    : node.textContent
+}
+
+/** Блок, внутри которого стоит курсор. */
+function currentBlock(root) {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return null
+  let node = sel.getRangeAt(0).startContainer
+  while (node && node.parentElement && node.parentElement !== root) node = node.parentElement
+  return node && node.parentElement === root ? node : null
+}
+
+function focusBlock(node) {
+  const target = node.getAttribute('data-block') === 'todo' ? node.querySelector('.todo-text') : node
+  const range = document.createRange()
+  range.selectNodeContents(target)
+  range.collapse(false)
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+/** Меняет тип блока на месте, сохраняя текст. */
+function setBlockType(root, node, type) {
+  const replacement = blockNode({ type, text: type === 'divider' ? '' : blockText(node), done: false })
+  node.replaceWith(replacement)
+  if (type === 'divider') {
+    // После линии нужна строка, в которой можно продолжить писать.
+    const after = blockNode({ type: 'text', text: '' })
+    replacement.after(after)
+    focusBlock(after)
+  } else {
+    focusBlock(replacement)
+  }
+  return replacement
+}
+
+function blockMenu(root, node) {
+  return el('div', {}, BLOCKS.map(b => el('button', {
+    class: 'item', type: 'button',
+    onclick: () => { closePopup(); setBlockType(root, node, b.id) },
+  }, el('span', { class: 'glyph' }, b.glyph), b.label)))
+}
+
+function wireEditor(root) {
+  root.addEventListener('input', () => {
+    markEmpty(root)
+    const node = currentBlock(root)
+    if (!node) return
+    const text = blockText(node)
+
+    // «/» в начале пустой строки открывает меню блоков. В середине текста косая черта
+    // остаётся обычным знаком: пути и дроби пишут чаще, чем зовут меню.
+    if (text === '/') { openPopup(node, blockMenu(root, node)); return }
+
+    // «---» превращается в линию сразу, без Enter — как в привычных markdown-редакторах.
+    if (/^-{3,}$/.test(text.trim()) && node.getAttribute('data-block') === 'text') {
+      closePopup()
+      setBlockType(root, node, 'divider')
+      return
+    }
+    if (popup && text.charAt(0) !== '/') closePopup()
+  })
+
+  root.addEventListener('keydown', e => {
+    const node = currentBlock(root)
+    if (!node) return
+    const type = node.getAttribute('data-block')
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      // Пустой пункт списка по Enter выходит из списка, а не плодит пустые пункты.
+      if (['bullet', 'number', 'todo'].includes(type) && blockText(node).trim() === '') {
+        setBlockType(root, node, 'text')
+        return
+      }
+      // Списки продолжаются сами; за заголовком и цитатой обычно идёт обычный текст.
+      const next = ['bullet', 'number', 'todo'].includes(type) ? type : 'text'
+      const created = blockNode({ type: next, text: '' })
+      node.after(created)
+      focusBlock(created)
+      return
+    }
+
+    if (e.key === 'Backspace' && blockText(node).trim() === '') {
+      if (type !== 'text') {
+        // Первый Backspace возвращает блок в обычный текст, второй — удаляет строку.
+        e.preventDefault()
+        setBlockType(root, node, 'text')
+        return
+      }
+      if (node.previousElementSibling) {
+        e.preventDefault()
+        const previous = node.previousElementSibling
+        node.remove()
+        focusBlock(previous)
+      }
+    }
+  })
+}
+
 /* ——— Быстрый ввод ——— */
 
 const composer = document.getElementById('composer')
-let draft = { title: '', desc: '', due: null, priority: null }
+let draft = { title: '', desc: '', due: null, priority: null, kind: null, kr: null }
 let composerOpen = false
 let triggerAt = null
 
-function renderComposer() {
-  composer.toggleAttribute('data-open', composerOpen)
+/** Меню типа записи — он же лейбл. Вкладка задаёт умолчание, но его можно переопределить. */
+function kindMenu(onPick) {
+  return el('div', {}, KINDS.map(k => el('button', {
+    class: 'item', type: 'button', onclick: () => { onPick(k.id); closePopup() },
+  }, el('span', { class: 'glyph' }, k.id === 'risk' ? '⚠' : k.id === 'control' ? '§' : '•'), k.label)))
+}
 
-  if (!composerOpen) {
-    // Свёрнутое состояние: одна строка — плюс, подсказка и срок справа.
-    const dateBtn = el('button', {
-      class: 'date-btn', type: 'button', 'data-pop-anchor': true,
-      'data-set': draft.due ? true : null,
-      onclick: e => { e.stopPropagation(); openPopup(e.currentTarget, calendar(draft.due, v => { draft.due = v; renderComposer() })) },
-    }, el('span', { html: svg('calendar', 15) }), dueLabel(draft.due) || 'Срок')
+/** Меню привязки к ключевому результату. */
+function krMenu(onPick) {
+  return el('div', {},
+    el('button', { class: 'item', type: 'button', onclick: () => { onPick(null); closePopup() } },
+      el('span', { html: svg('ban', 15) }), 'Без привязки'),
+    KRS.map(kr => el('button', {
+      class: 'item', type: 'button', onclick: () => { onPick(kr.id); closePopup() },
+    }, el('span', { html: svg('inbox', 15) }),
+      el('span', {}, kr.title,
+        el('span', { style: 'display:block;font-size:11px;color:var(--dsw-alias-label-caption)' }, kr.obj)))))
+}
 
-    composer.replaceChildren(el('div', { class: 'line' },
-      el('span', { html: svg('plus'), style: 'color:var(--dsw-alias-label-caption)' }),
-      el('input', {
-        class: 'title', placeholder: 'Добавить задачу', autocomplete: 'off',
-        onfocus: () => { composerOpen = true; renderComposer() },
-      }),
-      dateBtn,
-      el('span', { html: svg('chevronDown', 15), style: 'color:var(--dsw-alias-label-caption)' })))
-    return
-  }
+const krTitle = id => (KRS.find(k => k.id === id) || {}).title || null
+const kindLabel = id => (KINDS.find(k => k.id === id) || {}).label || ''
 
-  const title = el('input', { class: 'title', placeholder: 'Название задачи', autocomplete: 'off' })
-  title.value = draft.title
-  const desc = el('textarea', { class: 'desc', placeholder: 'Описание', rows: '1' })
-  desc.value = draft.desc
-
-  const grow = () => { desc.style.height = 'auto'; desc.style.height = desc.scrollHeight + 'px' }
-
-  title.addEventListener('input', () => {
+/** Обвязка поля названия: команды «/» и «!» работают и в свёрнутой строке. */
+function wireTitle(input) {
+  input.addEventListener('input', () => {
     const previous = draft.title
-    const next = title.value
-    // Команда распознаётся по только что набранному символу в начале слова: «/» и «!» —
-    // обычные знаки, и в середине текста они ничего открывать не должны.
+    const next = input.value
     if (next.length === previous.length + 1) {
-      const at = title.selectionStart - 1
+      const at = input.selectionStart - 1
       const typed = next[at]
       const before = at === 0 ? ' ' : next[at - 1]
       if ((typed === '/' || typed === '!') && (before === ' ' || before === undefined)) {
         triggerAt = at
-        if (typed === '!') openPopup(title, priorityMenu(draft.priority, v => { draft.priority = v; dropTrigger(); renderComposer() }))
-        else openPopup(title, commandsMenu(title))
+        if (typed === '!') openPopup(input, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() }))
+        else openPopup(input, commandsMenu(input))
       }
     }
     draft.title = next
-    addBtn.disabled = next.trim() === ''
+    const add = composer.querySelector('.add-btn')
+    if (add) add.disabled = next.trim() === ''
   })
 
-  title.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); desc.focus(); return }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.shiftKey) {
+      // Единственный вход в расширенный режим. По фокусу строка не разворачивается:
+      // иначе панель прыгает от простого клика мимо списка.
+      e.preventDefault()
+      composerOpen = true
+      renderComposer()
+      return
+    }
     if (e.key === 'Enter') { e.preventDefault(); submit() }
     if (e.key === 'Escape') { e.preventDefault(); resetComposer() }
   })
+}
+
+function dateButton(value, onPick) {
+  return el('button', {
+    class: 'date-btn', type: 'button', 'data-pop-anchor': true, 'data-set': value ? true : null,
+    onclick: e => { e.stopPropagation(); openPopup(e.currentTarget, calendar(value, onPick)) },
+  }, el('span', { html: svg('calendar', 15) }), dueLabel(value) || 'Срок')
+}
+
+function renderComposer() {
+  composer.toggleAttribute('data-open', composerOpen)
+  const dateBtn = dateButton(draft.due, v => { draft.due = v; renderComposer() })
+  const title = el('input', {
+    class: 'title', autocomplete: 'off',
+    placeholder: composerOpen ? 'Название задачи' : 'Добавить задачу',
+  })
+  title.value = draft.title
+  wireTitle(title)
+
+  if (!composerOpen) {
+    composer.replaceChildren(el('div', { class: 'line' },
+      el('span', { html: svg('plus'), style: 'color:var(--dsw-alias-label-caption)' }),
+      title, dateBtn,
+      el('span', { html: svg('chevronDown', 15), style: 'color:var(--dsw-alias-label-caption)' })))
+    if (draft.title !== '') {
+      title.focus()
+      title.setSelectionRange(title.value.length, title.value.length)
+    }
+    return
+  }
+
+  const desc = el('textarea', { class: 'desc', placeholder: 'Описание', rows: '1' })
+  desc.value = draft.desc
+  const grow = () => { desc.style.height = 'auto'; desc.style.height = desc.scrollHeight + 'px' }
   desc.addEventListener('input', () => { draft.desc = desc.value; grow() })
   desc.addEventListener('keydown', e => {
-    // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() }
     if (e.key === 'Escape') { e.preventDefault(); title.focus() }
   })
 
-  const dateBtn = el('button', {
-    class: 'date-btn', type: 'button', 'data-pop-anchor': true,
-    'data-set': draft.due ? true : null,
-    onclick: e => openPopup(e.currentTarget, calendar(draft.due, v => { draft.due = v; renderComposer() })),
-  }, el('span', { html: svg('calendar', 15) }), dueLabel(draft.due) || 'Срок')
-
-  const flagBtn = el('button', {
-    class: 'ico', type: 'button', title: 'Приоритет', 'data-pop-anchor': true,
-    'data-on': draft.priority ? true : null,
-    html: flagSvg(draft.priority || 'none', 16),
-    onclick: e => openPopup(e.currentTarget, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() })),
-  })
-
+  const kind = draft.kind || tab
   const addBtn = el('button', { class: 'add-btn', type: 'button', onclick: submit }, 'Добавить')
   addBtn.disabled = draft.title.trim() === ''
 
-  composer.replaceChildren(
-    title,
-    desc,
+  composer.replaceChildren(title, desc,
     el('div', { class: 'line' },
       el('div', { class: 'tools' },
         dateBtn,
-        flagBtn,
-        // Список задаётся вкладкой панели, метки и «ещё» — задел под будущее: в Backlog.md
-        // они есть, но в этой итерации не подключены, поэтому кнопки без действия.
-        iconBtn('inbox', 'Список — задаётся вкладкой', () => {}),
-        iconBtn('tag', 'Метки', () => {}),
+        el('button', {
+          class: 'ico', type: 'button', title: 'Приоритет', 'data-pop-anchor': true,
+          'data-on': draft.priority ? true : null, html: flagSvg(draft.priority || 'none', 16),
+          onclick: e => openPopup(e.currentTarget, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() })),
+        }),
+        // Ящик — привязка к ключевому результату: операционная задача помогает его достичь.
+        el('button', {
+          class: 'ico', type: 'button', 'data-pop-anchor': true,
+          title: draft.kr ? 'Ключевой результат: ' + krTitle(draft.kr) : 'Привязать к ключевому результату',
+          'data-on': draft.kr ? true : null, html: svg('inbox'),
+          onclick: e => openPopup(e.currentTarget, krMenu(v => { draft.kr = v; renderComposer() })),
+        }),
+        // Лейбл — тип записи: задача, договорённость или риск.
+        el('button', {
+          class: 'ico', type: 'button', 'data-pop-anchor': true,
+          title: 'Тип: ' + kindLabel(kind),
+          'data-on': draft.kind ? true : null, html: svg('tag'),
+          onclick: e => openPopup(e.currentTarget, kindMenu(v => { draft.kind = v; renderComposer() })),
+        }),
         iconBtn('dots', 'Ещё', () => {})),
       el('span', { style: 'flex:1' }),
       addBtn))
@@ -578,13 +857,15 @@ function renderComposer() {
 }
 
 function commandsMenu(anchor) {
+  const item = (icon, label, open) => el('button', {
+    class: 'item', type: 'button', onclick: () => { dropTrigger(); open() },
+  }, el('span', { html: svg(icon, 15) }), label)
+
   return el('div', {},
-    el('button', { class: 'item', type: 'button',
-      onclick: () => { dropTrigger(); openPopup(anchor, calendar(draft.due, v => { draft.due = v; renderComposer() })) } },
-      el('span', { html: svg('calendar', 15) }), 'Срок'),
-    el('button', { class: 'item', type: 'button',
-      onclick: () => { dropTrigger(); openPopup(anchor, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() })) } },
-      el('span', { html: svg('flag', 15) }), 'Приоритет'))
+    item('calendar', 'Срок', () => openPopup(anchor, calendar(draft.due, v => { draft.due = v; renderComposer() }))),
+    item('flag', 'Приоритет', () => openPopup(anchor, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() }))),
+    item('inbox', 'Ключевой результат', () => openPopup(anchor, krMenu(v => { draft.kr = v; renderComposer() }))),
+    item('tag', 'Тип', () => openPopup(anchor, kindMenu(v => { draft.kind = v; renderComposer() }))))
 }
 
 /** Убирает символ команды из названия — он служил только вызовом меню. */
@@ -597,7 +878,7 @@ function dropTrigger() {
 }
 
 function resetComposer() {
-  draft = { title: '', desc: '', due: null, priority: null }
+  draft = { title: '', desc: '', due: null, priority: null, kind: null, kr: null }
   composerOpen = false
   triggerAt = null
   closePopup()
@@ -608,12 +889,12 @@ function submit() {
   const title = draft.title.trim()
   if (title === '') return
   nextId += 1
-  tasks.push({ id: 'PO-' + nextId, kind: tab, title, desc: draft.desc.trim(),
-    due: draft.due, priority: draft.priority, done: false })
+  tasks.push({ id: 'PO-' + nextId, kind: draft.kind || tab, title, desc: draft.desc.trim(),
+    due: draft.due, priority: draft.priority, kr: draft.kr, done: false })
   save()
-  const keepOpen = true
-  draft = { title: '', desc: '', due: null, priority: null }
-  composerOpen = keepOpen
+  const wasOpen = composerOpen
+  draft = { title: '', desc: '', due: null, priority: null, kind: null, kr: null }
+  composerOpen = wasOpen
   renderComposer()
   renderList()
 }
@@ -644,6 +925,7 @@ function renderRow(task) {
       el('span', { class: 'row-title' }, task.title),
       task.due ? el('span', { class: 'row-meta', 'data-overdue': overdue || null }, dueLabel(task.due)) : null),
     el('span', { class: 'row-marks' },
+      task.kr ? el('span', { html: svg('inbox', 14), title: 'KR: ' + krTitle(task.kr) }) : null,
       task.desc ? el('span', { html: svg('note', 14), title: 'есть описание' }) : null,
       task.priority && !task.done ? el('span', { html: flagSvg(task.priority) }) : null))
 }
@@ -710,9 +992,14 @@ function renderDetail() {
     else title.textContent = task.title
   })
 
-  const desc = el('textarea', { class: 'detail-desc', placeholder: 'Контекст по задаче…' })
-  desc.value = task.desc || ''
-  desc.addEventListener('blur', () => { task.desc = desc.value.trim(); save(); renderList() })
+  // Описание — блочный редактор: «/» даёт заголовки и списки дел, «---» превращается
+  // в линию. Наружу уходит markdown, потому что его же читает Backlog.md.
+  const editor = renderEditor(task.desc || '')
+  const persist = () => {
+    const next = editorMarkdown(editor)
+    if (next !== (task.desc || '')) { task.desc = next; save(); renderList() }
+  }
+  editor.addEventListener('focusout', () => { setTimeout(persist, 0) })
 
   const grip = detailNode.querySelector('.grip')
   detailNode.replaceChildren(grip,
@@ -737,14 +1024,29 @@ function renderDetail() {
         })),
       }),
       el('span', { style: 'flex:1' }),
-      iconBtn('close', 'Закрыть', closeDetail)),
-    el('div', { class: 'detail-body' }, title, desc),
+      iconBtn('close', 'Закрыть', () => { persist(); closeDetail() })),
+    el('div', { class: 'detail-body' }, title, editor),
     el('div', { class: 'detail-foot' },
-      iconBtn('inbox', 'Список', () => {}),
+      // Ящик — привязка к ключевому результату, лейбл — тип записи.
+      el('button', {
+        class: 'ico', type: 'button', 'data-pop-anchor': true,
+        title: task.kr ? 'Ключевой результат: ' + krTitle(task.kr) : 'Привязать к ключевому результату',
+        'data-on': task.kr ? true : null, html: svg('inbox'),
+        onclick: e => openPopup(e.currentTarget, krMenu(v => { task.kr = v; save(); renderDetail() })),
+      }),
+      el('button', {
+        class: 'ico', type: 'button', 'data-pop-anchor': true, title: 'Тип: ' + kindLabel(task.kind),
+        html: svg('tag'),
+        onclick: e => openPopup(e.currentTarget, kindMenu(v => {
+          task.kind = v; save(); renderDetail(); renderList()
+        })),
+      }),
       el('span', { class: 'mono' }, task.id),
+      task.kr ? el('span', { style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+        '· ' + krTitle(task.kr)) : null,
       el('span', { style: 'flex:1' }),
-      iconBtn('tag', 'Метки', () => {}),
       iconBtn('trash', 'Удалить', () => {
+        persist()
         tasks = tasks.filter(t => t.id !== task.id); save(); closeDetail()
       })))
 }
