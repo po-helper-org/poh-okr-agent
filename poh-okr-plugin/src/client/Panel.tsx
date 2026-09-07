@@ -303,6 +303,10 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   }
 
   const openTaskCard = (task: PoTask) => {
+    // Повторный клик по уже открытой задаче ничего не делает: перезагрузка описания
+    // роняла редактор в состояние «грузится» и выглядела как закрытие сайдбара,
+    // а незаписанная правка при этом терялась.
+    if (openTask?.task.id === task.id) return
     setOpenTask({ task, content: null })
     void resolveId(task.id)
       .then(id => unwrap<RawTaskDetail>(call('task', { id })))
@@ -484,9 +488,8 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
                       <button
                         type="button"
                         className={css.itemCheck}
-                        data-kind={task.kind}
+                        data-priority={task.priority ?? undefined}
                         data-done={done || undefined}
-                        data-overdue={overdue || undefined}
                         aria-pressed={done}
                         aria-label={task.title}
                         onClick={event => {
@@ -499,17 +502,14 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
                       />
                       <span className={css.rowMain}>
                         <span className={css.itemTitle}>{task.title}</span>
+                        <span className={css.rowMarks}>
+                          {task.relatedKrIds.length > 0 && <Icon name="inbox" size={14} />}
+                        </span>
+                        {/* Срок в конце строки, а не второй строкой: так список вдвое ниже,
+                            а взгляд не уходит вниз с каждой записи. */}
                         {task.dueDate !== undefined && (
                           <span className={css.rowMeta} data-overdue={overdue || undefined}>
                             {dueLabel(task.dueDate, t)}
-                          </span>
-                        )}
-                      </span>
-                      <span className={css.rowMarks}>
-                        {task.relatedKrIds.length > 0 && <Icon name="inbox" size={14} />}
-                        {task.priority !== null && !done && (
-                          <span className={css.flag} data-priority={task.priority}>
-                            <PriorityFlag priority={task.priority} />
                           </span>
                         )}
                       </span>

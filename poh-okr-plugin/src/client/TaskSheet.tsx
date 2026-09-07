@@ -87,6 +87,24 @@ export function TaskSheet(props: TaskSheetProps) {
     }
   })
 
+  /**
+   * Ширина ужимается до свободного места слева от панели.
+   *
+   * Панель прижата к правому краю, сайдбар встаёт левее неё: на узком окне сумма ширин
+   * превышала экран, и сайдбар уезжал за левый край вместе со своей ручкой — вернуть его
+   * мышью было уже нечем.
+   */
+  useEffect(() => {
+    const fit = () => {
+      const panel = document.querySelector(`.${css.panel}`)?.getBoundingClientRect().width ?? 0
+      const room = Math.max(MIN_WIDTH, window.innerWidth - panel - 24)
+      setWidth(current => Math.min(current, room))
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => { window.removeEventListener('resize', fit) }
+  }, [])
+
   const today = new Date().toISOString().slice(0, 10)
   const done = task.status.toLowerCase() === 'done'
   const overdue = !done && task.dueDate !== undefined && task.dueDate <= today

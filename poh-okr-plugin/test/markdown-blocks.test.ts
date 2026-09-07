@@ -89,3 +89,10 @@ test('обычный текст не превращается в блок', () =
   assert.equal(shortcutFor('-'), null)
   assert.equal(shortcutFor('1.'), null)
 })
+
+test('«[]» без пробела уже даёт пункт списка дел', () => {
+  // Человек набирает скобки и ждёт чекбокс сразу, а не после пробела.
+  assert.equal(shortcutFor('[]')?.type, 'todo')
+  assert.equal(shortcutFor('[x]')?.type, 'todo')
+  assert.equal(shortcutFor('[] текст')?.rest, 'текст')
+})

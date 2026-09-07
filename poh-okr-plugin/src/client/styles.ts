@@ -200,6 +200,11 @@ export function dueLabel(due: string, t: (key: 'dateToday' | 'dateTomorrow' | 'd
 }
 
 export const styleText = `
+/* Отступы считаются внутрь ширины. Глобального сброса харнесс не даёт, а строка списка
+ * задана как width:100% с отступами — без этого она вылезала за карточку ровно на них,
+ * и срок в конце строки обрезался. Правило ограничено разделом. */
+.${c.panel} *,.${c.sheet} *,.${c.screen} *,.${c.pop} *{box-sizing:border-box;}
+
 /* ——— Кнопка раздела в подвале левой панели ———
  *
  * Подвал («footerActions» харнесса) — один flex-ряд с «nowrap», рассчитанный на одну запись.
@@ -358,22 +363,29 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
   transition:border-color var(--ds-transition-duration-fast) ease,
     background var(--ds-transition-duration-fast) ease;}
 .${c.itemCheck}:hover{border-color:var(--dsw-alias-label-primary);}
-.${c.itemCheck}[data-kind="control"]{border-color:#2F72B8;}
-.${c.itemCheck}[data-kind="risk"]{border-color:#B33F3F;}
-.${c.itemCheck}[data-overdue]{border-color:var(--dsw-alias-state-error-primary);}
+/* Цвет кружка задаёт приоритет: он важнее типа, а тип и так виден вкладкой.
+ * Серый — приоритет не выставлен. */
+.${c.itemCheck}[data-priority="high"]{border-color:var(--dsw-alias-state-error-primary);}
+.${c.itemCheck}[data-priority="medium"]{border-color:var(--dsw-alias-button-info-fill);}
+.${c.itemCheck}[data-priority="low"]{border-color:#2F9E6E;}
 .${c.itemCheck}[data-done]{background:var(--dsw-alias-label-secondary);
   border-color:var(--dsw-alias-label-secondary);}
 .${c.itemCheck}[data-done]::after{content:"";width:9px;height:5px;margin-top:-2px;
   border-left:1.5px solid var(--dsw-alias-bg-base);
   border-bottom:1.5px solid var(--dsw-alias-bg-base);transform:rotate(-45deg);}
 
-.${c.rowMain}{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+/* Строка одна: название тянется, значки и срок прижаты вправо. Срок второй строкой
+ * удваивал высоту списка и уводил взгляд вниз вместо конца строки. */
+.${c.rowMain}{flex:1;min-width:0;display:flex;align-items:center;gap:8px;}
 /* Название всегда одна строка: перенос ломает ритм строк и сдвигает секции. */
-.${c.itemTitle}{font-size:14px;line-height:1.35;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;}
+/* Название забирает остаток строки и режется многоточием; срок и значки не сжимаются,
+ * иначе длинный заголовок съедал дату до «05.» вместо «05.09». */
+.${c.itemTitle}{flex:1;min-width:0;font-size:14px;line-height:1.35;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
 .${c.item}[data-done] .${c.itemTitle}{color:var(--dsw-alias-label-caption);
   text-decoration:line-through;}
-.${c.rowMeta}{font-size:12px;color:var(--dsw-alias-label-caption);white-space:nowrap;}
+.${c.rowMeta}{flex-shrink:0;font-size:12px;color:var(--dsw-alias-label-caption);
+  white-space:nowrap;}
 .${c.rowMeta}[data-overdue]{color:var(--dsw-alias-state-error-primary);}
 .${c.rowMarks}{display:flex;align-items:center;gap:6px;flex-shrink:0;
   color:var(--dsw-alias-label-caption);}
@@ -506,9 +518,10 @@ ${phaseRules}
   border-color:var(--dsw-alias-button-info-fill);}
 .${c.todoBox}[data-on]::after{content:"";width:8px;height:4px;margin-top:-2px;
   border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg);}
-.${c.editor} .${c.todoText}{flex:1;outline:none;}
-.${c.editor} [data-block="todo"][data-done] .${c.todoText}{
-  color:var(--dsw-alias-label-caption);text-decoration:line-through;}
+.${c.editor} [data-block="todo"][data-done]{color:var(--dsw-alias-label-caption);
+  text-decoration:line-through;}
+/* Зачёркивание не должно доставать до флажка: он не часть текста. */
+.${c.editor} [data-block="todo"][data-done] .${c.todoBox}{text-decoration:none;}
 
 /* ——— Детальная страница ——— */
 .${c.detailTop}{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 16px;

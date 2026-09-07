@@ -46,19 +46,19 @@ function blockNode(block: Block, placeholder: string): HTMLElement {
     const box = document.createElement('button')
     box.type = 'button'
     box.className = css.todoBox
+    // Флажок выключен из редактирования, а текст пункта лежит прямо в блоке.
+    // Вложенный `contenteditable` под текст был отдельным редактируемым хостом со своим
+    // поведением Enter: браузер обрабатывал перенос внутри него сам, и пункт не делился.
     box.setAttribute('contenteditable', 'false')
     if (block.done) box.setAttribute('data-on', '')
+    box.addEventListener('mousedown', event => { event.preventDefault() })
     box.addEventListener('click', () => {
       const on = !node.hasAttribute('data-done')
       node.toggleAttribute('data-done', on)
       box.toggleAttribute('data-on', on)
       node.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    const text = document.createElement('span')
-    text.className = css.todoText
-    text.setAttribute('contenteditable', 'true')
-    text.textContent = block.text
-    node.append(box, text)
+    node.append(box, document.createTextNode(block.text))
     return node
   }
 
@@ -67,10 +67,9 @@ function blockNode(block: Block, placeholder: string): HTMLElement {
   return node
 }
 
+/** Текст блока. У пункта списка дел флажок текста не несёт, поэтому годится textContent. */
 function blockText(node: Element): string {
-  return node.getAttribute('data-block') === 'todo'
-    ? (node.querySelector(`.${css.todoText}`)?.textContent ?? '')
-    : (node.textContent ?? '')
+  return node.textContent ?? ''
 }
 
 function readBlocks(root: HTMLElement): Block[] {
@@ -93,12 +92,8 @@ function currentBlock(root: HTMLElement): HTMLElement | null {
 }
 
 function focusBlock(node: HTMLElement): void {
-  const target = node.getAttribute('data-block') === 'todo'
-    ? node.querySelector(`.${css.todoText}`)
-    : node
-  if (target === null) return
   const range = document.createRange()
-  range.selectNodeContents(target)
+  range.selectNodeContents(node)
   range.collapse(false)
   const selection = window.getSelection()
   selection?.removeAllRanges()
@@ -176,52 +171,74 @@ export function BlockEditor({ value, placeholder, onCommand, onChange }: BlockEd
       handlers.current.onChange(formatBlocks(readBlocks(root)))
     }
 
-    const onKeyDown = (event: KeyboardEvent): void => {
-      const node = currentBlock(root)
-      if (node === null) return
+    /** Разрыв строки: новый блок того же типа, пустой пункт списка выходит из списка. */
+    const splitBlock = (node: HTMLElement): void => {
       const type = (node.getAttribute('data-block') ?? 'text') as BlockType
-
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault()
-        // Пустой пункт списка по Enter выходит из списка, а не плодит пустые пункты.
-        if (CONTINUING.has(type) && blockText(node).trim() === '') {
-          setType(node, 'text')
-          return
-        }
-        const created = blockNode(
-          { type: CONTINUING.has(type) ? type : 'text', text: '', done: false },
-          placeholder,
-        )
-        node.after(created)
-        focusBlock(created)
-        markEmpty(root)
-        handlers.current.onChange(formatBlocks(readBlocks(root)))
+      // Пустой пункт списка по разрыву выходит из списка, а не плодит пустые пункты.
+      if (CONTINUING.has(type) && blockText(node).trim() === '') {
+        setType(node, 'text')
         return
       }
+      const created = blockNode(
+        { type: CONTINUING.has(type) ? type : 'text', text: '', done: false },
+        placeholder,
+      )
+      node.after(created)
+      focusBlock(created)
+      markEmpty(root)
+      handlers.current.onChange(formatBlocks(readBlocks(root)))
+    }
 
-      if (event.key === 'Backspace' && blockText(node).trim() === '') {
-        if (type !== 'text') {
-          // Первый Backspace возвращает блок в обычный текст, второй удаляет строку.
-          event.preventDefault()
-          setType(node, 'text')
-          return
-        }
-        const previous = node.previousElementSibling
-        if (previous !== null) {
-          event.preventDefault()
-          node.remove()
-          focusBlock(previous as HTMLElement)
-          markEmpty(root)
-          handlers.current.onChange(formatBlocks(readBlocks(root)))
-        }
+    /** Удаление назад в начале пустого блока: сперва сброс типа, потом склейка со строкой выше. */
+    const eraseBackwards = (node: HTMLElement): boolean => {
+      if (blockText(node).trim() !== '') return false
+      const type = (node.getAttribute('data-block') ?? 'text') as BlockType
+      if (type !== 'text') {
+        setType(node, 'text')
+        return true
+      }
+      const previous = node.previousElementSibling
+      if (previous === null) return false
+      node.remove()
+      focusBlock(previous as HTMLElement)
+      markEmpty(root)
+      handlers.current.onChange(formatBlocks(readBlocks(root)))
+      return true
+    }
+
+    /**
+     * Правки перехватываются на `beforeinput`, а не на нажатии клавиши.
+     *
+     * `beforeinput` называет намерение (`insertParagraph`, `deleteContentBackward`) и не
+     * зависит от того, какую клавишу опознал браузер: событие нажатия приходит пустым при
+     * нестандартной раскладке, из внешней клавиатуры и из автоматизации — тогда Enter
+     * проваливался в браузерное поведение, а оно в блочной разметке склеивает и рушит узлы.
+     */
+    const onBeforeInput = (event: InputEvent): void => {
+      const node = currentBlock(root)
+      if (node === null) return
+
+      if (event.inputType === 'insertParagraph') {
+        event.preventDefault()
+        splitBlock(node)
+        return
+      }
+      // Shift+Enter внутри блока: перенос строки нам не нужен, блоки и есть строки.
+      if (event.inputType === 'insertLineBreak') {
+        event.preventDefault()
+        splitBlock(node)
+        return
+      }
+      if (event.inputType === 'deleteContentBackward' && eraseBackwards(node)) {
+        event.preventDefault()
       }
     }
 
     root.addEventListener('input', onInput)
-    root.addEventListener('keydown', onKeyDown)
+    root.addEventListener('beforeinput', onBeforeInput as EventListener)
     return () => {
       root.removeEventListener('input', onInput)
-      root.removeEventListener('keydown', onKeyDown)
+      root.removeEventListener('beforeinput', onBeforeInput as EventListener)
     }
     // `value` здесь — начальное содержимое: пересборка на каждую букву сбрасывала бы курсор.
     // eslint-disable-next-line react-hooks/exhaustive-deps
