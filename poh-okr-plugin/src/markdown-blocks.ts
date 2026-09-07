@@ -80,3 +80,30 @@ export function formatBlocks(blocks: readonly Block[]): string {
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop()
   return lines.join('\n')
 }
+
+/**
+ * Сокращения, срабатывающие прямо при наборе: «- » превращает строку в пункт списка,
+ * «[] » — в пункт списка дел, «# » — в заголовок.
+ *
+ * Без них чеклист можно получить только через меню, а человек по привычке набирает
+ * разметку руками и видит, что «ничего не работает». Возвращает тип блока и текст,
+ * который должен остаться в строке после замены.
+ */
+export function shortcutFor(text: string): { type: BlockType; rest: string } | null {
+  const rules: ReadonlyArray<[RegExp, BlockType]> = [
+    [/^###\s(.*)$/, 'h3'],
+    [/^##\s(.*)$/, 'h2'],
+    [/^#\s(.*)$/, 'h1'],
+    [/^>\s(.*)$/, 'quote'],
+    // Пункт списка дел проверяется раньше маркированного: «- [] » начинается с дефиса.
+    [/^[-*]\s\[[ xX]?\]\s?(.*)$/, 'todo'],
+    [/^\[[ xX]?\]\s(.*)$/, 'todo'],
+    [/^[-*]\s(.*)$/, 'bullet'],
+    [/^\d+[.)]\s(.*)$/, 'number'],
+  ]
+  for (const [pattern, type] of rules) {
+    const match = pattern.exec(text)
+    if (match) return { type, rest: match[1] }
+  }
+  return null
+}

@@ -174,7 +174,10 @@ export function toSummary(raw: RawTask): TaskSummary {
     id: raw.id,
     title: raw.title,
     status: raw.status,
-    priority: (PRIORITIES.has(priority) ? priority : 'medium') as Priority,
+    // Незаданный приоритет остаётся незаданным. Подмена умолчанием делала все задачи
+    // «средними», и отличить выставленный вручную средний от невыставленного было нельзя —
+    // значок приоритета тогда пришлось бы прятать у всех.
+    priority: (PRIORITIES.has(priority) ? priority : null) as Priority | null,
     labels: raw.labels,
     ...(raw.dueDate ? { dueDate: raw.dueDate } : {}),
     ...(raw.milestone ? { milestone: raw.milestone } : {}),

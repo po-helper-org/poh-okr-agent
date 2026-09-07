@@ -17,12 +17,22 @@ import {
 import { REQUIRED_BACKLOG_VERSION, type OkrConfig } from './config.js'
 import { type Board, type KeyResult, type Objective, type PoTask } from './model.js'
 import { kindFromLabels, krIdsFromLabels, phasesFromLabels } from './phases.js'
-import { runCommandWithNode, type RunCommand } from './ports.js'
+import {
+  listDirectoryWithNode,
+  readTextFileWithNode,
+  runCommandWithNode,
+  type ListDirectory,
+  type ReadTextFile,
+  type RunCommand,
+} from './ports.js'
+import { buildOkrTree, parseNexus, type OkrTree } from './nexus-okr.js'
 import { parseCreatedId } from './parse-created.js'
 import { createBoardDoc as writerCreateBoardDoc, updateBoardDoc as writerUpdateBoardDoc } from './writer.js'
 
 export interface BacklogPorts {
   run: RunCommand
+  readTextFile: ReadTextFile
+  listDirectory: ListDirectory
 }
 
 const TASK_ID_RE = /^[A-Za-z]+-\d+(?:\.\d+)*$/
@@ -53,14 +63,22 @@ function isAtLeast(found: string, required: string): boolean {
  */
 export class BacklogReader {
   private readonly run: RunCommand
+  private readonly readTextFile: ReadTextFile
+  private readonly listDirectory: ListDirectory
   /** Проверка версии делается один раз за жизнь плагина, а не на каждый вызов. */
   private versionChecked: Promise<void> | null = null
 
   constructor(
     private readonly config: OkrConfig,
-    ports: BacklogPorts = { run: runCommandWithNode },
+    ports: BacklogPorts = {
+      run: runCommandWithNode,
+      readTextFile: readTextFileWithNode,
+      listDirectory: listDirectoryWithNode,
+    },
   ) {
     this.run = ports.run
+    this.readTextFile = ports.readTextFile
+    this.listDirectory = ports.listDirectory
   }
 
   /**
@@ -206,6 +224,26 @@ export class BacklogReader {
       }
     }
     await this.exec(writerUpdateBoardDoc(docId, encodeBoardSettings(settings)), signal)
+  }
+
+  /**
+   * Читает OKR из нексусов воркспейса.
+   *
+   * Настоящие цели PO пишут навыки `/okr-*` в каталог нексусов, а плагин управляет
+   * задачами Backlog.md. Чтение — первый шаг импорта: сами записи заводит канал.
+   */
+  async readNexusOkr(): Promise<OkrTree> {
+    const root = `${this.config.workspaceRoot}/${this.config.nexusOkrPath}`
+    const names = await this.listDirectory(root)
+    const nodes = []
+    for (const name of names) {
+      if (!name.endsWith('.md')) continue
+      const text = await this.readTextFile(`${root}/${name}`)
+      if (text === null) continue
+      const node = parseNexus(text)
+      if (node !== null) nodes.push(node)
+    }
+    return buildOkrTree(nodes)
   }
 
   /** Типы задач нужны каналу, чтобы собирать команды создания. */

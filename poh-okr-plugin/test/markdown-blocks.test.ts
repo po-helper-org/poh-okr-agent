@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatBlocks, parseBlocks, parseLine } from '../src/markdown-blocks.js'
+import { formatBlocks, parseBlocks, parseLine, shortcutFor } from '../src/markdown-blocks.js'
 
 test('заголовки трёх уровней разбираются', () => {
   assert.deepEqual(parseLine('# Раз'), { type: 'h1', text: 'Раз', done: false })
@@ -68,4 +68,24 @@ test('хвостовые пустые строки не копятся при с
 
 test('перевод строки Windows не ломает разбор', () => {
   assert.deepEqual(parseBlocks('раз\r\nдва').map(b => b.text), ['раз', 'два'])
+})
+
+test('набранная разметка превращается в блок', () => {
+  // Иначе чеклист можно получить только через меню, а человек набирает его привычно.
+  assert.deepEqual(shortcutFor('- '), { type: 'bullet', rest: '' })
+  assert.deepEqual(shortcutFor('1. '), { type: 'number', rest: '' })
+  assert.deepEqual(shortcutFor('## Раздел'), { type: 'h2', rest: 'Раздел' })
+  assert.deepEqual(shortcutFor('> цитата'), { type: 'quote', rest: 'цитата' })
+})
+
+test('пункт списка дел набирается тремя способами', () => {
+  for (const typed of ['- [] ', '- [ ] ', '[] ']) {
+    assert.equal(shortcutFor(typed)?.type, 'todo', typed)
+  }
+})
+
+test('обычный текст не превращается в блок', () => {
+  assert.equal(shortcutFor('просто текст'), null)
+  assert.equal(shortcutFor('-'), null)
+  assert.equal(shortcutFor('1.'), null)
 })

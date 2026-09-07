@@ -255,7 +255,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
       id: tempId,
       title: input.title,
       status: 'To Do',
-      priority: input.priority ?? 'medium',
+      priority: input.priority,
       labels,
       kind,
       relatedKrIds: input.krId === null ? [] : [input.krId],
@@ -281,7 +281,14 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         }
         const realId = result.id
         patchTasks(list => list.map(task => (task.id === tempId ? { ...task, id: realId } : task)))
-        pendingIds.current.delete(tempId)
+        // Карточку тоже: она могла быть открыта по временному идентификатору, и тогда любая
+        // правка уходила в CLI с «new-1», а тот отвечал «Task new-1 not found».
+        setOpenTask(current => (current?.task.id === tempId
+          ? { ...current, task: { ...current.task, id: realId } }
+          : current))
+        // Запись из карты не удаляется намеренно: где-то мог остаться объект задачи со
+        // старым временным идентификатором, и без этой записи его правка ушла бы в CLI
+        // как есть — тот отвечает «Task new-1 not found».
         return realId
       })
       .catch((cause: unknown) => {
@@ -309,6 +316,16 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         // «описания нет» и при первой правке стёрло бы настоящее.
         setOpenTask(current => (current?.task.id === task.id ? null : current))
       })
+  }
+
+  const importKrs = () => {
+    setError(null)
+    unwrap<{ objectives: number; keyResults: number }>(call('importOkr', {}))
+      .then(result => {
+        reload()
+        if (result.objectives === 0 && result.keyResults === 0) setError(t('importKrsNothing'))
+      })
+      .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
   }
 
   const continueInChat = (kr: KeyResult) => {
@@ -393,7 +410,9 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         <div ref={gripRef} className={css.grip} />
 
         <div className={css.header}>
-          <div className={css.headerTitle}>{t('panelTitle')}</div>
+          {/* Заголовка нет намеренно: раздел уже назван кнопкой левого меню, а вкладки
+              под ним говорят, что это за список. Строка-подпись только съедала высоту. */}
+          <span style={{ flex: 1 }} />
           <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>⟳</button>
           <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>✕</button>
         </div>
@@ -411,7 +430,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         </div>
 
         <div className={css.body}>
-          <Composer t={t} tab={tab} krs={krs} onSubmit={addTask} />
+          <Composer t={t} tab={tab} krs={krs} onSubmit={addTask} onImportKrs={importKrs} />
 
           {error !== null && <div className={css.stateMessage} role="alert">{error}</div>}
 
@@ -488,8 +507,10 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
                       </span>
                       <span className={css.rowMarks}>
                         {task.relatedKrIds.length > 0 && <Icon name="inbox" size={14} />}
-                        {task.priority === 'high' && !done && (
-                          <span className={css.flag} data-priority="high"><PriorityFlag priority="high" /></span>
+                        {task.priority !== null && !done && (
+                          <span className={css.flag} data-priority={task.priority}>
+                            <PriorityFlag priority={task.priority} />
+                          </span>
                         )}
                       </span>
                     </div>
@@ -525,8 +546,10 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             mutate('setDueDate', openTask.task.id, { dueDate: value }, current => ({ ...current, dueDate: value }))
           }}
           onSetPriority={value => {
-            const next: Priority = value ?? 'medium'
-            mutate('setPriority', openTask.task.id, { priority: next }, current => ({ ...current, priority: next }))
+            // Снятие приоритета Backlog.md не умеет: значения «никакой» у него нет.
+            // Поэтому «Без приоритета» в меню недоступно у уже заведённой задачи.
+            if (value === null) return
+            mutate('setPriority', openTask.task.id, { priority: value }, current => ({ ...current, priority: value }))
           }}
           onSetKind={value => {
             mutate('setKind', openTask.task.id, { value, labels: openTask.task.labels },
@@ -555,6 +578,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
               .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)); reload() })
           }}
           onClose={() => { setOpenTask(null) }}
+          onImportKrs={importKrs}
         />
       )}
     </>

@@ -26,6 +26,11 @@ export interface OkrConfig {
    */
   boardDocTitle: string
   /**
+   * Каталог нексусов OKR, относительно корня воркспейса. Оттуда импортируются настоящие
+   * цели PO: их пишут навыки `/okr-*`, а плагин работает с задачами Backlog.md.
+   */
+  nexusOkrPath: string
+  /**
    * Рабочее пространство по умолчанию для чатов по целям, относительно корня воркспейса.
    * К нему привязываются сессии кнопки «Продолжить в чате»: агент стартует там, где лежит
    * `backlog/`, и диалоги по целям собираются отдельной группой.
@@ -49,6 +54,7 @@ const DEFAULTS = {
   krTaskType: 'okr',
   poTaskType: 'potask',
   boardDocTitle: 'okr-board',
+  nexusOkrPath: 'GROUND/NEXUS/okr',
   sessionPath: '',
 } as const
 
@@ -79,6 +85,7 @@ export function loadConfig(env: Env): OkrConfig {
     krTaskType: value(env, 'OKR_KR_TASK_TYPE') ?? DEFAULTS.krTaskType,
     poTaskType: value(env, 'OKR_PO_TASK_TYPE') ?? DEFAULTS.poTaskType,
     boardDocTitle: value(env, 'OKR_BOARD_DOC') ?? DEFAULTS.boardDocTitle,
+    nexusOkrPath: value(env, 'OKR_NEXUS_PATH') ?? DEFAULTS.nexusOkrPath,
     // Отдельно от value(): здесь пустая строка — не «переменная не задана», а осмысленное
     // «не привязывать чаты никуда». Смотрим на наличие ключа, а не на непустоту значения,
     // иначе выключить привязку через окружение было бы нечем.
@@ -96,6 +103,7 @@ export function describeConfig(config: OkrConfig): string[] {
     `тип KR: ${config.krTaskType}`,
     `тип задач PO: ${config.poTaskType}`,
     `документ доски: ${config.boardDocTitle}`,
+    `нексусы OKR: ${config.nexusOkrPath}`,
     `рабочее пространство чатов: ${config.sessionPath === '' ? 'не привязано (текущее)' : config.sessionPath}`,
   ]
 }

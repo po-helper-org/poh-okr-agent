@@ -33,6 +33,8 @@ export interface ComposerProps {
   /** Ключевые результаты доски — из них наполняется меню привязки. */
   krs: KeyResult[]
   onSubmit: (draft: ComposerDraft) => void
+  /** Перенос настоящих OKR из нексусов воркспейса в Backlog.md. */
+  onImportKrs: () => void
 }
 
 type OpenMenu = 'commands' | 'priority' | 'date' | 'kind' | 'kr' | null
@@ -54,7 +56,7 @@ const EMPTY: ComposerDraft = {
   title: '', description: '', dueDate: null, priority: null, kind: null, krId: null,
 }
 
-export function Composer({ t, tab, krs, onSubmit }: ComposerProps) {
+export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) {
   const titleRef = useRef<HTMLInputElement>(null)
   const anchorRef = useRef<HTMLElement | null>(null)
   /** Позиция символа команды: при выборе пункта его надо убрать из названия. */
@@ -281,6 +283,14 @@ export function Composer({ t, tab, krs, onSubmit }: ComposerProps) {
                   onSelect={() => { setDraft(current => ({ ...current, krId: kr.id })); dropTrigger(); closeMenu() }}
                 />
               ))}
+              {/* Настоящие цели PO живут в нексусах воркспейса, а плагин управляет задачами
+                  Backlog.md. Пункт переносит их туда — иначе меню пустует, и непонятно почему. */}
+              <PopoverItem
+                glyph={<Icon name="weekAhead" size={15} />}
+                label={t('importKrs')}
+                sub={t('importKrsHint')}
+                onSelect={() => { onImportKrs(); dropTrigger(); closeMenu() }}
+              />
             </>
           )}
 

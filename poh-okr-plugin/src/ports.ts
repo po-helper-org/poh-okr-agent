@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
 import { constants as osConstants } from 'node:os'
 
 export interface CommandResult {
@@ -191,4 +192,30 @@ export function runCommandWithNode(
   signal?: AbortSignal,
 ): Promise<CommandResult> {
   return runCommandWithTimeout(bin, args, cwd, COMMAND_TIMEOUT_MS, signal)
+}
+
+/** Порт чтения текстового файла. `null` — файла нет; это не ошибка. */
+export type ReadTextFile = (path: string) => Promise<string | null>
+
+/** Порт перечисления файлов каталога. Нет каталога — пустой список. */
+export type ListDirectory = (path: string) => Promise<string[]>
+
+export async function readTextFileWithNode(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch {
+    // Нет файла, нет прав, по пути каталог — для импорта всё это одно и то же:
+    // читать нечего. Отличать эти случаи здесь не от чего.
+    return null
+  }
+}
+
+export async function listDirectoryWithNode(path: string): Promise<string[]> {
+  try {
+    const entries = await readdir(path, { withFileTypes: true })
+    return entries.filter(entry => entry.isFile() || entry.isSymbolicLink()).map(entry => entry.name)
+  } catch {
+    // Каталога нексусов может не быть вовсе — это обычный воркспейс без OKR, а не сбой.
+    return []
+  }
 }

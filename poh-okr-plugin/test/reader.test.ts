@@ -11,8 +11,13 @@ const CONFIG: OkrConfig = {
   krTaskType: 'okr',
   poTaskType: 'potask',
   boardDocTitle: 'okr-board',
+  nexusOkrPath: 'GROUND/NEXUS/okr',
   sessionPath: '',
 }
+
+/** Файловые порты в этих сценариях не задействованы: читается только вывод CLI. */
+const noFile = async (): Promise<string | null> => null
+const noDir = async (): Promise<string[]> => []
 
 function result(stdout: string, code = 0): CommandResult {
   return { stdout, stderr: '', code, timedOut: false, killedBySignal: null }
@@ -39,18 +44,20 @@ const VERSION_OK: [RegExp, CommandResult] = [/^--version$/, result('1.51.0\n')]
 test('старый CLI отвергается с внятной ошибкой, а не работает наполовину', async () => {
   // На 1.50 нет `--due-date`, и панель работы потеряла бы группировку по срокам, выглядя
   // при этом исправной.
-  const reader = new BacklogReader(CONFIG, { run: fakeRun([[/^--version$/, result('1.50.1\n')]]) })
+  const reader = new BacklogReader(CONFIG, { run: fakeRun([[/^--version$/, result('1.50.1\n')]]), readTextFile: noFile, listDirectory: noDir })
   await assert.rejects(() => reader.listKeyResults(), BacklogTooOldError)
 })
 
 test('отсутствие CLI отличается от ошибки команды', async () => {
-  const reader = new BacklogReader(CONFIG, { run: async () => result('', -1) })
+  const reader = new BacklogReader(CONFIG, { run: async () => result('', -1), readTextFile: noFile, listDirectory: noDir })
   await assert.rejects(() => reader.listKeyResults(), BacklogUnavailableError)
 })
 
 test('версия проверяется один раз, а не на каждый вызов', async () => {
   const log: string[][] = []
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([VERSION_OK, [/task list/, result(taskList([]))]], log),
   })
   await reader.listKeyResults()
@@ -62,6 +69,8 @@ test('неудачная проверка версии не запоминает
   // Иначе временный сбой CLI выключил бы раздел до перезапуска харнесса.
   let failing = true
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: async (_bin, args) => {
       if (args[0] === '--version') return failing ? result('', -1) : result('1.51.0\n')
       return result(taskList([]))
@@ -75,6 +84,8 @@ test('неудачная проверка версии не запоминает
 test('тип задач фильтруется на стороне CLI, а не после выгрузки всего бэклога', async () => {
   const log: string[][] = []
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([VERSION_OK, [/task list/, result(taskList([]))]], log),
   })
   await reader.listKeyResults()
@@ -84,6 +95,8 @@ test('тип задач фильтруется на стороне CLI, а не 
 
 test('доска раскладывает KR по объективам', async () => {
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([
       VERSION_OK,
       [/doc list/, result(' - \n')],
@@ -103,6 +116,8 @@ test('доска раскладывает KR по объективам', async (
 test('KR без объектива не теряется, а собирается в отдельную группу', async () => {
   // Задача, заведённая мимо плагина, должна быть видна — иначе она пропадёт молча.
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([
       VERSION_OK,
       [/doc list/, result(' - \n')],
@@ -119,6 +134,8 @@ test('KR без объектива не теряется, а собираетс�
 
 test('доска отдаёт шесть подписей столбцов', async () => {
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([
       VERSION_OK,
       [/doc list/, result(' - \n')],
@@ -131,6 +148,8 @@ test('доска отдаёт шесть подписей столбцов', asy
 
 test('подписи столбцов берутся из служебного документа', async () => {
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([
       VERSION_OK,
       [/doc list/, result(' - \ndoc-1 - okr-board\n')],
@@ -146,6 +165,8 @@ test('без служебного документа доска открывае
   // Документ заводится лениво, при первой правке подписей: свежий воркспейс не должен
   // обрастать служебными файлами только оттого, что доску один раз открыли.
   const reader = new BacklogReader(CONFIG, {
+    readTextFile: noFile,
+    listDirectory: noDir,
     run: fakeRun([
       VERSION_OK,
       [/doc list/, result(' - \n')],

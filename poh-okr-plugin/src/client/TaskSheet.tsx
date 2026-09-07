@@ -33,6 +33,7 @@ export interface TaskSheetProps {
   onSaveContent: (taskId: string, markdown: string) => void
   onDelete: () => void
   onClose: () => void
+  onImportKrs: () => void
 }
 
 type OpenMenu = 'date' | 'priority' | 'kind' | 'kr' | 'blocks' | null
@@ -197,7 +198,7 @@ export function TaskSheet(props: TaskSheetProps) {
           type="button"
           className={css.iconButton}
           title={t('fieldPriority')}
-          data-on={task.priority !== 'medium' || undefined}
+          data-on={task.priority !== null || undefined}
           onClick={event => { openFrom(event, 'priority') }}
         ><PriorityFlag priority={task.priority} size={16} /></button>
         <span style={{ flex: 1 }} />
@@ -268,7 +269,9 @@ export function TaskSheet(props: TaskSheetProps) {
             <Calendar value={task.dueDate ?? null} t={t}
               onPick={value => { props.onSetDue(value); setMenu(null) }} />
           )}
-          {menu === 'priority' && PRIORITIES.map(item => (
+          {/* «Без приоритета» здесь нет: у Backlog.md нет значения «никакой», и пункт,
+              который ничего не делает, хуже отсутствующего. */}
+          {menu === 'priority' && PRIORITIES.filter(item => item.id !== 'none').map(item => (
             <PopoverItem
               key={item.id ?? 'none'}
               glyph={item.id === 'none' ? <Icon name="ban" size={15} /> : <PriorityFlag priority={item.id} size={15} />}
@@ -288,6 +291,9 @@ export function TaskSheet(props: TaskSheetProps) {
                 <PopoverItem key={kr.id} glyph={<Icon name="inbox" size={15} />} label={kr.title} sub={kr.id}
                   onSelect={() => { props.onSetKr(kr.id); setMenu(null) }} />
               ))}
+              <PopoverItem glyph={<Icon name="weekAhead" size={15} />} label={t('importKrs')}
+                sub={t('importKrsHint')}
+                onSelect={() => { props.onImportKrs(); setMenu(null) }} />
             </>
           )}
           {menu === 'blocks' && BLOCK_TYPES.map(type => (

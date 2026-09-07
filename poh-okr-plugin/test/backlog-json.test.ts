@@ -93,13 +93,15 @@ test('карточка задачи отдаёт комментарии как �
   assert.deepEqual(task.dependencies, ['PO-12'])
 })
 
-test('незнакомый приоритет считается средним, а не роняет разбор', () => {
+test('незнакомый и невыставленный приоритет остаются пустыми', () => {
+  // Подмена умолчанием делала все задачи «средними», и отличить выставленный вручную
+  // средний от невыставленного становилось нельзя.
   const summary = toSummary({
     id: 'PO-30', title: 'KR', status: 'To Do', type: 'okr', priority: 'critical',
     labels: [], milestone: null, dueDate: null, assignees: [], references: [],
     parentTaskId: null, acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0,
   })
-  assert.equal(summary.priority, 'medium')
+  assert.equal(summary.priority, null)
 })
 
 test('пустые milestone и dueDate не превращаются в поля', () => {

@@ -246,9 +246,19 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.iconButton}{display:flex;align-items:center;justify-content:center;width:28px;height:28px;
   border:none;background:transparent;color:var(--dsw-alias-label-caption);border-radius:6px;cursor:pointer;}
 .${c.iconButton}:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
+/* Вкладки — чипы: выбранная залита цветом текста, остальные обведены волосяной рамкой.
+ * Стили обязаны быть здесь целиком: без них браузер рисует кнопку по умолчанию — серый
+ * блок, по которому не видно даже, какая вкладка выбрана. */
 .${c.tabsRow}{display:flex;gap:6px;padding:10px 14px 2px;}
-/* Вкладки — чипы брендбука; подчёркнутых табов в нём нет. */
-.${c.tabBar}{display:flex;gap:2px;padding:0 12px;}
+.${c.tab}{padding:5px 12px;border-radius:999px;cursor:pointer;font-size:13px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;
+  color:var(--dsw-alias-label-secondary);
+  transition:background var(--ds-transition-duration-fast) ease,
+    color var(--ds-transition-duration-fast) ease;}
+.${c.tab}:hover{background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary);}
+.${c.tab}[data-active]{background:var(--dsw-alias-label-primary);
+  border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base);}
 .${c.body}{flex:1;overflow-y:auto;padding:8px 0 16px;}
 .${c.footer}{padding:12px 16px;border-top:1px solid var(--dsw-alias-border-l2);}
 .${c.fullWidth}{width:100%;}

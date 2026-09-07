@@ -11,7 +11,14 @@
  * человек, навыки и CLI (см. `markdown-blocks.ts`).
  */
 import { useEffect, useRef } from 'react'
-import { CONTINUING, formatBlocks, parseBlocks, type Block, type BlockType } from '../markdown-blocks.js'
+import {
+  CONTINUING,
+  formatBlocks,
+  parseBlocks,
+  shortcutFor,
+  type Block,
+  type BlockType,
+} from '../markdown-blocks.js'
 import { classNames as css } from './styles.js'
 
 export interface BlockEditorProps {
@@ -155,6 +162,15 @@ export function BlockEditor({ value, placeholder, onCommand, onChange }: BlockEd
           // «---» превращается в линию сразу, без Enter — как в привычных markdown-редакторах.
           setType(node, 'divider')
           return
+        } else if (node.getAttribute('data-block') === 'text') {
+          // Набранная руками разметка превращается в блок: «- », «[] », «# » и прочие.
+          // Иначе чеклист можно получить только через меню, а человек набирает его привычно.
+          const shortcut = shortcutFor(text)
+          if (shortcut !== null) {
+            node.textContent = shortcut.rest
+            setType(node, shortcut.type)
+            return
+          }
         }
       }
       handlers.current.onChange(formatBlocks(readBlocks(root)))

@@ -11,6 +11,7 @@ export interface PluginConfig {
   krTaskType: string
   poTaskType: string
   boardDocTitle: string
+  nexusOkrPath: string
   sessionPath: string
 }
 
@@ -20,6 +21,8 @@ export const Config = z.object({
   krTaskType: z.string().default('okr'),
   poTaskType: z.string().default('potask'),
   boardDocTitle: z.string().default('okr-board'),
+  // Каталог нексусов OKR: источник настоящих целей для импорта в Backlog.md.
+  nexusOkrPath: z.string().default('GROUND/NEXUS/okr'),
   // Пустая строка выключает привязку чатов (см. toOkrConfig ниже и OkrConfig.sessionPath).
   sessionPath: z.string().default(''),
 })
@@ -40,6 +43,7 @@ export function toOkrConfig(plugin: PluginConfig): OkrConfig {
     krTaskType: plugin.krTaskType,
     poTaskType: plugin.poTaskType,
     boardDocTitle: plugin.boardDocTitle,
+    nexusOkrPath: plugin.nexusOkrPath,
     // Пустая строка здесь осмысленна («не привязывать»), поэтому нормализуем пробелы,
     // а не подставляем умолчание вместо пустого значения.
     sessionPath: plugin.sessionPath?.trim() ?? '',

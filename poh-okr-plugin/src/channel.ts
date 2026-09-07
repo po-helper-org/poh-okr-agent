@@ -299,6 +299,65 @@ export async function dispatch(
         return ok({ id })
       }
 
+      /**
+       * Перенос настоящих OKR из нексусов воркспейса в Backlog.md.
+       *
+       * Объектив становится milestone, ключевой результат — задачей типа `okr` с привязкой
+       * к нему. Повторный запуск ничего не дублирует: уже существующие по названию записи
+       * пропускаются. Дальше источником истины служит Backlog.md — только им плагин и умеет
+       * управлять, у нексуса нет ни статуса, ни срока, ни зависимостей.
+       */
+      case 'importOkr': {
+        const tree = await reader.readNexusOkr()
+        if (tree.objectives.length === 0 && tree.keyResults.length === 0) {
+          return fail('nexus-empty', 'в каталоге нексусов не нашлось ни объективов, ни ключевых результатов')
+        }
+
+        const existingObjectives = await reader.listObjectives(signal)
+        const byTitle = new Map(existingObjectives.map(row => [row.title, row.id]))
+        let createdObjectives = 0
+        for (const objective of tree.objectives) {
+          if (byTitle.has(objective.title)) continue
+          await reader.write(writer.createObjective(objective.title), signal)
+          createdObjectives += 1
+        }
+
+        // Список объективов перечитывается: идентификаторы им присваивает Backlog.md,
+        // и угадать их до записи нельзя.
+        const afterObjectives = await reader.listObjectives(signal)
+        const objectiveId = new Map(afterObjectives.map(row => [row.title, row.id]))
+        const nodeToTitle = new Map(tree.objectives.map(item => [item.nodeId, item.title]))
+
+        const existingKrs = await reader.listKeyResults(signal)
+        const known = new Set(existingKrs.map(kr => kr.title))
+        let createdKrs = 0
+        for (const kr of tree.keyResults) {
+          if (known.has(kr.title)) continue
+          const title = kr.serves === null ? undefined : nodeToTitle.get(kr.serves)
+          const milestone = title === undefined ? undefined : objectiveId.get(title)
+          if (milestone === undefined) {
+            // Ключевой результат без объектива заводится всё равно — на доске он попадёт
+            // в группу «Без объектива», а не потеряется.
+            await reader.write(
+              ['task', 'create', kr.title, '--type', reader.krTaskType],
+              signal,
+            )
+          } else {
+            await reader.write(
+              writer.createKeyResult({ title: kr.title, objectiveId: milestone, taskType: reader.krTaskType }),
+              signal,
+            )
+          }
+          createdKrs += 1
+        }
+
+        return ok({
+          objectives: createdObjectives,
+          keyResults: createdKrs,
+          skipped: tree.keyResults.length - createdKrs,
+        })
+      }
+
       case 'setSprintLabels': {
         const labels = field(payload, 'sprintLabels')
         if (!Array.isArray(labels)) return fail('bad-request', 'не переданы подписи столбцов')

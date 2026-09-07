@@ -82,7 +82,8 @@ export interface TaskSummary {
   title: string
   /** Статус как его назвал воркспейс. Плагин не навязывает свой канон статусов. */
   status: string
-  priority: Priority
+  /** `null` — приоритет не выставлен. У Backlog.md нет значения «никакой». */
+  priority: Priority | null
   labels: string[]
   /** `YYYY-MM-DD`. Появился в Backlog.md 1.51.0; на более старом CLI поля не будет. */
   dueDate?: string
