@@ -244,7 +244,7 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
   display:flex;flex-direction:column;pointer-events:auto;
   background:var(--dsw-alias-bg-base);border-left:1px solid var(--dsw-alias-border-l2);
   box-shadow:-8px 0 24px rgba(0,0,0,.12);}
-.${c.header}{display:flex;align-items:center;gap:8px;padding:12px 16px;
+.${c.header}{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 14px;
   border-bottom:1px solid var(--dsw-alias-border-l2);}
 .${c.headerTitle}{flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--dsw-alias-label-caption);}
@@ -254,7 +254,11 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 /* Вкладки — чипы: выбранная залита цветом текста, остальные обведены волосяной рамкой.
  * Стили обязаны быть здесь целиком: без них браузер рисует кнопку по умолчанию — серый
  * блок, по которому не видно даже, какая вкладка выбрана. */
-.${c.tabsRow}{display:flex;gap:6px;padding:10px 14px 2px;}
+.${c.tabsRow}{display:flex;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none;}
+/* Вкладки в узкой панели прокручиваются, а не переносятся: перенос вернул бы вторую
+ * строку в шапку, ради избавления от которой их сюда и перенесли. */
+.${c.tabsRow}::-webkit-scrollbar{display:none;}
+.${c.tab}{flex-shrink:0;}
 .${c.tab}{padding:5px 12px;border-radius:999px;cursor:pointer;font-size:13px;
   border:1px solid var(--dsw-alias-border-l2);background:transparent;
   color:var(--dsw-alias-label-secondary);

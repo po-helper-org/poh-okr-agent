@@ -413,24 +413,24 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
       >
         <div ref={gripRef} className={css.grip} />
 
+        {/* Вкладки и кнопки раздела — одной строкой. Отдельная полоса под ними несла
+            только иконки и съедала высоту списка; заголовка нет намеренно — раздел уже
+            назван кнопкой левого меню. */}
         <div className={css.header}>
-          {/* Заголовка нет намеренно: раздел уже назван кнопкой левого меню, а вкладки
-              под ним говорят, что это за список. Строка-подпись только съедала высоту. */}
+          <div className={css.tabsRow}>
+            {TABS.map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                className={css.tab}
+                data-active={tab === kind || undefined}
+                onClick={() => { setTab(kind); setOpenTask(null) }}
+              >{t(label)}</button>
+            ))}
+          </div>
           <span style={{ flex: 1 }} />
           <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>⟳</button>
           <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>✕</button>
-        </div>
-
-        <div className={css.tabsRow}>
-          {TABS.map(([kind, label]) => (
-            <button
-              key={kind}
-              type="button"
-              className={css.tab}
-              data-active={tab === kind || undefined}
-              onClick={() => { setTab(kind); setOpenTask(null) }}
-            >{t(label)}</button>
-          ))}
         </div>
 
         <div className={css.body}>

@@ -58,6 +58,8 @@ function blockNode(block: Block, placeholder: string): HTMLElement {
       box.toggleAttribute('data-on', on)
       node.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    // За флажком всегда есть текстовый узел, даже пустой: без него каретка попадает
+    // внутрь самого флажка, и набранное уходит в кнопку вместо строки пункта.
     node.append(box, document.createTextNode(block.text))
     return node
   }
@@ -91,11 +93,30 @@ function currentBlock(root: HTMLElement): HTMLElement | null {
   return node !== null && node.parentElement === root ? (node as HTMLElement) : null
 }
 
+/**
+ * Ставит каретку в конец текста блока.
+ *
+ * У пункта списка дел каретка привязывается к текстовому узлу за флажком, а не к концу
+ * блока: конец блока браузер отсчитывает от последнего потомка, и при пустом тексте
+ * каретка оказывалась внутри флажка — набранное уходило в кнопку вместо строки пункта.
+ */
 function focusBlock(node: HTMLElement): void {
   const range = document.createRange()
-  range.selectNodeContents(node)
-  range.collapse(false)
   const selection = window.getSelection()
+
+  if (node.getAttribute('data-block') === 'todo') {
+    let text = node.lastChild
+    if (text === null || text.nodeType !== Node.TEXT_NODE) {
+      text = document.createTextNode('')
+      node.append(text)
+    }
+    range.setStart(text, text.textContent?.length ?? 0)
+    range.collapse(true)
+  } else {
+    range.selectNodeContents(node)
+    range.collapse(false)
+  }
+
   selection?.removeAllRanges()
   selection?.addRange(range)
 }
@@ -141,9 +162,31 @@ export function BlockEditor({ value, placeholder, onCommand, onChange }: BlockEd
       handlers.current.onChange(formatBlocks(readBlocks(root)))
     }
 
+    /**
+     * Возвращает текст, попавший внутрь флажка, обратно в строку пункта.
+     *
+     * Браузер иногда вставляет символ в `contenteditable=false`-кнопку, если каретка
+     * оказалась на её границе. Оставить это нельзя: текст пропадёт при сборке markdown,
+     * потому что флажок текста не несёт.
+     */
+    const rescueBoxText = (node: HTMLElement): void => {
+      const box = node.querySelector(`.${css.todoBox}`)
+      if (box === null || box.textContent === '') return
+      const stray = box.textContent ?? ''
+      box.textContent = ''
+      let text = node.lastChild
+      if (text === null || text.nodeType !== Node.TEXT_NODE) {
+        text = document.createTextNode('')
+        node.append(text)
+      }
+      text.textContent = `${text.textContent ?? ''}${stray}`
+      focusBlock(node)
+    }
+
     const onInput = (): void => {
       markEmpty(root)
       const node = currentBlock(root)
+      if (node !== null && node.getAttribute('data-block') === 'todo') rescueBoxText(node)
       if (node !== null) {
         const text = blockText(node)
         // «/» в начале пустой строки открывает меню блоков. В середине текста косая черта
