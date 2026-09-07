@@ -10,7 +10,7 @@ import {
   TaskNotFoundError,
 } from './errors.js'
 import type { BacklogReader } from './reader.js'
-import type { Phase, PoTaskKind } from './model.js'
+import type { Phase, PoTaskKind, Priority } from './model.js'
 import { PHASES, PO_TASK_KINDS, SPRINT_COUNT } from './model.js'
 import * as writer from './writer.js'
 
@@ -72,6 +72,7 @@ function stringField(payload: unknown, name: string): string | null {
 const PHASE_SET: ReadonlySet<string> = new Set(PHASES)
 const KIND_SET: ReadonlySet<string> = new Set(PO_TASK_KINDS)
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const PRIORITY_SET: ReadonlySet<string> = new Set(['high', 'medium', 'low'])
 
 /**
  * Разбирает подкоманду канала.
@@ -150,6 +151,11 @@ export async function dispatch(
         }
         const relatedKrId = stringField(payload, 'relatedKrId')
         const dueDate = stringField(payload, 'dueDate')
+        const description = stringField(payload, 'description')
+        const priority = stringField(payload, 'priority')
+        if (priority !== null && !PRIORITY_SET.has(priority)) {
+          return fail('bad-request', `неизвестный приоритет ${JSON.stringify(priority)}`)
+        }
         const id = await reader.writeCreating(
           writer.createPoTask({
             title,
@@ -157,6 +163,8 @@ export async function dispatch(
             taskType: reader.poTaskType,
             ...(relatedKrId ? { relatedKrId } : {}),
             ...(dueDate ? { dueDate } : {}),
+            ...(description ? { description } : {}),
+            ...(priority ? { priority: priority as Priority } : {}),
           }),
           signal,
         )

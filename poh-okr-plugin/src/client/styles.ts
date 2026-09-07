@@ -43,6 +43,12 @@ export const classNames = {
   fullWidth: 'okr-full-width',
 
   addRow: 'okr-add-row',
+  composer: 'okr-composer',
+  composerTitle: 'okr-composer-title',
+  composerDescription: 'okr-composer-description',
+  composerFoot: 'okr-composer-foot',
+  composerChip: 'okr-composer-chip',
+  composerHint: 'okr-composer-hint',
   sectionCard: 'okr-section-card',
   rowMain: 'okr-row-main',
   rowMeta: 'okr-row-meta',
@@ -201,6 +207,27 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.fullWidth}{width:100%;}
 
 .${c.addRow}{padding:10px 14px 4px;}
+
+/* Быстрый ввод: постоянная строка вверху панели. Рамка подсвечивается, только когда в него
+ * начали писать, — пустой composer не должен перетягивать внимание на себя. */
+.${c.composer}{margin:10px 14px 2px;padding:8px 10px;border-radius:10px;
+  border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
+  display:flex;flex-direction:column;gap:6px;
+  transition:border-color var(--ds-transition-duration-fast) ease;}
+.${c.composer}[data-active]{border-color:var(--dsw-alias-label-caption);}
+.${c.composerTitle}{border:none;background:transparent;padding:2px 0;font:inherit;font-size:14px;
+  color:var(--dsw-alias-label-primary);outline:none;}
+.${c.composerDescription}{border:none;background:transparent;padding:0;font:inherit;font-size:13px;
+  color:var(--dsw-alias-label-secondary);outline:none;resize:vertical;min-height:44px;}
+.${c.composerFoot}{display:flex;align-items:center;gap:6px;}
+.${c.composerChip}{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;cursor:pointer;
+  font-size:12px;color:var(--dsw-alias-label-secondary);}
+.${c.composerChip}:hover{color:var(--dsw-alias-label-primary);
+  border-color:var(--dsw-alias-label-caption);}
+/* Подсказка о командах видна, только когда в строке уже пишут: на пустой панели это шум. */
+.${c.composerHint}{display:none;font-size:11px;color:var(--dsw-alias-label-caption);}
+.${c.composer}[data-active] .${c.composerHint}{display:inline;}
 
 /* Секция — подпись и отдельная карточка со строками. Заголовок сам по себе группу не
  * показывает: на длинном списке глаз теряет, где она кончилась. Карточка показывает. */

@@ -19,6 +19,7 @@ import { poTaskLabel, type Board as BoardModel, type KeyResult, type PoTask, typ
 import type { RawTaskDetail } from '../backlog-json.js'
 import { groupTasks, isoDay, type GroupKey } from '../po-groups.js'
 import { Board } from './Board.js'
+import { Composer, type ComposerDraft } from './Composer.js'
 import { DetailPage } from './DetailPage.js'
 import { KrSidebar } from './KrSidebar.js'
 import { TaskPopup } from './TaskPopup.js'
@@ -222,23 +223,29 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
    * (у новой записи его и не может быть), а настоящий идентификатор подставляется, когда
    * ответит CLI. Перечитывать список после этого незачем — в нём уже ровно то, что создано.
    */
-  const addTask = () => {
+  const addTask = (input: ComposerDraft) => {
     tempCounter.current += 1
     const tempId = `new-${tempCounter.current}`
     const draft: PoTask = {
       id: tempId,
-      title: t('newTask'),
+      title: input.title,
       status: 'To Do',
-      priority: 'medium',
+      priority: input.priority ?? 'medium',
       labels: [poTaskLabel(tab)],
       kind: tab,
       relatedKrIds: [],
+      ...(input.dueDate !== null ? { dueDate: input.dueDate } : {}),
     }
 
     patchTasks(list => [...list, draft])
-    setOpenTask({ task: draft, content: '', justCreated: true })
 
-    const created = unwrap<{ id: string | null }>(call('createPoTask', { title: draft.title, kind: tab }))
+    const created = unwrap<{ id: string | null }>(call('createPoTask', {
+      title: input.title,
+      kind: tab,
+      ...(input.description !== '' ? { description: input.description } : {}),
+      ...(input.dueDate !== null ? { dueDate: input.dueDate } : {}),
+      ...(input.priority !== null ? { priority: input.priority } : {}),
+    }))
       .then(result => {
         if (result.id === null) {
           // Идентификатора в выводе CLI не нашлось. Запись создана, но связать её с
@@ -248,16 +255,12 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         }
         const realId = result.id
         patchTasks(list => list.map(task => (task.id === tempId ? { ...task, id: realId } : task)))
-        setOpenTask(current => (current?.task.id === tempId
-          ? { ...current, task: { ...current.task, id: realId } }
-          : current))
         pendingIds.current.delete(tempId)
         return realId
       })
       .catch((cause: unknown) => {
         // Строка-призрак хуже пустого списка: убираем её и говорим причину.
         patchTasks(list => list.filter(task => task.id !== tempId))
-        setOpenTask(current => (current?.task.id === tempId ? null : current))
         pendingIds.current.delete(tempId)
         setError(cause instanceof Error ? cause.message : String(cause))
         throw cause
@@ -354,11 +357,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
         </div>
 
         <div className={css.body}>
-          <div className={css.addRow}>
-            <Button variant="outline" className={css.fullWidth} icon={<IconPlusOutline16 />} onClick={addTask}>
-              {t('addTask')}
-            </Button>
-          </div>
+          <Composer t={t} onSubmit={addTask} />
 
           {error !== null && (
             <div className={css.stateMessage} role="alert">{error}</div>

@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Панель работы — прототип</title>
+<style>
+/*
+ * Прототип панели «Управление целями» для отладки UX до переноса в DeepSeek Harness.
+ *
+ * Токены светлой темы сняты с живого харнесса и подставлены как есть. Тёмная тема здесь
+ * приближённая: харнесс переключает её своей настройкой, а не системной, поэтому её значения
+ * измерить тем же способом не удалось — при переносе цвета возьмутся из настоящих переменных.
+ *
+ * Имена переменных совпадают с харнессом (--dsw-alias-*), чтобы перенос был заменой блока
+ * :root на ничего, а не переписыванием стилей.
+ */
+:root{
+  --dsw-alias-bg-base:#ffffff;
+  --dsw-alias-bg-layer-1:#ffffff;
+  --dsw-alias-interactive-bg-hover:rgba(38,49,72,.06);
+  --dsw-alias-border-l1:rgba(0,0,0,.04);
+  --dsw-alias-border-l2:rgba(0,0,0,.10);
+  --dsw-alias-border-l3:rgba(0,0,0,.12);
+  --dsw-alias-label-primary:#0f1115;
+  --dsw-alias-label-secondary:#61666b;
+  --dsw-alias-label-tertiary:#81858c;
+  --dsw-alias-label-caption:#adb2b8;
+  --dsw-alias-button-info-fill:#4176e6;
+  --dsw-alias-state-error-primary:#ec1313;
+  --dsw-specific-sidebar-fill:#f9fafb;
+  --ds-transition-duration-fast:120ms;
+  --page:#eef0f3;
+}
+[data-theme="dark"]{
+  --dsw-alias-bg-base:#17181c;
+  --dsw-alias-bg-layer-1:#1c1e22;
+  --dsw-alias-interactive-bg-hover:rgba(255,255,255,.07);
+  --dsw-alias-border-l1:rgba(255,255,255,.06);
+  --dsw-alias-border-l2:rgba(255,255,255,.12);
+  --dsw-alias-border-l3:rgba(255,255,255,.16);
+  --dsw-alias-label-primary:#e8eaed;
+  --dsw-alias-label-secondary:#a8adb4;
+  --dsw-alias-label-tertiary:#878c93;
+  --dsw-alias-label-caption:#6b7078;
+  --dsw-specific-sidebar-fill:#141519;
+  --page:#0e0f12;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--page);
+  color:var(--dsw-alias-label-primary);
+  font-family:-apple-system,system-ui,"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  display:flex;justify-content:flex-end;
+}
+
+/* Переключатель темы прототипа — в харнесс не переносится. */
+.proto-bar{position:fixed;top:12px;left:12px;display:flex;gap:8px;align-items:center;
+  font-size:12px;color:var(--dsw-alias-label-secondary);z-index:100}
+.proto-bar button{font:inherit;padding:4px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
+  color:var(--dsw-alias-label-secondary)}
+
+/* ——— Панель ——— */
+.panel{width:420px;max-width:100vw;height:100vh;display:flex;flex-direction:column;
+  background:var(--dsw-alias-bg-base);border-left:1px solid var(--dsw-alias-border-l2);
+  box-shadow:-8px 0 24px rgba(0,0,0,.10)}
+.header{display:flex;align-items:center;gap:8px;padding:12px 16px;
+  border-bottom:1px solid var(--dsw-alias-border-l2)}
+.header-title{flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--dsw-alias-label-tertiary)}
+.icon-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;
+  border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:8px;
+  cursor:pointer}
+.icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+
+.tabs{display:flex;gap:6px;padding:10px 14px 2px}
+.pill{padding:5px 12px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);
+  background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;
+  cursor:pointer;transition:background var(--ds-transition-duration-fast) ease}
+.pill:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.pill[aria-pressed="true"]{background:var(--dsw-alias-label-primary);
+  border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}
+
+.body{flex:1;overflow-y:auto;padding-bottom:16px}
+.footer{padding:12px 16px;border-top:1px solid var(--dsw-alias-border-l2)}
+.wide{width:100%;justify-content:center}
+
+/* ——— Быстрый ввод ——— */
+.composer{margin:10px 14px 4px;padding:8px 10px;border-radius:10px;
+  border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
+  display:flex;flex-direction:column;gap:6px;position:relative;
+  transition:border-color var(--ds-transition-duration-fast) ease}
+.composer:focus-within{border-color:var(--dsw-alias-button-info-fill)}
+.composer input.title,.composer textarea.desc{
+  border:none;background:transparent;padding:2px 0;font:inherit;outline:none;width:100%}
+.composer input.title{font-size:14px;color:var(--dsw-alias-label-primary)}
+.composer input.title::placeholder{color:var(--dsw-alias-label-caption)}
+.composer textarea.desc{font-size:13px;color:var(--dsw-alias-label-secondary);
+  resize:vertical;min-height:46px}
+.composer .foot{display:flex;align-items:center;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;cursor:pointer;
+  font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.chip:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-caption)}
+.chip[data-set]{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-caption)}
+.hint{font-size:11px;color:var(--dsw-alias-label-caption)}
+.btn-primary{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;
+  border:none;background:var(--dsw-alias-button-info-fill);color:#fff;font:inherit;font-size:13px;
+  cursor:pointer}
+.btn-primary:disabled{opacity:.4;cursor:default}
+
+/* ——— Меню команд ——— */
+.menu{position:absolute;z-index:50;min-width:190px;padding:4px;border-radius:10px;
+  background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);
+  box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:7px 9px;border:none;background:transparent;border-radius:6px;cursor:pointer;
+  font:inherit;font-size:13px;color:var(--dsw-alias-label-primary)}
+.menu button:hover,.menu button[data-cursor]{background:var(--dsw-alias-interactive-bg-hover)}
+.menu .sep{height:1px;margin:4px 2px;background:var(--dsw-alias-border-l2)}
+
+/* ——— Список ——— */
+.group{padding:6px 14px 10px}
+.group-head{display:flex;align-items:baseline;gap:6px;padding:6px 2px}
+.group-label{font-size:13px;font-weight:600}
+.group-label.overdue{color:var(--dsw-alias-state-error-primary)}
+.group-count{font-size:12px;color:var(--dsw-alias-label-caption)}
+.card{border-radius:12px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
+.row{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;
+  border:none;background:transparent;text-align:left;cursor:pointer;font:inherit;
+  color:var(--dsw-alias-label-primary)}
+.row + .row{box-shadow:inset 0 1px 0 var(--dsw-alias-border-l2)}
+.row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.check{flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:50%;cursor:pointer;
+  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color var(--ds-transition-duration-fast) ease,
+    background var(--ds-transition-duration-fast) ease}
+.check:hover{border-color:var(--dsw-alias-label-primary)}
+.check[data-kind="control"]{border-color:#2F72B8}
+.check[data-kind="risk"]{border-color:#B33F3F}
+.check[data-overdue]{border-color:var(--dsw-alias-state-error-primary)}
+.check[data-done]{background:var(--dsw-alias-label-secondary);
+  border-color:var(--dsw-alias-label-secondary)}
+.check[data-done]::after{content:"";width:9px;height:5px;margin-top:-2px;
+  border-left:1.5px solid var(--dsw-alias-bg-base);
+  border-bottom:1.5px solid var(--dsw-alias-bg-base);transform:rotate(-45deg)}
+.row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.row-title{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.row[data-done] .row-title{color:var(--dsw-alias-label-caption);text-decoration:line-through}
+.row-meta{font-size:12px;color:var(--dsw-alias-label-caption)}
+.row-meta.overdue{color:var(--dsw-alias-state-error-primary)}
+.dot{flex-shrink:0;width:8px;height:8px;margin-top:6px;border-radius:50%}
+.dot[data-priority="high"]{background:var(--dsw-alias-state-error-primary)}
+.dot[data-priority="medium"]{background:#C1861A}
+.dot[data-priority="low"]{background:var(--dsw-alias-label-caption)}
+.note-dot{flex-shrink:0;width:5px;height:5px;margin-top:7px;border-radius:50%;
+  background:var(--dsw-alias-label-caption)}
+
+.state{display:flex;flex-direction:column;align-items:center;gap:6px;padding:52px 24px;
+  text-align:center}
+.state-title{font-size:14px;color:var(--dsw-alias-label-secondary)}
+.state-hint{font-size:12px;color:var(--dsw-alias-label-caption)}
+
+/* ——— Карточка задачи ——— */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.32);backdrop-filter:blur(2px);z-index:60;
+  display:flex;align-items:center;justify-content:center;padding:24px}
+.modal{width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;
+  background:var(--dsw-alias-bg-base);border-radius:14px;padding:16px 20px 12px;
+  box-shadow:0 16px 48px rgba(0,0,0,.28)}
+.modal-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;
+  border-bottom:1px solid var(--dsw-alias-border-l2)}
+.date-chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
+  color:var(--dsw-alias-label-secondary)}
+.date-chip[data-overdue]{color:var(--dsw-alias-state-error-primary)}
+.date-chip input{background:transparent;border:none;padding:0;font:inherit;color:inherit}
+.modal-title{font-size:20px;font-weight:700;line-height:1.3;padding:14px 0 6px;outline:none}
+.modal-desc{flex:1;min-height:180px;border:none;background:transparent;padding:0;font:inherit;
+  font-size:14px;line-height:1.55;color:var(--dsw-alias-label-primary);outline:none;resize:none}
+.modal-foot{display:flex;align-items:center;gap:8px;padding-top:10px;
+  border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
+  color:var(--dsw-alias-label-caption)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <span>прототип панели</span>
+  <button id="themeBtn" type="button">тёмная тема</button>
+  <button id="resetBtn" type="button">сбросить данные</button>
+</div>
+
+<aside class="panel">
+  <div class="header">
+    <div class="header-title">Панель работы</div>
+    <button class="icon-btn" id="reloadBtn" title="Обновить" aria-label="Обновить">⟳</button>
+    <button class="icon-btn" title="Закрыть" aria-label="Закрыть">✕</button>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="body">
+    <div class="composer" id="composer">
+      <input class="title" id="cTitle" placeholder="Новая задача" autocomplete="off">
+      <textarea class="desc" id="cDesc" placeholder="Описание" hidden></textarea>
+      <div class="foot">
+        <button class="chip" id="cDate" type="button">Срок</button>
+        <button class="chip" id="cPriority" type="button">Приоритет</button>
+        <span style="flex:1"></span>
+        <span class="hint" id="cHint" hidden>/ команды · ! приоритет · Shift+Enter описание</span>
+        <button class="btn-primary" id="cAdd" type="button" disabled>Добавить</button>
+      </div>
+      <div class="menu" id="cMenu" hidden></div>
+    </div>
+
+    <div id="list"></div>
+  </div>
+
+  <div class="footer">
+    <button class="chip wide" type="button" style="padding:8px 12px">Открыть доску целей</button>
+  </div>
+</aside>
+
+<script>
+'use strict'
+
+/* ——— Данные ——— */
+
+const KINDS = [
+  { id: 'task', label: 'Задачи' },
+  { id: 'control', label: 'Договорённости' },
+  { id: 'risk', label: 'Риски' },
+]
+
+const PRIORITIES = [
+  { id: 'high', label: 'Высокий' },
+  { id: 'medium', label: 'Средний' },
+  { id: 'low', label: 'Низкий' },
+  { id: null, label: 'Без приоритета' },
+]
+
+const iso = d => {
+  const p = n => String(n).padStart(2, '0')
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+}
+const shiftDays = n => {
+  const now = new Date()
+  return iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n))
+}
+const TODAY = iso(new Date())
+
+const DATES = [
+  { id: 'today', label: 'Сегодня', days: 0 },
+  { id: 'tomorrow', label: 'Завтра', days: 1 },
+  { id: 'monday', label: 'Следующий понедельник', days: (8 - new Date().getDay()) % 7 || 7 },
+  { id: 'week', label: 'Через неделю', days: 7 },
+  { id: 'none', label: 'Без срока', days: null },
+]
+
+const SEED = [
+  { id: 'PO-25', kind: 'task', title: 'Занести все эпики в JIRA', due: shiftDays(-14), priority: 'high', done: false, desc: '' },
+  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, купивших на TLND', due: shiftDays(-2), priority: null, done: false, desc: 'Согласовано с Кардоной.' },
+  { id: 'PO-31', kind: 'task', title: 'Созвон по админкам ТС', due: TODAY, priority: 'medium', done: false, desc: '' },
+  { id: 'PO-32', kind: 'task', title: 'По FAQ — занести истории на итерацию 2', due: shiftDays(3), priority: null, done: false, desc: '' },
+  { id: 'PO-27', kind: 'task', title: 'Взять AI-харнесс под проектное управление', due: null, priority: null, done: false, desc: '' },
+  { id: 'PO-30', kind: 'task', title: 'PoC BI', due: null, priority: null, done: true, desc: '' },
+  { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент без Тимура — к 3 августа', due: shiftDays(1), priority: 'high', done: false, desc: '' },
+  { id: 'PO-33', kind: 'control', title: 'Слава собрал контекст по нестабильным моментам', due: null, priority: null, done: true, desc: '' },
+  { id: 'PO-29', kind: 'risk', title: 'Подрядчик не подтвердил сроки', due: shiftDays(-1), priority: 'high', done: false, desc: 'Ждём ответа до пятницы, иначе двигаем релиз.' },
+  { id: 'PO-34', kind: 'risk', title: 'Спекулянты держат места бесконечной бронью', due: null, priority: 'medium', done: false, desc: '' },
+]
+
+const STORAGE = 'okr-panel-prototype'
+let tasks = load()
+let tab = 'task'
+let nextId = 100
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE)
+    if (raw) return JSON.parse(raw)
+  } catch (e) { /* приватное окно или запрет на хранилище — работаем на посевных данных */ }
+  return SEED.map(t => ({ ...t }))
+}
+function save() {
+  try { localStorage.setItem(STORAGE, JSON.stringify(tasks)) } catch (e) { /* см. load */ }
+}
+
+/* ——— Группировка ——— */
+
+const GROUPS = [
+  { key: 'overdue', label: 'Просрочено' },
+  { key: 'today', label: 'Сегодня' },
+  { key: 'week', label: 'На неделе' },
+  { key: 'later', label: 'Позже' },
+  { key: 'noDate', label: 'Без срока' },
+  { key: 'done', label: 'Выполнено' },
+]
+
+function groupOf(task) {
+  if (task.done) return 'done'
+  if (!task.due) return 'noDate'
+  if (task.due < TODAY) return 'overdue'
+  if (task.due === TODAY) return 'today'
+  return task.due <= shiftDays(7) ? 'week' : 'later'
+}
+
+const shortDate = d => d ? d.slice(8, 10) + '.' + d.slice(5, 7) : ''
+
+/* ——— Отрисовка ——— */
+
+const el = (tag, attrs, ...kids) => {
+  const node = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v === null || v === undefined) continue
+    if (k === 'class') node.className = v
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v)
+    else node.setAttribute(k, v === true ? '' : v)
+  }
+  for (const kid of kids.flat()) {
+    if (kid === null || kid === undefined || kid === false) continue
+    node.append(kid.nodeType ? kid : document.createTextNode(String(kid)))
+  }
+  return node
+}
+
+function renderTabs() {
+  const box = document.getElementById('tabs')
+  box.replaceChildren(...KINDS.map(k => el('button', {
+    class: 'pill', type: 'button', 'aria-pressed': String(tab === k.id),
+    onclick: () => { tab = k.id; render() },
+  }, k.label)))
+}
+
+function renderList() {
+  const box = document.getElementById('list')
+  const mine = tasks.filter(t => t.kind === tab)
+
+  if (mine.length === 0) {
+    box.replaceChildren(el('div', { class: 'state' },
+      el('span', { class: 'state-title' }, 'Пусто'),
+      el('span', { class: 'state-hint' }, 'Наберите задачу в строке сверху и нажмите Enter')))
+    return
+  }
+
+  const nodes = []
+  for (const group of GROUPS) {
+    const rows = mine.filter(t => groupOf(t) === group.key)
+      .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+    if (rows.length === 0) continue
+
+    nodes.push(el('div', { class: 'group' },
+      el('div', { class: 'group-head' },
+        el('span', { class: 'group-label' + (group.key === 'overdue' ? ' overdue' : '') }, group.label),
+        el('span', { class: 'group-count' }, rows.length)),
+      el('div', { class: 'card' }, rows.map(renderRow))))
+  }
+  box.replaceChildren(...nodes)
+}
+
+function renderRow(task) {
+  const overdue = !task.done && task.due && task.due < TODAY
+  return el('div', {
+    class: 'row', role: 'button', tabindex: '0', 'data-done': task.done || null,
+    onclick: () => openCard(task.id),
+    onkeydown: e => { if (e.key === 'Enter') openCard(task.id) },
+  },
+    el('button', {
+      class: 'check', type: 'button', 'aria-pressed': String(task.done),
+      'data-kind': task.kind, 'data-done': task.done || null, 'data-overdue': overdue || null,
+      'aria-label': task.title,
+      onclick: e => { e.stopPropagation(); task.done = !task.done; save(); render() },
+    }),
+    el('span', { class: 'row-main' },
+      el('span', { class: 'row-title' }, task.title),
+      task.due ? el('span', { class: 'row-meta' + (overdue ? ' overdue' : '') },
+        'до ' + shortDate(task.due)) : null),
+    task.desc ? el('span', { class: 'note-dot', title: 'есть описание' }) : null,
+    task.priority && !task.done ? el('span', { class: 'dot', 'data-priority': task.priority }) : null)
+}
+
+function render() {
+  renderTabs()
+  renderList()
+}
+
+/* ——— Быстрый ввод ——— */
+
+const cTitle = document.getElementById('cTitle')
+const cDesc = document.getElementById('cDesc')
+const cAdd = document.getElementById('cAdd')
+const cHint = document.getElementById('cHint')
+const cMenu = document.getElementById('cMenu')
+const cDate = document.getElementById('cDate')
+const cPriority = document.getElementById('cPriority')
+
+let draft = { due: null, priority: null }
+let triggerAt = null
+let menuKind = null
+
+function syncComposer() {
+  const filled = cTitle.value.trim() !== ''
+  cAdd.disabled = !filled
+  cHint.hidden = !filled && cDesc.hidden
+  cDate.textContent = draft.due ? shortDate(draft.due) : 'Срок'
+  cDate.toggleAttribute('data-set', Boolean(draft.due))
+  const p = PRIORITIES.find(x => x.id === draft.priority)
+  cPriority.textContent = draft.priority ? p.label : 'Приоритет'
+  cPriority.toggleAttribute('data-set', Boolean(draft.priority))
+}
+
+function closeMenu() {
+  cMenu.hidden = true
+  menuKind = null
+}
+
+/** Убирает символ команды из текста: он служил только вызовом меню. */
+function dropTrigger() {
+  if (triggerAt === null) return
+  const at = triggerAt
+  triggerAt = null
+  const v = cTitle.value
+  if (v[at] === '/' || v[at] === '!') {
+    cTitle.value = v.slice(0, at) + v.slice(at + 1)
+    cTitle.setSelectionRange(at, at)
+  }
+}
+
+function openMenu(kind) {
+  menuKind = kind
+  const items = kind === 'commands'
+    ? [{ id: 'date', label: 'Срок' }, { id: 'priority', label: 'Приоритет' }]
+    : kind === 'priority'
+      ? PRIORITIES.map(p => ({ id: String(p.id), label: p.label, priority: p.id }))
+      : DATES.map(d => ({ id: d.id, label: d.label }))
+
+  cMenu.replaceChildren(...items.map(item => el('button', {
+    type: 'button', onclick: () => pick(item.id),
+  },
+    item.priority ? el('span', { class: 'dot', 'data-priority': item.priority, style: 'margin:0' }) : null,
+    item.label)))
+
+  // Меню встаёт под строкой ввода, а не под курсором: в узкой панели у курсора ему негде
+  // раскрыться, и оно всё равно упёрлось бы в край.
+  cMenu.style.left = '10px'
+  cMenu.style.top = (cTitle.offsetTop + cTitle.offsetHeight + 6) + 'px'
+  cMenu.hidden = false
+}
+
+function pick(id) {
+  if (menuKind === 'commands') {
+    dropTrigger()
+    openMenu(id === 'date' ? 'date' : 'priority')
+    return
+  }
+  if (menuKind === 'priority') {
+    draft.priority = id === 'null' ? null : id
+  } else {
+    const found = DATES.find(d => d.id === id)
+    draft.due = found && found.days !== null ? shiftDays(found.days) : null
+  }
+  dropTrigger()
+  closeMenu()
+  syncComposer()
+  cTitle.focus()
+}
+
+let previous = ''
+cTitle.addEventListener('input', () => {
+  const next = cTitle.value
+  // Команда распознаётся по только что набранному символу в начале слова: «/» и «!» —
+  // обычные знаки, и в середине текста они ничего открывать не должны.
+  if (next.length === previous.length + 1) {
+    const at = cTitle.selectionStart - 1
+    const typed = next[at]
+    const before = at === 0 ? ' ' : next[at - 1]
+    if ((typed === '/' || typed === '!') && (before === ' ' || before === undefined)) {
+      triggerAt = at
+      openMenu(typed === '/' ? 'commands' : 'priority')
+    }
+  }
+  previous = next
+  syncComposer()
+})
+
+cTitle.addEventListener('keydown', e => {
+  if (menuKind && (e.key === 'Escape')) { e.preventDefault(); dropTrigger(); closeMenu(); return }
+  if (e.key === 'Enter' && e.shiftKey) {
+    // Shift+Enter уводит во вторую строку, а не переносит строку в названии.
+    e.preventDefault()
+    cDesc.hidden = false
+    cDesc.focus()
+    syncComposer()
+    return
+  }
+  if (e.key === 'Enter') { e.preventDefault(); submit() }
+  if (e.key === 'Escape') { e.preventDefault(); resetComposer() }
+})
+
+cDesc.addEventListener('keydown', e => {
+  // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() }
+  if (e.key === 'Escape') { e.preventDefault(); cTitle.focus() }
+})
+
+cDate.addEventListener('click', () => { menuKind === 'date' ? closeMenu() : openMenu('date') })
+cPriority.addEventListener('click', () => { menuKind === 'priority' ? closeMenu() : openMenu('priority') })
+cAdd.addEventListener('click', submit)
+
+document.addEventListener('click', e => {
+  if (menuKind && !document.getElementById('composer').contains(e.target)) closeMenu()
+})
+
+function resetComposer() {
+  cTitle.value = ''
+  cDesc.value = ''
+  cDesc.hidden = true
+  previous = ''
+  draft = { due: null, priority: null }
+  closeMenu()
+  syncComposer()
+}
+
+function submit() {
+  const title = cTitle.value.trim()
+  if (title === '') return
+  nextId += 1
+  tasks.push({
+    id: 'PO-' + nextId, kind: tab, title,
+    desc: cDesc.value.trim(), due: draft.due, priority: draft.priority, done: false,
+  })
+  save()
+  resetComposer()
+  render()
+  cTitle.focus()
+}
+
+/* ——— Карточка задачи ——— */
+
+function openCard(id) {
+  const task = tasks.find(t => t.id === id)
+  if (!task) return
+  const overdue = !task.done && task.due && task.due < TODAY
+
+  const title = el('div', { class: 'modal-title', contenteditable: 'true', spellcheck: 'false' }, task.title)
+  const desc = el('textarea', { class: 'modal-desc', placeholder: 'Контекст по задаче…' })
+  desc.value = task.desc || ''
+
+  const dateInput = el('input', { type: 'date', value: task.due || '' })
+  dateInput.addEventListener('change', () => { task.due = dateInput.value || null; save(); render() })
+
+  const check = el('button', {
+    class: 'check', type: 'button', 'data-kind': task.kind,
+    'data-done': task.done || null, 'data-overdue': overdue || null, 'aria-label': task.title,
+  })
+
+  const close = () => {
+    task.title = title.textContent.trim() || task.title
+    task.desc = desc.value.trim()
+    save()
+    mask.remove()
+    render()
+  }
+
+  check.addEventListener('click', () => {
+    task.done = !task.done
+    check.toggleAttribute('data-done', task.done)
+    save()
+  })
+
+  const modal = el('div', { class: 'modal', onclick: e => e.stopPropagation() },
+    el('div', { class: 'modal-head' },
+      check,
+      el('label', { class: 'date-chip', 'data-overdue': overdue || null },
+        '🕑', task.due ? '' : 'Срок', dateInput),
+      el('span', { style: 'flex:1' }),
+      task.priority ? el('span', { class: 'dot', 'data-priority': task.priority, style: 'margin:0' }) : null),
+    title,
+    desc,
+    el('div', { class: 'modal-foot' },
+      el('button', { class: 'icon-btn', type: 'button', title: 'Блоки' }, '＋'),
+      el('span', { class: 'mono' }, task.id),
+      el('span', { style: 'flex:1' }),
+      el('button', {
+        class: 'icon-btn', type: 'button', title: 'Удалить',
+        onclick: () => { tasks = tasks.filter(t => t.id !== task.id); save(); mask.remove(); render() },
+      }, '🗑')))
+
+  const mask = el('div', { class: 'mask', onclick: close }, modal)
+  document.body.append(mask)
+
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); close() }
+  })
+
+  title.focus()
+  const range = document.createRange()
+  range.selectNodeContents(title)
+  range.collapse(false)
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+/* ——— Служебное ——— */
+
+document.getElementById('themeBtn').addEventListener('click', e => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+  document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark')
+  e.target.textContent = dark ? 'тёмная тема' : 'светлая тема'
+})
+document.getElementById('resetBtn').addEventListener('click', () => {
+  tasks = SEED.map(t => ({ ...t }))
+  save()
+  render()
+})
+document.getElementById('reloadBtn').addEventListener('click', render)
+
+render()
+syncComposer()
+cTitle.focus()
+</script>
+</body>
+</html>

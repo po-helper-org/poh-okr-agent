@@ -1,5 +1,5 @@
 import { InvalidMilestoneIdError, InvalidTaskIdError, SprintOutOfRangeError } from './errors.js'
-import { SPRINT_COUNT, krLabel, poTaskLabel, type Phase, type PoTaskKind } from './model.js'
+import { SPRINT_COUNT, krLabel, poTaskLabel, type Phase, type PoTaskKind, type Priority } from './model.js'
 import { labelForPhase, phaseLabelsOf } from './phases.js'
 
 /**
@@ -66,6 +66,9 @@ export interface CreatePoTaskInput {
   title: string
   kind: PoTaskKind
   taskType: string
+  /** Контекст задачи, набранный во второй строке быстрого ввода. */
+  description?: string
+  priority?: Priority
   /** KR, которому задача помогает. Связь — зависимость, а не родительство: у операционной
    *  задачи свой жизненный цикл, и подзадачей KR она быть не должна. */
   relatedKrId?: string
@@ -82,6 +85,10 @@ export function createPoTask(input: CreatePoTaskInput): BacklogArgs {
   const args = ['task', 'create', input.title, '--type', input.taskType, '--labels', labels.join(',')]
   if (input.relatedKrId) args.push('--dep', taskId(input.relatedKrId))
   if (input.dueDate) args.push('--due-date', input.dueDate)
+  if (input.description) args.push('--description', input.description)
+  // Приоритет не проставляется, когда его не выбрали: у Backlog.md нет значения «никакой»,
+  // и подстановка умолчания выдала бы догадку за решение человека.
+  if (input.priority) args.push('--priority', input.priority)
   return args
 }
 

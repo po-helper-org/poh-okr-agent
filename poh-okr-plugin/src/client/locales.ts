@@ -13,7 +13,19 @@ export const ru = {
   tabControl: 'Договорённости',
   tabRisks: 'Риски',
 
-  addTask: 'Добавить задачу',
+  addTask: 'Добавить',
+  composerPlaceholder: 'Новая задача — Enter, чтобы завести',
+  composerDescription: 'Описание',
+  composerHint: '/ команды · ! приоритет · Shift+Enter описание',
+  fieldPriority: 'Приоритет',
+  priorityHigh: 'Высокий',
+  priorityMedium: 'Средний',
+  priorityLow: 'Низкий',
+  priorityNone: 'Без приоритета',
+  dateToday: 'Сегодня',
+  dateTomorrow: 'Завтра',
+  dateWeek: 'Через неделю',
+  dateNone: 'Без срока',
   // Названия по умолчанию для только что заведённых записей. Отдельно от подписей
   // кнопок: подпись кнопки в качестве названия задачи читается как ошибка.
   newTask: 'Новая задача',

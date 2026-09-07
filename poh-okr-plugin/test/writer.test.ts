@@ -90,3 +90,19 @@ test('связь с KR дублируется меткой ради чтения
   assert.ok(args[args.indexOf('--labels') + 1].split(',').includes('okr-kr:PO-30'))
   assert.ok(args.includes('--dep'))
 })
+
+test('быстрый ввод передаёт описание и приоритет одной командой', () => {
+  const args = writer.createPoTask({
+    title: 'Согласовать бюджет', kind: 'task', taskType: 'potask',
+    description: 'Контекст из второй строки', priority: 'high',
+  })
+  assert.deepEqual(args.slice(args.indexOf('--description')), [
+    '--description', 'Контекст из второй строки', '--priority', 'high',
+  ])
+})
+
+test('невыбранный приоритет не подставляется умолчанием', () => {
+  // У Backlog.md нет значения «никакой»; подстановка выдала бы догадку за решение человека.
+  const args = writer.createPoTask({ title: 'Задача', kind: 'task', taskType: 'potask' })
+  assert.ok(!args.includes('--priority'))
+})
