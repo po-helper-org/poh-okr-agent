@@ -22,7 +22,9 @@ Node.js/npm (устанавливается автоматически чере�
 curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
 ```
 Скрипт спросит IDE-агента (Claude Code / Codex / Cline / DevX / Universal) и
-синкнет команды и навыки в нужный корень. Если найден `npm` — заодно
+синкнет навыки в нужный корень — плюс команды тем агентам, которые каталога
+навыков не читают (Codex / Cline / DevX / Universal). Claude Code показывает
+навыки слэш-командами сам, поэтому туда команды не синкаются. Если найден `npm` — заодно
 установит `pptxgenjs` (нужен только для `.pptx`-вывода `/okr-equator` и
 `/okr-plan-deck`; `.md`-артефакты и остальные команды работают без Node.js).
 После установки запусти `/okr-index` — навык проведёт первичную аналитику
