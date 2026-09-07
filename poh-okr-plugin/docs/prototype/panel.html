@@ -8,12 +8,9 @@
 /*
  * Прототип панели «Управление целями» для отладки UX до переноса в DeepSeek Harness.
  *
- * Токены светлой темы сняты с живого харнесса и подставлены как есть. Тёмная тема здесь
- * приближённая: харнесс переключает её своей настройкой, а не системной, поэтому её значения
- * измерить тем же способом не удалось — при переносе цвета возьмутся из настоящих переменных.
- *
- * Имена переменных совпадают с харнессом (--dsw-alias-*), чтобы перенос был заменой блока
- * :root на ничего, а не переписыванием стилей.
+ * Имена переменных совпадают с харнессом (--dsw-alias-*), чтобы перенос сводился к удалению
+ * блока :root, а не к переписыванию стилей. Значения светлой темы сняты с живого харнесса;
+ * тёмная приближённая — харнесс переключает её своей настройкой, а не системной.
  */
 :root{
   --dsw-alias-bg-base:#ffffff;
@@ -28,9 +25,13 @@
   --dsw-alias-label-caption:#adb2b8;
   --dsw-alias-button-info-fill:#4176e6;
   --dsw-alias-state-error-primary:#ec1313;
-  --dsw-specific-sidebar-fill:#f9fafb;
   --ds-transition-duration-fast:120ms;
   --page:#eef0f3;
+  --warning:#C1861A;
+  /* Ширина панели живёт переменной: от неё отталкивается сайдбар задачи, который встаёт
+     слева от неё, а не поверх — иначе список пропадает ровно в тот момент, когда по нему
+     и надо ориентироваться. */
+  --panel-w:420px;
 }
 [data-theme="dark"]{
   --dsw-alias-bg-base:#17181c;
@@ -43,7 +44,6 @@
   --dsw-alias-label-secondary:#a8adb4;
   --dsw-alias-label-tertiary:#878c93;
   --dsw-alias-label-caption:#6b7078;
-  --dsw-specific-sidebar-fill:#141519;
   --page:#0e0f12;
 }
 
@@ -54,92 +54,124 @@ body{
   color:var(--dsw-alias-label-primary);
   font-family:-apple-system,system-ui,"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased;
-  display:flex;justify-content:flex-end;
 }
+button{font:inherit}
+svg{display:block;flex-shrink:0}
 
-/* Переключатель темы прототипа — в харнесс не переносится. */
-.proto-bar{position:fixed;top:12px;left:12px;display:flex;gap:8px;align-items:center;
-  font-size:12px;color:var(--dsw-alias-label-secondary);z-index:100}
-.proto-bar button{font:inherit;padding:4px 10px;border-radius:999px;cursor:pointer;
+/* Служебная полоса прототипа — в харнесс не переносится. */
+.proto-bar{position:fixed;bottom:12px;left:12px;display:flex;gap:8px;align-items:center;
+  font-size:12px;color:var(--dsw-alias-label-secondary);z-index:200}
+.proto-bar button{padding:4px 10px;border-radius:999px;cursor:pointer;
   border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
   color:var(--dsw-alias-label-secondary)}
 
-/* ——— Панель ——— */
-.panel{width:420px;max-width:100vw;height:100vh;display:flex;flex-direction:column;
+/* ——— Сайдбары ——— */
+.sheet{position:fixed;top:0;right:0;bottom:0;display:flex;flex-direction:column;
   background:var(--dsw-alias-bg-base);border-left:1px solid var(--dsw-alias-border-l2);
   box-shadow:-8px 0 24px rgba(0,0,0,.10)}
-.header{display:flex;align-items:center;gap:8px;padding:12px 16px;
+#panel{width:var(--panel-w);z-index:10}
+#detail{width:520px;right:var(--panel-w);z-index:20;
+  border-right:1px solid var(--dsw-alias-border-l2)}
+/* Ручка растягивания: узкая полоса вдоль левой границы. Подсвечивается под курсором,
+   чтобы её было видно, но в покое не рисует лишней линии. */
+.grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5}
+.grip:hover,.grip[data-dragging]{background:var(--dsw-alias-button-info-fill);opacity:.5}
+
+.head{display:flex;align-items:center;gap:6px;padding:12px 14px;
   border-bottom:1px solid var(--dsw-alias-border-l2)}
-.header-title{flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+.head-title{flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--dsw-alias-label-tertiary)}
-.icon-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;
+.ico{display:flex;align-items:center;justify-content:center;width:28px;height:28px;
   border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:8px;
   cursor:pointer}
-.icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ico:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ico[data-on]{color:var(--dsw-alias-button-info-fill)}
 
 .tabs{display:flex;gap:6px;padding:10px 14px 2px}
 .pill{padding:5px 12px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);
-  background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;
-  cursor:pointer;transition:background var(--ds-transition-duration-fast) ease}
+  background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;cursor:pointer;
+  transition:background var(--ds-transition-duration-fast) ease}
 .pill:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .pill[aria-pressed="true"]{background:var(--dsw-alias-label-primary);
   border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}
 
 .body{flex:1;overflow-y:auto;padding-bottom:16px}
-.footer{padding:12px 16px;border-top:1px solid var(--dsw-alias-border-l2)}
-.wide{width:100%;justify-content:center}
+.foot{padding:12px 14px;border-top:1px solid var(--dsw-alias-border-l2)}
 
 /* ——— Быстрый ввод ——— */
-.composer{margin:10px 14px 4px;padding:8px 10px;border-radius:10px;
+.composer{margin:10px 14px 4px;padding:9px 10px;border-radius:10px;position:relative;
   border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);
-  display:flex;flex-direction:column;gap:6px;position:relative;
+  display:flex;flex-direction:column;gap:8px;
   transition:border-color var(--ds-transition-duration-fast) ease}
-.composer:focus-within{border-color:var(--dsw-alias-button-info-fill)}
-.composer input.title,.composer textarea.desc{
-  border:none;background:transparent;padding:2px 0;font:inherit;outline:none;width:100%}
-.composer input.title{font-size:14px;color:var(--dsw-alias-label-primary)}
+.composer[data-open]{border-color:var(--dsw-alias-button-info-fill)}
+.composer .line{display:flex;align-items:center;gap:8px}
+.composer input.title,.composer textarea.desc{border:none;background:transparent;padding:0;
+  font:inherit;outline:none;width:100%;color:var(--dsw-alias-label-primary)}
+.composer input.title{font-size:14px;
+  /* Название всегда одна строка: перенос в списке ломает ритм строк и сдвигает секции. */
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .composer input.title::placeholder{color:var(--dsw-alias-label-caption)}
 .composer textarea.desc{font-size:13px;color:var(--dsw-alias-label-secondary);
-  resize:vertical;min-height:46px}
-.composer .foot{display:flex;align-items:center;gap:6px}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
-  border:1px solid var(--dsw-alias-border-l2);background:transparent;cursor:pointer;
-  font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary)}
-.chip:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-caption)}
-.chip[data-set]{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-caption)}
-.hint{font-size:11px;color:var(--dsw-alias-label-caption)}
-.btn-primary{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;
-  border:none;background:var(--dsw-alias-button-info-fill);color:#fff;font:inherit;font-size:13px;
-  cursor:pointer}
-.btn-primary:disabled{opacity:.4;cursor:default}
+  resize:none;min-height:22px;overflow:hidden}
+.composer textarea.desc::placeholder{color:var(--dsw-alias-label-caption)}
+.composer .tools{display:flex;align-items:center;gap:2px}
+.date-btn{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;
+  border:none;background:transparent;cursor:pointer;font-size:13px;
+  color:var(--dsw-alias-label-tertiary)}
+.date-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.date-btn[data-set]{color:var(--dsw-alias-button-info-fill)}
+.add-btn{padding:6px 16px;border-radius:999px;border:none;cursor:pointer;font-size:13px;
+  background:var(--dsw-alias-button-info-fill);color:#fff}
+.add-btn:disabled{opacity:.35;cursor:default}
 
-/* ——— Меню команд ——— */
-.menu{position:absolute;z-index:50;min-width:190px;padding:4px;border-radius:10px;
+/* ——— Меню и календарь ——— */
+.pop{position:absolute;z-index:80;padding:4px;border-radius:12px;
   background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);
-  box-shadow:0 8px 24px rgba(0,0,0,.18)}
-.menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
-  padding:7px 9px;border:none;background:transparent;border-radius:6px;cursor:pointer;
-  font:inherit;font-size:13px;color:var(--dsw-alias-label-primary)}
-.menu button:hover,.menu button[data-cursor]{background:var(--dsw-alias-interactive-bg-hover)}
-.menu .sep{height:1px;margin:4px 2px;background:var(--dsw-alias-border-l2)}
+  box-shadow:0 12px 32px rgba(0,0,0,.22)}
+.pop button.item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:7px 9px;border:none;background:transparent;border-radius:7px;cursor:pointer;
+  font-size:13px;color:var(--dsw-alias-label-primary);white-space:nowrap}
+.pop button.item:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.cal{width:268px;padding:10px}
+.cal-quick{display:flex;gap:4px;padding:2px 2px 8px;border-bottom:1px solid var(--dsw-alias-border-l2)}
+.cal-quick button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 2px;border:none;background:transparent;border-radius:8px;cursor:pointer;
+  font-size:10px;color:var(--dsw-alias-label-tertiary)}
+.cal-quick button:hover{background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary)}
+.cal-head{display:flex;align-items:center;gap:4px;padding:8px 2px 6px}
+.cal-month{flex:1;font-size:14px;font-weight:600}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow{text-align:center;font-size:11px;color:var(--dsw-alias-label-caption);padding:2px 0 4px}
+.cal-day{height:30px;border:none;background:transparent;border-radius:8px;cursor:pointer;
+  font-size:13px;color:var(--dsw-alias-label-primary)}
+.cal-day:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.cal-day[data-out]{color:var(--dsw-alias-label-caption)}
+.cal-day[data-today]{box-shadow:inset 0 0 0 1px var(--dsw-alias-button-info-fill)}
+.cal-day[data-sel]{background:var(--dsw-alias-button-info-fill);color:#fff}
+.cal-foot{display:flex;gap:8px;padding-top:10px;margin-top:6px;
+  border-top:1px solid var(--dsw-alias-border-l2)}
+.cal-foot button{flex:1;padding:7px;border-radius:8px;cursor:pointer;font-size:13px;
+  border:1px solid var(--dsw-alias-border-l2);background:transparent;
+  color:var(--dsw-alias-label-secondary)}
+.cal-foot button.primary{border-color:transparent;background:var(--dsw-alias-button-info-fill);
+  color:#fff}
 
 /* ——— Список ——— */
 .group{padding:6px 14px 10px}
 .group-head{display:flex;align-items:baseline;gap:6px;padding:6px 2px}
 .group-label{font-size:13px;font-weight:600}
-.group-label.overdue{color:var(--dsw-alias-state-error-primary)}
+.group-label[data-overdue]{color:var(--dsw-alias-state-error-primary)}
 .group-count{font-size:12px;color:var(--dsw-alias-label-caption)}
 .card{border-radius:12px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
-.row{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 12px;
-  border:none;background:transparent;text-align:left;cursor:pointer;font:inherit;
-  color:var(--dsw-alias-label-primary)}
+.row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;
+  background:transparent;text-align:left;cursor:pointer;color:var(--dsw-alias-label-primary)}
 .row + .row{box-shadow:inset 0 1px 0 var(--dsw-alias-border-l2)}
 .row:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.check{flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:50%;cursor:pointer;
+.row[data-active]{background:var(--dsw-alias-interactive-bg-hover)}
+.check{flex-shrink:0;width:18px;height:18px;border-radius:50%;cursor:pointer;
   border:1.5px solid var(--dsw-alias-label-caption);background:transparent;padding:0;
-  display:flex;align-items:center;justify-content:center;
-  transition:border-color var(--ds-transition-duration-fast) ease,
-    background var(--ds-transition-duration-fast) ease}
+  display:flex;align-items:center;justify-content:center}
 .check:hover{border-color:var(--dsw-alias-label-primary)}
 .check[data-kind="control"]{border-color:#2F72B8}
 .check[data-kind="risk"]{border-color:#B33F3F}
@@ -149,39 +181,34 @@ body{
 .check[data-done]::after{content:"";width:9px;height:5px;margin-top:-2px;
   border-left:1.5px solid var(--dsw-alias-bg-base);
   border-bottom:1.5px solid var(--dsw-alias-bg-base);transform:rotate(-45deg)}
-.row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.row-title{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+/* Название всегда в одну строку — длинное обрезается многоточием. */
+.row-title{font-size:14px;line-height:1.35;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
 .row[data-done] .row-title{color:var(--dsw-alias-label-caption);text-decoration:line-through}
-.row-meta{font-size:12px;color:var(--dsw-alias-label-caption)}
-.row-meta.overdue{color:var(--dsw-alias-state-error-primary)}
-.dot{flex-shrink:0;width:8px;height:8px;margin-top:6px;border-radius:50%}
-.dot[data-priority="high"]{background:var(--dsw-alias-state-error-primary)}
-.dot[data-priority="medium"]{background:#C1861A}
-.dot[data-priority="low"]{background:var(--dsw-alias-label-caption)}
-.note-dot{flex-shrink:0;width:5px;height:5px;margin-top:7px;border-radius:50%;
-  background:var(--dsw-alias-label-caption)}
+.row-meta{font-size:12px;color:var(--dsw-alias-label-caption);white-space:nowrap}
+.row-meta[data-overdue]{color:var(--dsw-alias-state-error-primary)}
+.row-marks{display:flex;align-items:center;gap:6px;flex-shrink:0;
+  color:var(--dsw-alias-label-caption)}
+.flag[data-priority="high"]{color:var(--dsw-alias-state-error-primary)}
+.flag[data-priority="medium"]{color:var(--warning)}
+.flag[data-priority="low"]{color:var(--dsw-alias-button-info-fill)}
 
 .state{display:flex;flex-direction:column;align-items:center;gap:6px;padding:52px 24px;
   text-align:center}
 .state-title{font-size:14px;color:var(--dsw-alias-label-secondary)}
 .state-hint{font-size:12px;color:var(--dsw-alias-label-caption)}
 
-/* ——— Карточка задачи ——— */
-.mask{position:fixed;inset:0;background:rgba(0,0,0,.32);backdrop-filter:blur(2px);z-index:60;
-  display:flex;align-items:center;justify-content:center;padding:24px}
-.modal{width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;
-  background:var(--dsw-alias-bg-base);border-radius:14px;padding:16px 20px 12px;
-  box-shadow:0 16px 48px rgba(0,0,0,.28)}
-.modal-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;
+/* ——— Сайдбар задачи ——— */
+.detail-head{display:flex;align-items:center;gap:10px;padding:12px 16px;
   border-bottom:1px solid var(--dsw-alias-border-l2)}
-.date-chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;
-  color:var(--dsw-alias-label-secondary)}
-.date-chip[data-overdue]{color:var(--dsw-alias-state-error-primary)}
-.date-chip input{background:transparent;border:none;padding:0;font:inherit;color:inherit}
-.modal-title{font-size:20px;font-weight:700;line-height:1.3;padding:14px 0 6px;outline:none}
-.modal-desc{flex:1;min-height:180px;border:none;background:transparent;padding:0;font:inherit;
-  font-size:14px;line-height:1.55;color:var(--dsw-alias-label-primary);outline:none;resize:none}
-.modal-foot{display:flex;align-items:center;gap:8px;padding-top:10px;
+.detail-body{flex:1;overflow-y:auto;padding:14px 18px}
+.detail-title{font-size:20px;font-weight:700;line-height:1.3;outline:none;
+  padding-bottom:8px;white-space:pre-wrap}
+.detail-desc{width:100%;min-height:240px;border:none;background:transparent;padding:0;
+  font:inherit;font-size:14px;line-height:1.55;color:var(--dsw-alias-label-primary);
+  outline:none;resize:none}
+.detail-foot{display:flex;align-items:center;gap:4px;padding:10px 14px;
   border-top:1px solid var(--dsw-alias-border-l2);font-size:12px;
   color:var(--dsw-alias-label-caption)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -195,39 +222,62 @@ body{
   <button id="resetBtn" type="button">сбросить данные</button>
 </div>
 
-<aside class="panel">
-  <div class="header">
-    <div class="header-title">Панель работы</div>
-    <button class="icon-btn" id="reloadBtn" title="Обновить" aria-label="Обновить">⟳</button>
-    <button class="icon-btn" title="Закрыть" aria-label="Закрыть">✕</button>
+<aside class="sheet" id="panel">
+  <div class="grip" id="panelGrip"></div>
+  <div class="head">
+    <div class="head-title">Панель работы</div>
+    <button class="ico" id="reloadBtn" title="Обновить" aria-label="Обновить"></button>
+    <button class="ico" title="Закрыть" aria-label="Закрыть"></button>
   </div>
-
   <div class="tabs" id="tabs"></div>
-
   <div class="body">
-    <div class="composer" id="composer">
-      <input class="title" id="cTitle" placeholder="Новая задача" autocomplete="off">
-      <textarea class="desc" id="cDesc" placeholder="Описание" hidden></textarea>
-      <div class="foot">
-        <button class="chip" id="cDate" type="button">Срок</button>
-        <button class="chip" id="cPriority" type="button">Приоритет</button>
-        <span style="flex:1"></span>
-        <span class="hint" id="cHint" hidden>/ команды · ! приоритет · Shift+Enter описание</span>
-        <button class="btn-primary" id="cAdd" type="button" disabled>Добавить</button>
-      </div>
-      <div class="menu" id="cMenu" hidden></div>
-    </div>
-
+    <div class="composer" id="composer"></div>
     <div id="list"></div>
   </div>
-
-  <div class="footer">
-    <button class="chip wide" type="button" style="padding:8px 12px">Открыть доску целей</button>
+  <div class="foot">
+    <button class="pill" type="button" style="width:100%;padding:8px">Открыть доску целей</button>
   </div>
 </aside>
 
 <script>
 'use strict'
+
+/* ——— Иконки ————————————————————————————————————————————————————————————————
+ * Инлайновый SVG: прототип должен открываться одним файлом без сети и шрифтов.
+ * При переносе заменяются на набор харнесса (IconPlusOutline16 и соседи).
+ */
+const ICON = {
+  plus: 'M8 3.5v9M3.5 8h9',
+  calendar: 'M3 6.2h10M4.6 3.2v2M11.4 3.2v2M3 5.2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
+  flag: 'M4 13.5V3M4 3.6h7.2l-1.6 2.6 1.6 2.6H4',
+  inbox: 'M2.6 8h3l.9 1.6h3l.9-1.6h3M2.6 8l1.8-4.4h7.2L13.4 8v4a1 1 0 0 1-1 1H3.6a1 1 0 0 1-1-1z',
+  tag: 'M7.6 2.6H13v5.4l-5.6 5.6a1 1 0 0 1-1.4 0L2.6 10a1 1 0 0 1 0-1.4zM10.6 5.4h.01',
+  dots: 'M4 8h.01M8 8h.01M12 8h.01',
+  close: 'M4 4l8 8M12 4l-8 8',
+  reload: 'M13 8a5 5 0 1 1-1.5-3.6M13 3v2.6h-2.6',
+  chevronDown: 'M4.5 6.5L8 10l3.5-3.5',
+  chevronLeft: 'M10 3.5L5.5 8l4.5 4.5',
+  chevronRight: 'M6 3.5L10.5 8 6 12.5',
+  trash: 'M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.6 8.2h4.8l.6-8.2',
+  sun: 'M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6M8 1.6v1.4M8 13v1.4M2.6 8H1.2M14.8 8h-1.4M4.2 4.2l-1-1M12.8 12.8l-1-1M4.2 11.8l-1 1M12.8 3.2l-1 1',
+  sunrise: 'M2 12.4h12M5.2 9.6a2.8 2.8 0 0 1 5.6 0M8 2v3.2M4.4 5.2l1 1M11.6 5.2l-1 1',
+  week: 'M3 6.2h10M3 5.2a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM6.2 9.6h3.6M8 7.8v3.6',
+  ban: 'M8 2.4a5.6 5.6 0 1 0 0 11.2A5.6 5.6 0 0 0 8 2.4M4.2 4.2l7.6 7.6',
+  note: 'M4 4.4h8M4 7.4h8M4 10.4h5',
+}
+
+const svg = (name, size = 16, extra = '') => {
+  const d = ICON[name]
+  return `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none"
+    stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+    ${extra}><path d="${d}"/></svg>`
+}
+const flagSvg = (priority, size = 14) => {
+  const filled = priority === 'high' || priority === 'medium'
+  return `<svg class="flag" data-priority="${priority}" width="${size}" height="${size}"
+    viewBox="0 0 16 16" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor"
+    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON.flag}"/></svg>`
+}
 
 /* ——— Данные ——— */
 
@@ -236,7 +286,6 @@ const KINDS = [
   { id: 'control', label: 'Договорённости' },
   { id: 'risk', label: 'Риски' },
 ]
-
 const PRIORITIES = [
   { id: 'high', label: 'Высокий' },
   { id: 'medium', label: 'Средний' },
@@ -244,47 +293,49 @@ const PRIORITIES = [
   { id: null, label: 'Без приоритета' },
 ]
 
-const iso = d => {
-  const p = n => String(n).padStart(2, '0')
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
-}
+const pad = n => String(n).padStart(2, '0')
+const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
 const shiftDays = n => {
-  const now = new Date()
-  return iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n))
+  const t = new Date()
+  return iso(new Date(t.getFullYear(), t.getMonth(), t.getDate() + n))
 }
 const TODAY = iso(new Date())
+const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+const DOW = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']
 
-const DATES = [
-  { id: 'today', label: 'Сегодня', days: 0 },
-  { id: 'tomorrow', label: 'Завтра', days: 1 },
-  { id: 'monday', label: 'Следующий понедельник', days: (8 - new Date().getDay()) % 7 || 7 },
-  { id: 'week', label: 'Через неделю', days: 7 },
-  { id: 'none', label: 'Без срока', days: null },
-]
+/** Короткая подпись срока: сегодня и завтра словом, остальное числом. */
+function dueLabel(due) {
+  if (!due) return null
+  if (due === TODAY) return 'Сегодня'
+  if (due === shiftDays(1)) return 'Завтра'
+  if (due === shiftDays(-1)) return 'Вчера'
+  return due.slice(8, 10) + '.' + due.slice(5, 7)
+}
 
 const SEED = [
   { id: 'PO-25', kind: 'task', title: 'Занести все эпики в JIRA', due: shiftDays(-14), priority: 'high', done: false, desc: '' },
-  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, купивших на TLND', due: shiftDays(-2), priority: null, done: false, desc: 'Согласовано с Кардоной.' },
+  { id: 'PO-26', kind: 'task', title: 'БФТ: исключить Email пользователей TC, которые купили на TLND', due: shiftDays(-2), priority: null, done: false, desc: 'Согласовано с Кардоной. Нужен список исключений от маркетинга.' },
   { id: 'PO-31', kind: 'task', title: 'Созвон по админкам ТС', due: TODAY, priority: 'medium', done: false, desc: '' },
   { id: 'PO-32', kind: 'task', title: 'По FAQ — занести истории на итерацию 2', due: shiftDays(3), priority: null, done: false, desc: '' },
-  { id: 'PO-27', kind: 'task', title: 'Взять AI-харнесс под проектное управление', due: null, priority: null, done: false, desc: '' },
+  { id: 'PO-27', kind: 'task', title: 'Взять AI-харнесс под проектное управление', due: null, priority: 'low', done: false, desc: '' },
   { id: 'PO-30', kind: 'task', title: 'PoC BI', due: null, priority: null, done: true, desc: '' },
-  { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент без Тимура — к 3 августа', due: shiftDays(1), priority: 'high', done: false, desc: '' },
+  { id: 'PO-28', kind: 'control', title: 'Дежурство и релиз-менеджмент без Тимура', due: shiftDays(1), priority: 'high', done: false, desc: '' },
   { id: 'PO-33', kind: 'control', title: 'Слава собрал контекст по нестабильным моментам', due: null, priority: null, done: true, desc: '' },
   { id: 'PO-29', kind: 'risk', title: 'Подрядчик не подтвердил сроки', due: shiftDays(-1), priority: 'high', done: false, desc: 'Ждём ответа до пятницы, иначе двигаем релиз.' },
   { id: 'PO-34', kind: 'risk', title: 'Спекулянты держат места бесконечной бронью', due: null, priority: 'medium', done: false, desc: '' },
 ]
 
-const STORAGE = 'okr-panel-prototype'
+const STORAGE = 'okr-panel-prototype-2'
 let tasks = load()
 let tab = 'task'
+let openId = null
 let nextId = 100
 
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE)
     if (raw) return JSON.parse(raw)
-  } catch (e) { /* приватное окно или запрет на хранилище — работаем на посевных данных */ }
+  } catch (e) { /* приватное окно или file:// — работаем на посевных данных */ }
   return SEED.map(t => ({ ...t }))
 }
 function save() {
@@ -301,24 +352,22 @@ const GROUPS = [
   { key: 'noDate', label: 'Без срока' },
   { key: 'done', label: 'Выполнено' },
 ]
-
-function groupOf(task) {
-  if (task.done) return 'done'
-  if (!task.due) return 'noDate'
-  if (task.due < TODAY) return 'overdue'
-  if (task.due === TODAY) return 'today'
-  return task.due <= shiftDays(7) ? 'week' : 'later'
+function groupOf(t) {
+  if (t.done) return 'done'
+  if (!t.due) return 'noDate'
+  if (t.due < TODAY) return 'overdue'
+  if (t.due === TODAY) return 'today'
+  return t.due <= shiftDays(7) ? 'week' : 'later'
 }
 
-const shortDate = d => d ? d.slice(8, 10) + '.' + d.slice(5, 7) : ''
-
-/* ——— Отрисовка ——— */
+/* ——— Мелкие помощники разметки ——— */
 
 const el = (tag, attrs, ...kids) => {
   const node = document.createElement(tag)
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === false || v === null || v === undefined) continue
     if (k === 'class') node.className = v
+    else if (k === 'html') node.innerHTML = v
     else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v)
     else node.setAttribute(k, v === true ? '' : v)
   }
@@ -328,286 +377,437 @@ const el = (tag, attrs, ...kids) => {
   }
   return node
 }
+const iconBtn = (name, title, onClick, size = 16) =>
+  el('button', { class: 'ico', type: 'button', title, 'aria-label': title,
+    html: svg(name, size), onclick: onClick })
+
+/* ——— Всплывающие слои ——— */
+
+let popup = null
+function closePopup() {
+  if (popup) { popup.remove(); popup = null }
+}
+/** Открывает слой под якорем. Позиционируется от границ окна, чтобы не вылезать за экран. */
+function openPopup(anchor, node) {
+  closePopup()
+  node.classList.add('pop')
+  node.style.position = 'fixed'
+  document.body.append(node)
+  const a = anchor.getBoundingClientRect()
+  const w = node.offsetWidth, h = node.offsetHeight
+  let left = Math.min(a.left, window.innerWidth - w - 8)
+  let top = a.bottom + 6
+  if (top + h > window.innerHeight - 8) top = Math.max(8, a.top - h - 6)
+  node.style.left = Math.max(8, left) + 'px'
+  node.style.top = top + 'px'
+  popup = node
+}
+document.addEventListener('pointerdown', e => {
+  if (popup && !popup.contains(e.target) && !e.target.closest('[data-pop-anchor]')) closePopup()
+})
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && popup) closePopup() })
+
+/* ——— Календарь ——— */
+
+function calendar(selected, onPick) {
+  let cursor = selected ? new Date(selected) : new Date()
+  const box = el('div', { class: 'cal' })
+
+  const quick = [
+    { icon: 'sun', label: 'Сегодня', days: 0 },
+    { icon: 'sunrise', label: 'Завтра', days: 1 },
+    { icon: 'week', label: 'Неделя', days: 7 },
+    { icon: 'ban', label: 'Снять', days: null },
+  ]
+
+  const draw = () => {
+    const year = cursor.getFullYear(), month = cursor.getMonth()
+    const first = new Date(year, month, 1)
+    // Неделя начинается с понедельника: getDay() отдаёт воскресенье нулём.
+    const lead = (first.getDay() + 6) % 7
+    const start = new Date(year, month, 1 - lead)
+
+    const days = []
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+      const value = iso(d)
+      days.push(el('button', {
+        class: 'cal-day', type: 'button',
+        'data-out': d.getMonth() !== month || null,
+        'data-today': value === TODAY || null,
+        'data-sel': value === selected || null,
+        onclick: () => { selected = value; draw() },
+      }, d.getDate()))
+    }
+
+    box.replaceChildren(
+      el('div', { class: 'cal-quick' }, quick.map(q => el('button', {
+        type: 'button', title: q.label,
+        onclick: () => { onPick(q.days === null ? null : shiftDays(q.days)); closePopup() },
+      }, el('span', { html: svg(q.icon, 18) }), q.label))),
+
+      el('div', { class: 'cal-head' },
+        el('div', { class: 'cal-month' }, MONTHS[month] + ' ' + year),
+        iconBtn('chevronLeft', 'Предыдущий месяц', () => {
+          cursor = new Date(year, month - 1, 1); draw()
+        }),
+        iconBtn('chevronRight', 'Следующий месяц', () => {
+          cursor = new Date(year, month + 1, 1); draw()
+        })),
+
+      el('div', { class: 'cal-grid' },
+        DOW.map(d => el('div', { class: 'cal-dow' }, d)), days),
+
+      el('div', { class: 'cal-foot' },
+        el('button', { type: 'button', onclick: () => { onPick(null); closePopup() } }, 'Очистить'),
+        el('button', { class: 'primary', type: 'button',
+          onclick: () => { onPick(selected); closePopup() } }, 'Готово')))
+  }
+
+  draw()
+  return box
+}
+
+function priorityMenu(current, onPick) {
+  return el('div', {}, PRIORITIES.map(p => el('button', {
+    class: 'item', type: 'button', onclick: () => { onPick(p.id); closePopup() },
+  }, el('span', { html: p.id ? flagSvg(p.id, 15) : svg('ban', 15) }), p.label)))
+}
+
+/* ——— Быстрый ввод ——— */
+
+const composer = document.getElementById('composer')
+let draft = { title: '', desc: '', due: null, priority: null }
+let composerOpen = false
+let triggerAt = null
+
+function renderComposer() {
+  composer.toggleAttribute('data-open', composerOpen)
+
+  if (!composerOpen) {
+    // Свёрнутое состояние: одна строка — плюс, подсказка и срок справа.
+    const dateBtn = el('button', {
+      class: 'date-btn', type: 'button', 'data-pop-anchor': true,
+      'data-set': draft.due ? true : null,
+      onclick: e => { e.stopPropagation(); openPopup(e.currentTarget, calendar(draft.due, v => { draft.due = v; renderComposer() })) },
+    }, el('span', { html: svg('calendar', 15) }), dueLabel(draft.due) || 'Срок')
+
+    composer.replaceChildren(el('div', { class: 'line' },
+      el('span', { html: svg('plus'), style: 'color:var(--dsw-alias-label-caption)' }),
+      el('input', {
+        class: 'title', placeholder: 'Добавить задачу', autocomplete: 'off',
+        onfocus: () => { composerOpen = true; renderComposer() },
+      }),
+      dateBtn,
+      el('span', { html: svg('chevronDown', 15), style: 'color:var(--dsw-alias-label-caption)' })))
+    return
+  }
+
+  const title = el('input', { class: 'title', placeholder: 'Название задачи', autocomplete: 'off' })
+  title.value = draft.title
+  const desc = el('textarea', { class: 'desc', placeholder: 'Описание', rows: '1' })
+  desc.value = draft.desc
+
+  const grow = () => { desc.style.height = 'auto'; desc.style.height = desc.scrollHeight + 'px' }
+
+  title.addEventListener('input', () => {
+    const previous = draft.title
+    const next = title.value
+    // Команда распознаётся по только что набранному символу в начале слова: «/» и «!» —
+    // обычные знаки, и в середине текста они ничего открывать не должны.
+    if (next.length === previous.length + 1) {
+      const at = title.selectionStart - 1
+      const typed = next[at]
+      const before = at === 0 ? ' ' : next[at - 1]
+      if ((typed === '/' || typed === '!') && (before === ' ' || before === undefined)) {
+        triggerAt = at
+        if (typed === '!') openPopup(title, priorityMenu(draft.priority, v => { draft.priority = v; dropTrigger(); renderComposer() }))
+        else openPopup(title, commandsMenu(title))
+      }
+    }
+    draft.title = next
+    addBtn.disabled = next.trim() === ''
+  })
+
+  title.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); desc.focus(); return }
+    if (e.key === 'Enter') { e.preventDefault(); submit() }
+    if (e.key === 'Escape') { e.preventDefault(); resetComposer() }
+  })
+  desc.addEventListener('input', () => { draft.desc = desc.value; grow() })
+  desc.addEventListener('keydown', e => {
+    // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() }
+    if (e.key === 'Escape') { e.preventDefault(); title.focus() }
+  })
+
+  const dateBtn = el('button', {
+    class: 'date-btn', type: 'button', 'data-pop-anchor': true,
+    'data-set': draft.due ? true : null,
+    onclick: e => openPopup(e.currentTarget, calendar(draft.due, v => { draft.due = v; renderComposer() })),
+  }, el('span', { html: svg('calendar', 15) }), dueLabel(draft.due) || 'Срок')
+
+  const flagBtn = el('button', {
+    class: 'ico', type: 'button', title: 'Приоритет', 'data-pop-anchor': true,
+    'data-on': draft.priority ? true : null,
+    html: flagSvg(draft.priority || 'none', 16),
+    onclick: e => openPopup(e.currentTarget, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() })),
+  })
+
+  const addBtn = el('button', { class: 'add-btn', type: 'button', onclick: submit }, 'Добавить')
+  addBtn.disabled = draft.title.trim() === ''
+
+  composer.replaceChildren(
+    title,
+    desc,
+    el('div', { class: 'line' },
+      el('div', { class: 'tools' },
+        dateBtn,
+        flagBtn,
+        // Список задаётся вкладкой панели, метки и «ещё» — задел под будущее: в Backlog.md
+        // они есть, но в этой итерации не подключены, поэтому кнопки без действия.
+        iconBtn('inbox', 'Список — задаётся вкладкой', () => {}),
+        iconBtn('tag', 'Метки', () => {}),
+        iconBtn('dots', 'Ещё', () => {})),
+      el('span', { style: 'flex:1' }),
+      addBtn))
+
+  title.focus()
+  title.setSelectionRange(title.value.length, title.value.length)
+  grow()
+}
+
+function commandsMenu(anchor) {
+  return el('div', {},
+    el('button', { class: 'item', type: 'button',
+      onclick: () => { dropTrigger(); openPopup(anchor, calendar(draft.due, v => { draft.due = v; renderComposer() })) } },
+      el('span', { html: svg('calendar', 15) }), 'Срок'),
+    el('button', { class: 'item', type: 'button',
+      onclick: () => { dropTrigger(); openPopup(anchor, priorityMenu(draft.priority, v => { draft.priority = v; renderComposer() })) } },
+      el('span', { html: svg('flag', 15) }), 'Приоритет'))
+}
+
+/** Убирает символ команды из названия — он служил только вызовом меню. */
+function dropTrigger() {
+  if (triggerAt === null) return
+  const at = triggerAt
+  triggerAt = null
+  const v = draft.title
+  if (v[at] === '/' || v[at] === '!') draft.title = v.slice(0, at) + v.slice(at + 1)
+}
+
+function resetComposer() {
+  draft = { title: '', desc: '', due: null, priority: null }
+  composerOpen = false
+  triggerAt = null
+  closePopup()
+  renderComposer()
+}
+
+function submit() {
+  const title = draft.title.trim()
+  if (title === '') return
+  nextId += 1
+  tasks.push({ id: 'PO-' + nextId, kind: tab, title, desc: draft.desc.trim(),
+    due: draft.due, priority: draft.priority, done: false })
+  save()
+  const keepOpen = true
+  draft = { title: '', desc: '', due: null, priority: null }
+  composerOpen = keepOpen
+  renderComposer()
+  renderList()
+}
+
+/* ——— Список ——— */
 
 function renderTabs() {
-  const box = document.getElementById('tabs')
-  box.replaceChildren(...KINDS.map(k => el('button', {
+  document.getElementById('tabs').replaceChildren(...KINDS.map(k => el('button', {
     class: 'pill', type: 'button', 'aria-pressed': String(tab === k.id),
-    onclick: () => { tab = k.id; render() },
+    onclick: () => { tab = k.id; closeDetail(); renderTabs(); renderList() },
   }, k.label)))
+}
+
+function renderRow(task) {
+  const overdue = !task.done && task.due && task.due < TODAY
+  return el('div', {
+    class: 'row', role: 'button', tabindex: '0',
+    'data-done': task.done || null, 'data-active': task.id === openId || null,
+    onclick: () => openDetail(task.id),
+    onkeydown: e => { if (e.key === 'Enter') openDetail(task.id) },
+  },
+    el('button', {
+      class: 'check', type: 'button', 'aria-pressed': String(task.done), 'aria-label': task.title,
+      'data-kind': task.kind, 'data-done': task.done || null, 'data-overdue': overdue || null,
+      onclick: e => { e.stopPropagation(); task.done = !task.done; save(); renderList(); renderDetail() },
+    }),
+    el('span', { class: 'row-main' },
+      el('span', { class: 'row-title' }, task.title),
+      task.due ? el('span', { class: 'row-meta', 'data-overdue': overdue || null }, dueLabel(task.due)) : null),
+    el('span', { class: 'row-marks' },
+      task.desc ? el('span', { html: svg('note', 14), title: 'есть описание' }) : null,
+      task.priority && !task.done ? el('span', { html: flagSvg(task.priority) }) : null))
 }
 
 function renderList() {
   const box = document.getElementById('list')
   const mine = tasks.filter(t => t.kind === tab)
-
   if (mine.length === 0) {
     box.replaceChildren(el('div', { class: 'state' },
       el('span', { class: 'state-title' }, 'Пусто'),
-      el('span', { class: 'state-hint' }, 'Наберите задачу в строке сверху и нажмите Enter')))
+      el('span', { class: 'state-hint' }, 'Наберите задачу в строке сверху')))
     return
   }
-
   const nodes = []
   for (const group of GROUPS) {
     const rows = mine.filter(t => groupOf(t) === group.key)
       .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
     if (rows.length === 0) continue
-
     nodes.push(el('div', { class: 'group' },
       el('div', { class: 'group-head' },
-        el('span', { class: 'group-label' + (group.key === 'overdue' ? ' overdue' : '') }, group.label),
+        el('span', { class: 'group-label', 'data-overdue': group.key === 'overdue' || null }, group.label),
         el('span', { class: 'group-count' }, rows.length)),
       el('div', { class: 'card' }, rows.map(renderRow))))
   }
   box.replaceChildren(...nodes)
 }
 
-function renderRow(task) {
-  const overdue = !task.done && task.due && task.due < TODAY
-  return el('div', {
-    class: 'row', role: 'button', tabindex: '0', 'data-done': task.done || null,
-    onclick: () => openCard(task.id),
-    onkeydown: e => { if (e.key === 'Enter') openCard(task.id) },
-  },
-    el('button', {
-      class: 'check', type: 'button', 'aria-pressed': String(task.done),
-      'data-kind': task.kind, 'data-done': task.done || null, 'data-overdue': overdue || null,
-      'aria-label': task.title,
-      onclick: e => { e.stopPropagation(); task.done = !task.done; save(); render() },
-    }),
-    el('span', { class: 'row-main' },
-      el('span', { class: 'row-title' }, task.title),
-      task.due ? el('span', { class: 'row-meta' + (overdue ? ' overdue' : '') },
-        'до ' + shortDate(task.due)) : null),
-    task.desc ? el('span', { class: 'note-dot', title: 'есть описание' }) : null,
-    task.priority && !task.done ? el('span', { class: 'dot', 'data-priority': task.priority }) : null)
-}
+/* ——— Сайдбар задачи ——— */
 
-function render() {
-  renderTabs()
+let detailNode = null
+
+function openDetail(id) {
+  openId = id
+  if (!detailNode) {
+    detailNode = el('aside', { class: 'sheet', id: 'detail' })
+    document.body.append(detailNode)
+    detailNode.append(el('div', { class: 'grip', id: 'detailGrip' }))
+    makeResizable(detailNode.querySelector('#detailGrip'), detailNode, 'detailWidth', 320,
+      Math.max(320, window.innerWidth - panel.getBoundingClientRect().width - 24))
+    const stored = Number(localStorage.getItem('detailWidth') || 0)
+    if (stored) detailNode.style.width = stored + 'px'
+    clampDetail()
+  }
+  renderDetail()
   renderList()
 }
 
-/* ——— Быстрый ввод ——— */
-
-const cTitle = document.getElementById('cTitle')
-const cDesc = document.getElementById('cDesc')
-const cAdd = document.getElementById('cAdd')
-const cHint = document.getElementById('cHint')
-const cMenu = document.getElementById('cMenu')
-const cDate = document.getElementById('cDate')
-const cPriority = document.getElementById('cPriority')
-
-let draft = { due: null, priority: null }
-let triggerAt = null
-let menuKind = null
-
-function syncComposer() {
-  const filled = cTitle.value.trim() !== ''
-  cAdd.disabled = !filled
-  cHint.hidden = !filled && cDesc.hidden
-  cDate.textContent = draft.due ? shortDate(draft.due) : 'Срок'
-  cDate.toggleAttribute('data-set', Boolean(draft.due))
-  const p = PRIORITIES.find(x => x.id === draft.priority)
-  cPriority.textContent = draft.priority ? p.label : 'Приоритет'
-  cPriority.toggleAttribute('data-set', Boolean(draft.priority))
+function closeDetail() {
+  openId = null
+  if (detailNode) { detailNode.remove(); detailNode = null }
+  renderList()
 }
 
-function closeMenu() {
-  cMenu.hidden = true
-  menuKind = null
-}
-
-/** Убирает символ команды из текста: он служил только вызовом меню. */
-function dropTrigger() {
-  if (triggerAt === null) return
-  const at = triggerAt
-  triggerAt = null
-  const v = cTitle.value
-  if (v[at] === '/' || v[at] === '!') {
-    cTitle.value = v.slice(0, at) + v.slice(at + 1)
-    cTitle.setSelectionRange(at, at)
-  }
-}
-
-function openMenu(kind) {
-  menuKind = kind
-  const items = kind === 'commands'
-    ? [{ id: 'date', label: 'Срок' }, { id: 'priority', label: 'Приоритет' }]
-    : kind === 'priority'
-      ? PRIORITIES.map(p => ({ id: String(p.id), label: p.label, priority: p.id }))
-      : DATES.map(d => ({ id: d.id, label: d.label }))
-
-  cMenu.replaceChildren(...items.map(item => el('button', {
-    type: 'button', onclick: () => pick(item.id),
-  },
-    item.priority ? el('span', { class: 'dot', 'data-priority': item.priority, style: 'margin:0' }) : null,
-    item.label)))
-
-  // Меню встаёт под строкой ввода, а не под курсором: в узкой панели у курсора ему негде
-  // раскрыться, и оно всё равно упёрлось бы в край.
-  cMenu.style.left = '10px'
-  cMenu.style.top = (cTitle.offsetTop + cTitle.offsetHeight + 6) + 'px'
-  cMenu.hidden = false
-}
-
-function pick(id) {
-  if (menuKind === 'commands') {
-    dropTrigger()
-    openMenu(id === 'date' ? 'date' : 'priority')
-    return
-  }
-  if (menuKind === 'priority') {
-    draft.priority = id === 'null' ? null : id
-  } else {
-    const found = DATES.find(d => d.id === id)
-    draft.due = found && found.days !== null ? shiftDays(found.days) : null
-  }
-  dropTrigger()
-  closeMenu()
-  syncComposer()
-  cTitle.focus()
-}
-
-let previous = ''
-cTitle.addEventListener('input', () => {
-  const next = cTitle.value
-  // Команда распознаётся по только что набранному символу в начале слова: «/» и «!» —
-  // обычные знаки, и в середине текста они ничего открывать не должны.
-  if (next.length === previous.length + 1) {
-    const at = cTitle.selectionStart - 1
-    const typed = next[at]
-    const before = at === 0 ? ' ' : next[at - 1]
-    if ((typed === '/' || typed === '!') && (before === ' ' || before === undefined)) {
-      triggerAt = at
-      openMenu(typed === '/' ? 'commands' : 'priority')
-    }
-  }
-  previous = next
-  syncComposer()
-})
-
-cTitle.addEventListener('keydown', e => {
-  if (menuKind && (e.key === 'Escape')) { e.preventDefault(); dropTrigger(); closeMenu(); return }
-  if (e.key === 'Enter' && e.shiftKey) {
-    // Shift+Enter уводит во вторую строку, а не переносит строку в названии.
-    e.preventDefault()
-    cDesc.hidden = false
-    cDesc.focus()
-    syncComposer()
-    return
-  }
-  if (e.key === 'Enter') { e.preventDefault(); submit() }
-  if (e.key === 'Escape') { e.preventDefault(); resetComposer() }
-})
-
-cDesc.addEventListener('keydown', e => {
-  // В описании Enter переносит строку; отправляет Cmd/Ctrl+Enter.
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit() }
-  if (e.key === 'Escape') { e.preventDefault(); cTitle.focus() }
-})
-
-cDate.addEventListener('click', () => { menuKind === 'date' ? closeMenu() : openMenu('date') })
-cPriority.addEventListener('click', () => { menuKind === 'priority' ? closeMenu() : openMenu('priority') })
-cAdd.addEventListener('click', submit)
-
-document.addEventListener('click', e => {
-  if (menuKind && !document.getElementById('composer').contains(e.target)) closeMenu()
-})
-
-function resetComposer() {
-  cTitle.value = ''
-  cDesc.value = ''
-  cDesc.hidden = true
-  previous = ''
-  draft = { due: null, priority: null }
-  closeMenu()
-  syncComposer()
-}
-
-function submit() {
-  const title = cTitle.value.trim()
-  if (title === '') return
-  nextId += 1
-  tasks.push({
-    id: 'PO-' + nextId, kind: tab, title,
-    desc: cDesc.value.trim(), due: draft.due, priority: draft.priority, done: false,
-  })
-  save()
-  resetComposer()
-  render()
-  cTitle.focus()
-}
-
-/* ——— Карточка задачи ——— */
-
-function openCard(id) {
-  const task = tasks.find(t => t.id === id)
-  if (!task) return
+function renderDetail() {
+  if (!detailNode) return
+  const task = tasks.find(t => t.id === openId)
+  if (!task) { closeDetail(); return }
   const overdue = !task.done && task.due && task.due < TODAY
 
-  const title = el('div', { class: 'modal-title', contenteditable: 'true', spellcheck: 'false' }, task.title)
-  const desc = el('textarea', { class: 'modal-desc', placeholder: 'Контекст по задаче…' })
+  const title = el('div', { class: 'detail-title', contenteditable: 'true', spellcheck: 'false' }, task.title)
+  title.addEventListener('blur', () => {
+    const next = title.textContent.trim()
+    if (next && next !== task.title) { task.title = next; save(); renderList() }
+    else title.textContent = task.title
+  })
+
+  const desc = el('textarea', { class: 'detail-desc', placeholder: 'Контекст по задаче…' })
   desc.value = task.desc || ''
+  desc.addEventListener('blur', () => { task.desc = desc.value.trim(); save(); renderList() })
 
-  const dateInput = el('input', { type: 'date', value: task.due || '' })
-  dateInput.addEventListener('change', () => { task.due = dateInput.value || null; save(); render() })
-
-  const check = el('button', {
-    class: 'check', type: 'button', 'data-kind': task.kind,
-    'data-done': task.done || null, 'data-overdue': overdue || null, 'aria-label': task.title,
-  })
-
-  const close = () => {
-    task.title = title.textContent.trim() || task.title
-    task.desc = desc.value.trim()
-    save()
-    mask.remove()
-    render()
-  }
-
-  check.addEventListener('click', () => {
-    task.done = !task.done
-    check.toggleAttribute('data-done', task.done)
-    save()
-  })
-
-  const modal = el('div', { class: 'modal', onclick: e => e.stopPropagation() },
-    el('div', { class: 'modal-head' },
-      check,
-      el('label', { class: 'date-chip', 'data-overdue': overdue || null },
-        '🕑', task.due ? '' : 'Срок', dateInput),
+  const grip = detailNode.querySelector('.grip')
+  detailNode.replaceChildren(grip,
+    el('div', { class: 'detail-head' },
+      el('button', {
+        class: 'check', type: 'button', 'data-kind': task.kind,
+        'data-done': task.done || null, 'data-overdue': overdue || null, 'aria-label': task.title,
+        onclick: () => { task.done = !task.done; save(); renderDetail(); renderList() },
+      }),
+      el('button', {
+        class: 'date-btn', type: 'button', 'data-pop-anchor': true,
+        'data-set': task.due ? true : null,
+        onclick: e => openPopup(e.currentTarget, calendar(task.due, v => {
+          task.due = v; save(); renderDetail(); renderList()
+        })),
+      }, el('span', { html: svg('calendar', 15) }), dueLabel(task.due) || 'Срок'),
+      el('button', {
+        class: 'ico', type: 'button', title: 'Приоритет', 'data-pop-anchor': true,
+        'data-on': task.priority ? true : null, html: flagSvg(task.priority || 'none', 16),
+        onclick: e => openPopup(e.currentTarget, priorityMenu(task.priority, v => {
+          task.priority = v; save(); renderDetail(); renderList()
+        })),
+      }),
       el('span', { style: 'flex:1' }),
-      task.priority ? el('span', { class: 'dot', 'data-priority': task.priority, style: 'margin:0' }) : null),
-    title,
-    desc,
-    el('div', { class: 'modal-foot' },
-      el('button', { class: 'icon-btn', type: 'button', title: 'Блоки' }, '＋'),
+      iconBtn('close', 'Закрыть', closeDetail)),
+    el('div', { class: 'detail-body' }, title, desc),
+    el('div', { class: 'detail-foot' },
+      iconBtn('inbox', 'Список', () => {}),
       el('span', { class: 'mono' }, task.id),
       el('span', { style: 'flex:1' }),
-      el('button', {
-        class: 'icon-btn', type: 'button', title: 'Удалить',
-        onclick: () => { tasks = tasks.filter(t => t.id !== task.id); save(); mask.remove(); render() },
-      }, '🗑')))
-
-  const mask = el('div', { class: 'mask', onclick: close }, modal)
-  document.body.append(mask)
-
-  document.addEventListener('keydown', function onKey(e) {
-    if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); close() }
-  })
-
-  title.focus()
-  const range = document.createRange()
-  range.selectNodeContents(title)
-  range.collapse(false)
-  const sel = window.getSelection()
-  sel.removeAllRanges()
-  sel.addRange(range)
+      iconBtn('tag', 'Метки', () => {}),
+      iconBtn('trash', 'Удалить', () => {
+        tasks = tasks.filter(t => t.id !== task.id); save(); closeDetail()
+      })))
 }
 
-/* ——— Служебное ——— */
+/* ——— Растягивание сайдбаров ——— */
+
+function makeResizable(grip, sheet, storageKey, min, max) {
+  let startX = 0, startW = 0
+  const onMove = e => {
+    // Тянем влево — панель шире: она прижата к правому краю.
+    const next = Math.min(max, Math.max(min, startW + (startX - e.clientX)))
+    apply(next)
+  }
+  const apply = value => {
+    if (storageKey === 'panelWidth') {
+      document.documentElement.style.setProperty('--panel-w', value + 'px')
+      // Панель растёт вправо от сайдбара задачи, поэтому его надо ужать: иначе он уезжает
+      // за левый край экрана вместе со своей ручкой, и вернуть его мышью уже нечем.
+      clampDetail()
+    } else {
+      sheet.style.width = value + 'px'
+    }
+  }
+  const onUp = () => {
+    grip.removeAttribute('data-dragging')
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
+    document.body.style.userSelect = ''
+    try {
+      localStorage.setItem(storageKey, Math.round(sheet.getBoundingClientRect().width))
+    } catch (e) { /* см. load */ }
+  }
+  grip.addEventListener('pointerdown', e => {
+    e.preventDefault()
+    startX = e.clientX
+    startW = sheet.getBoundingClientRect().width
+    grip.setAttribute('data-dragging', '')
+    // Без этого выделяется текст всей страницы, пока тянут границу.
+    document.body.style.userSelect = 'none'
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  })
+}
+
+/** Ужимает сайдбар задачи до свободного места слева от панели. */
+function clampDetail() {
+  if (!detailNode) return
+  const panelW = document.getElementById('panel').getBoundingClientRect().width
+  const room = Math.max(320, window.innerWidth - panelW - 24)
+  if (detailNode.getBoundingClientRect().width > room) detailNode.style.width = room + 'px'
+}
+window.addEventListener('resize', clampDetail)
+
+/* ——— Запуск ——— */
+
+const panel = document.getElementById('panel')
+makeResizable(document.getElementById('panelGrip'), panel, 'panelWidth', 340, 720)
+const storedPanel = Number(localStorage.getItem('panelWidth') || 0)
+if (storedPanel) document.documentElement.style.setProperty('--panel-w', storedPanel + 'px')
+
+document.getElementById('reloadBtn').innerHTML = svg('reload')
+document.querySelectorAll('.head .ico')[1].innerHTML = svg('close')
+document.getElementById('reloadBtn').addEventListener('click', renderList)
 
 document.getElementById('themeBtn').addEventListener('click', e => {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -616,14 +816,12 @@ document.getElementById('themeBtn').addEventListener('click', e => {
 })
 document.getElementById('resetBtn').addEventListener('click', () => {
   tasks = SEED.map(t => ({ ...t }))
-  save()
-  render()
+  save(); closeDetail(); renderList()
 })
-document.getElementById('reloadBtn').addEventListener('click', render)
 
-render()
-syncComposer()
-cTitle.focus()
+renderTabs()
+renderComposer()
+renderList()
 </script>
 </body>
 </html>
