@@ -134,11 +134,11 @@ export async function dispatch(
         const objectiveId = stringField(payload, 'objectiveId')
         if (!title) return fail('bad-request', 'пустое название ключевого результата')
         if (!objectiveId) return fail('bad-request', 'не передан объектив')
-        await reader.write(
+        const id = await reader.writeCreating(
           writer.createKeyResult({ title, objectiveId, taskType: reader.krTaskType }),
           signal,
         )
-        return ok({ created: true })
+        return ok({ id })
       }
 
       case 'createPoTask': {
@@ -150,7 +150,7 @@ export async function dispatch(
         }
         const relatedKrId = stringField(payload, 'relatedKrId')
         const dueDate = stringField(payload, 'dueDate')
-        await reader.write(
+        const id = await reader.writeCreating(
           writer.createPoTask({
             title,
             kind: (kind ?? 'task') as PoTaskKind,
@@ -160,7 +160,7 @@ export async function dispatch(
           }),
           signal,
         )
-        return ok({ created: true })
+        return ok({ id })
       }
 
       case 'setStatus': {

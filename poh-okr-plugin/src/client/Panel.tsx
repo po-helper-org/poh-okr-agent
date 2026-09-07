@@ -75,8 +75,17 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
    * Попап нельзя открывать с пустым контекстом до загрузки: сохранение по уходу фокуса
    * записало бы эту пустоту поверх существующего описания задачи.
    */
-  const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null } | null>(null)
+  const [openTask, setOpenTask] = useState<{ task: PoTask; content: string | null; justCreated: boolean } | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  /**
+   * Задача, которую надо открыть на редактирование, как только список перечитается.
+   *
+   * Требование T-07: кнопка быстрого добавления заводит запись и сразу открывает её.
+   * Открыть карточку прямо в обработчике нельзя — списка с новой задачей ещё нет, а
+   * карточке нужен сам объект задачи. Искать её потом по названию тоже нельзя: у всех
+   * новых записей название одинаковое, поэтому канал возвращает идентификатор.
+   */
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null)
 
   const reload = useCallback(() => { setReloadToken(token => token + 1) }, [])
 
@@ -116,6 +125,17 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
     return () => { controller.abort() }
   }, [route.view, call, reloadToken])
 
+  useEffect(() => {
+    if (pendingOpenId === null || tasks.phase !== 'ready') return
+    const created = tasks.value.find(task => task.id === pendingOpenId)
+    if (created === undefined) return
+    setPendingOpenId(null)
+    openTaskCard(created, true)
+    // openTaskCard пересоздаётся на каждый рендер и в зависимости не идёт: он читает только
+    // `call`, а добавление его сюдагоняло бы эффект вхолостую на каждый рендер.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenId, tasks])
+
   // Esc закрывает верхний открытый слой: меню блоков живёт внутри попапа, дальше попап,
   // сайдбар, экран, панель (требование G-01).
   useEffect(() => {
@@ -134,12 +154,12 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
 
   if (!open) return null
 
-  const openTaskCard = (task: PoTask) => {
-    setOpenTask({ task, content: null })
+  const openTaskCard = (task: PoTask, justCreated = false) => {
+    setOpenTask({ task, content: null, justCreated })
     unwrap<RawTaskDetail>(call('task', { id: task.id }))
       .then(detail => {
         setOpenTask(current => (current?.task.id === task.id
-          ? { task: current.task, content: detail.description ?? '' }
+          ? { ...current, content: detail.description ?? '' }
           : current))
       })
       .catch(() => {
@@ -249,7 +269,18 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             <button
               type="button"
               className={css.addButton}
-              onClick={() => { write('createPoTask', { title: t('newTask'), kind: tab }) }}
+              onClick={() => {
+                unwrap<{ id: string | null }>(call('createPoTask', { title: t('newTask'), kind: tab }))
+                  .then(created => {
+                    // Идентификатора может не быть, если вывод CLI изменится: запись всё равно
+                    // создана, поэтому список обновляем в любом случае, а карточку не открываем.
+                    if (created.id !== null) setPendingOpenId(created.id)
+                    reload()
+                  })
+                  .catch((cause: unknown) => {
+                    setTasks({ phase: 'error', message: cause instanceof Error ? cause.message : String(cause) })
+                  })
+              }}
             >+&nbsp;&nbsp;{t('addTask')}</button>
           </div>
 
@@ -345,6 +376,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
           onSetDue={date => { write('setDueDate', { id: openTask.task.id, dueDate: date }) }}
           onDelete={() => { write('deleteTask', { id: openTask.task.id }); setOpenTask(null) }}
           onClose={() => { setOpenTask(null) }}
+          selectTitle={openTask.justCreated}
         />
       )}
     </>

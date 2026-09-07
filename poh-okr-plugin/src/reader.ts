@@ -18,6 +18,7 @@ import { REQUIRED_BACKLOG_VERSION, type OkrConfig } from './config.js'
 import { type Board, type KeyResult, type Objective, type PoTask } from './model.js'
 import { kindFromLabels, krIdsFromLabels, phasesFromLabels } from './phases.js'
 import { runCommandWithNode, type RunCommand } from './ports.js'
+import { parseCreatedId } from './parse-created.js'
 import { createBoardDoc as writerCreateBoardDoc, updateBoardDoc as writerUpdateBoardDoc } from './writer.js'
 
 export interface BacklogPorts {
@@ -219,5 +220,18 @@ export class BacklogReader {
   async write(args: string[], signal?: AbortSignal): Promise<void> {
     await this.ensureVersion(signal)
     await this.exec(args, signal)
+  }
+
+  /**
+   * То же, но отдаёт идентификатор созданной задачи.
+   *
+   * Нужен кнопке быстрого добавления: она обязана сразу открыть новую запись на
+   * редактирование, а искать её в перечитанном списке по названию нельзя — у всех новых
+   * записей название одинаковое. `null` — CLI отработал, но идентификатор в выводе не нашёлся;
+   * запись при этом создана, поэтому это не ошибка, а лишь повод не открывать карточку.
+   */
+  async writeCreating(args: string[], signal?: AbortSignal): Promise<string | null> {
+    await this.ensureVersion(signal)
+    return parseCreatedId(await this.exec(args, signal))
   }
 }

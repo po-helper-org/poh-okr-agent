@@ -12,7 +12,7 @@
  * Подзадачи и связи в Backlog.md есть отдельными механизмами — им место в отдельной работе,
  * а не в виде вставки текста.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PoTask } from '../model.js'
 import type { OkrLocaleKey } from './locales.js'
 import { classNames as css } from './styles.js'
@@ -28,6 +28,15 @@ export interface TaskPopupProps {
   onSetDue: (date: string) => void
   onDelete: () => void
   onClose: () => void
+  /**
+   * Выделить название целиком при открытии.
+   *
+   * Включается для только что заведённой записи: у неё название — заглушка, и первое, что
+   * делает человек, — печатает своё поверх. Для существующей задачи выделение опасно:
+   * случайное нажатие клавиши стёрло бы настоящее имя, поэтому там курсор просто встаёт
+   * в конец.
+   */
+  selectTitle?: boolean
 }
 
 /** Блоки меню: подпись и вставляемая разметка. */
@@ -44,11 +53,31 @@ const BLOCKS: ReadonlyArray<{ key: OkrLocaleKey; snippet: string }> = [
 ]
 
 export function TaskPopup(props: TaskPopupProps) {
-  const { task, content, t, onRename, onToggleDone, onSaveContent, onSetDue, onDelete, onClose } = props
+  const { task, content, t, onRename, onToggleDone, onSaveContent, onSetDue, onDelete, onClose, selectTitle } = props
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const titleRef = useRef<HTMLDivElement>(null)
   const [draft, setDraft] = useState(content)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const done = task.status.toLowerCase() === 'done'
+
+  /**
+   * Фокус в название при открытии карточки.
+   *
+   * Карточка открывается в том числе сразу после создания записи (требование T-07), и первое,
+   * что делает человек, — даёт задаче имя. Без фокуса он вынужден сперва прицелиться мышью в
+   * заголовок, хотя карточку для этого и открыли.
+   */
+  useEffect(() => {
+    const node = titleRef.current
+    if (node === null) return
+    node.focus()
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    if (selectTitle !== true) range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }, [task.id, selectTitle])
 
   /**
    * Вставляет блок в позицию курсора; без курсора — в конец (требование C-05).
@@ -99,6 +128,7 @@ export function TaskPopup(props: TaskPopupProps) {
         </div>
 
         <div
+          ref={titleRef}
           className={css.popupTitle}
           style={{ padding: '10px 16px 0' }}
           contentEditable

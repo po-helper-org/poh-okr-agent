@@ -147,13 +147,25 @@ const phaseRules = Object.entries(PHASE_COLORS)
   .join('\n')
 
 export const styleText = `
-/* ——— Кнопка раздела в подвале левой панели ——— */
-.${c.navLayer}{display:flex;flex-direction:column;gap:4px;}
+/* ——— Кнопка раздела в подвале левой панели ———
+ *
+ * Подвал («footerActions» харнесса) — один flex-ряд с «nowrap», рассчитанный на одну запись.
+ * Соседний раздел занимает его целиком фиксированной шириной, поэтому вторая запись уезжает
+ * за правый край сайдбара: в разметке она есть, на экране её нет и нажать нечего.
+ *
+ * Разрешаем ряду переносить записи и просим для себя целую строку. Правило точечное — оно
+ * действует только на тот подвал, внутри которого есть наша запись, и ничего не меняет там,
+ * где её нет. Между рядом и записью стоит якорь слота с «display:contents», поэтому в
+ * селекторе два уровня вложенности, а не один. */
+div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
+.${c.navLayer}{display:flex;flex-direction:column;gap:4px;flex-basis:100%;width:100%;}
 .${c.navButtons}{display:flex;align-items:center;gap:4px;}
 .${c.navRail} .${c.navButtons}{flex-direction:column;}
 .${c.navBadge}{display:flex;align-items:center;gap:8px;border:none;background:transparent;
-  color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:8px;padding:8px;
+  color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:8px;padding:10px 12px;
+  width:100%;text-align:left;
   transition:background var(--ds-transition-duration-fast) ease,color var(--ds-transition-duration-fast) ease;}
+.${c.navRail} .${c.navLayer}{flex-basis:auto;width:auto;}
 .${c.navRail} .${c.navBadge}{width:36px;height:36px;justify-content:center;padding:0;border-radius:50%;}
 .${c.navBadge}:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
 .${c.navBadge}[data-active]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
@@ -192,11 +204,15 @@ export const styleText = `
 .${c.item}{display:flex;align-items:center;gap:10px;width:100%;padding:8px 16px;border:none;
   background:transparent;text-align:left;cursor:pointer;color:var(--dsw-alias-label-primary);}
 .${c.item}:hover{background:var(--dsw-alias-bg-layer-1);}
+/* Рамка чекбокса — цветом подписи, а не токеном границы: границы в этой теме волосяные
+ * (4–12% чёрного) и годятся для разделителей, но контрол с такой рамкой выглядит
+ * отсутствующим — на светлом фоне его попросту не видно. */
 .${c.itemCheck}{flex-shrink:0;width:16px;height:16px;border-radius:4px;cursor:pointer;
-  border:1.5px solid var(--dsw-alias-border-l1);background:transparent;padding:0;}
+  border:1.5px solid var(--dsw-alias-label-caption);background:transparent;padding:0;}
+.${c.itemCheck}:hover{border-color:var(--dsw-alias-label-secondary);}
 .${c.itemCheck}[data-kind="control"]{border-color:#2F72B8;}
 .${c.itemCheck}[data-kind="risk"]{border-color:#B33F3F;}
-.${c.itemCheck}[data-done]{background:var(--dsw-alias-label-caption);border-color:var(--dsw-alias-label-caption);}
+.${c.itemCheck}[data-done]{background:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-label-secondary);}
 .${c.itemTitle}{flex:1;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;}
 .${c.item}[data-done] .${c.itemTitle}{color:var(--dsw-alias-label-caption);text-decoration:line-through;}
