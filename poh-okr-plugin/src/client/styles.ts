@@ -211,15 +211,25 @@ export const styleText = `
  * где её нет. Между рядом и записью стоит якорь слота с «display:contents», поэтому в
  * селекторе два уровня вложенности, а не один. */
 div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
-.${c.navLayer}{display:flex;flex-direction:column;gap:4px;flex-basis:100%;width:100%;}
+.${c.navLayer}{display:flex;flex-direction:column;gap:4px;flex-basis:100%;width:100%;
+  /* Столько же, сколько подвал сам отбивает до «Settings»: иначе наша запись висит
+   * с разными зазорами сверху и снизу. */
+  margin-top:4px;}
 .${c.navButtons}{display:flex;align-items:center;gap:4px;}
 .${c.navRail} .${c.navButtons}{flex-direction:column;}
+/* Геометрия снята с соседних записей подвала (раздел требований и «Settings») и повторена
+ * числом в число: высота 42, радиус 12, отступы 0/10/0/8, шрифт 14. Расхождение хотя бы в
+ * паре пикселей видно сразу — иконки трёх строк перестают стоять на одной вертикали.
+ * Ширина 260 при контейнере 256 достигается вылетом на 2px в каждую сторону — так же,
+ * как это сделано у соседа. */
 .${c.navBadge}{display:flex;align-items:center;gap:8px;border:none;background:transparent;
-  color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:8px;padding:10px 12px;
-  width:100%;text-align:left;
-  transition:background var(--ds-transition-duration-fast) ease,color var(--ds-transition-duration-fast) ease;}
+  color:var(--dsw-alias-label-primary);cursor:pointer;border-radius:12px;
+  padding:0 10px 0 8px;height:42px;font-size:14px;text-align:left;
+  width:calc(100% + 4px);margin:0 -2px;
+  transition:background var(--ds-transition-duration-fast) ease;}
 .${c.navRail} .${c.navLayer}{flex-basis:auto;width:auto;}
-.${c.navRail} .${c.navBadge}{width:36px;height:36px;justify-content:center;padding:0;border-radius:50%;}
+.${c.navRail} .${c.navBadge}{width:36px;height:36px;justify-content:center;padding:0;
+  border-radius:50%;margin:0;}
 .${c.navBadge}:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
 .${c.navBadge}[data-active]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}
 .${c.navBadgeLabel}{font-size:13px;white-space:nowrap;}
