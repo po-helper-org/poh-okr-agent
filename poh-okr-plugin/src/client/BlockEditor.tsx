@@ -58,9 +58,9 @@ function blockNode(block: Block, placeholder: string): HTMLElement {
       box.toggleAttribute('data-on', on)
       node.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    // За флажком всегда есть текстовый узел, даже пустой: без него каретка попадает
-    // внутрь самого флажка, и набранное уходит в кнопку вместо строки пункта.
-    node.append(box, document.createTextNode(block.text))
+    // Текст идёт первым узлом, флажок — вторым: он выведен из потока стилями и стоит
+    // слева, а порядок в разметке решает, куда браузер поставит каретку по умолчанию.
+    node.append(document.createTextNode(block.text), box)
     return node
   }
 
@@ -105,10 +105,10 @@ function focusBlock(node: HTMLElement): void {
   const selection = window.getSelection()
 
   if (node.getAttribute('data-block') === 'todo') {
-    let text = node.lastChild
+    let text = node.firstChild
     if (text === null || text.nodeType !== Node.TEXT_NODE) {
       text = document.createTextNode('')
-      node.append(text)
+      node.prepend(text)
     }
     range.setStart(text, text.textContent?.length ?? 0)
     range.collapse(true)
@@ -174,10 +174,10 @@ export function BlockEditor({ value, placeholder, onCommand, onChange }: BlockEd
       if (box === null || box.textContent === '') return
       const stray = box.textContent ?? ''
       box.textContent = ''
-      let text = node.lastChild
+      let text = node.firstChild
       if (text === null || text.nodeType !== Node.TEXT_NODE) {
         text = document.createTextNode('')
-        node.append(text)
+        node.prepend(text)
       }
       text.textContent = `${text.textContent ?? ''}${stray}`
       focusBlock(node)

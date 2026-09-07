@@ -303,10 +303,14 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
   }
 
   const openTaskCard = (task: PoTask) => {
-    // Повторный клик по уже открытой задаче ничего не делает: перезагрузка описания
-    // роняла редактор в состояние «грузится» и выглядела как закрытие сайдбара,
-    // а незаписанная правка при этом терялась.
-    if (openTask?.task.id === task.id) return
+    // Повторный клик по уже открытой задаче закрывает сайдбар: строка списка работает
+    // переключателем, и закрывать через кнопку внутри сайдбара не приходится.
+    // Перечитывать описание при этом нельзя — редактор упал бы в «грузится» и потерял
+    // незаписанную правку.
+    if (openTask?.task.id === task.id) {
+      setOpenTask(null)
+      return
+    }
     setOpenTask({ task, content: null })
     void resolveId(task.id)
       .then(id => unwrap<RawTaskDetail>(call('task', { id })))

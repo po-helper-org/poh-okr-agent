@@ -514,10 +514,14 @@ ${phaseRules}
   border-left:2px solid var(--dsw-alias-border-l3);}
 .${c.editor} [data-block="divider"]{padding:0;height:1px;
   background:var(--dsw-alias-border-l2);margin:12px 0;}
-.${c.editor} [data-block="todo"]{display:flex;align-items:flex-start;gap:8px;}
-.${c.todoBox}{flex-shrink:0;width:16px;height:16px;margin-top:4px;border-radius:4px;
+/* Флажок вынесен из потока и стоит слева от текста, а сам блок содержит только текст.
+ * Пока флажок был обычным потомком блока, каретка на пустом пункте вставала на него —
+ * набранное уходило в кнопку. Абсолютной позицией эта развилка убрана целиком:
+ * внутри блока просто нет другого места, куда каретке встать. */
+.${c.editor} [data-block="todo"]{position:relative;padding-left:26px;min-height:24px;}
+.${c.todoBox}{position:absolute;left:0;top:3px;width:16px;height:16px;border-radius:4px;
   border:1.5px solid var(--dsw-alias-label-caption);background:transparent;cursor:pointer;
-  padding:0;display:flex;align-items:center;justify-content:center;}
+  padding:0;display:flex;align-items:center;justify-content:center;user-select:none;}
 .${c.todoBox}[data-on]{background:var(--dsw-alias-button-info-fill);
   border-color:var(--dsw-alias-button-info-fill);}
 .${c.todoBox}[data-on]::after{content:"";width:8px;height:4px;margin-top:-2px;
