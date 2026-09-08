@@ -98,7 +98,7 @@ test('незнакомый и невыставленный приоритет о
   // средний от невыставленного становилось нельзя.
   const summary = toSummary({
     id: 'PO-30', title: 'KR', status: 'To Do', type: 'okr', priority: 'critical',
-    labels: [], milestone: null, dueDate: null, assignees: [], references: [],
+    labels: [], milestone: null, dueDate: null, updatedAt: null, assignees: [], references: [],
     parentTaskId: null, acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0,
   })
   assert.equal(summary.priority, null)
@@ -107,7 +107,7 @@ test('незнакомый и невыставленный приоритет о
 test('пустые milestone и dueDate не превращаются в поля', () => {
   const summary = toSummary({
     id: 'PO-30', title: 'KR', status: 'To Do', type: 'okr', priority: 'low',
-    labels: [], milestone: null, dueDate: null, assignees: [], references: [],
+    labels: [], milestone: null, dueDate: null, updatedAt: null, assignees: [], references: [],
     parentTaskId: null, acceptanceCriteriaCompleted: 0, acceptanceCriteriaCount: 0,
   })
   assert.equal('milestone' in summary, false)

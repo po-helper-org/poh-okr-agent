@@ -23,6 +23,31 @@ const ORDER: readonly GroupKey[] = ['overdue', 'today', 'week', 'later', 'noDate
 
 const DONE_STATUS = 'done'
 
+/**
+ * Сколько выполненное держится в списке.
+ *
+ * Секция выполненного росла без конца и вытесняла работу: к концу квартала под ней лежали
+ * сотни строк, которые никто не читал. Сутки — окно «я только что это закрыл»: успеть
+ * заметить ошибочную отметку и снять её. Более старое из панели уходит, но не удаляется —
+ * оно остаётся в Backlog.md и видно через `backlog task list -s Done`.
+ */
+const DONE_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Показывать ли выполненную задачу.
+ *
+ * Отметки «когда выполнено» у Backlog.md нет, поэтому свежесть считается по времени
+ * последней правки: для закрытой и больше не тронутой задачи это и есть момент закрытия.
+ * Задача без отметки времени (старый CLI) остаётся видимой: прятать по неизвестному
+ * признаку хуже, чем показать лишнее.
+ */
+function isFreshDone(task: PoTask, now: Date): boolean {
+  if (task.updatedAt === undefined) return true
+  const updated = Date.parse(task.updatedAt)
+  if (Number.isNaN(updated)) return true
+  return now.getTime() - updated <= DONE_WINDOW_MS
+}
+
 /** `YYYY-MM-DD` календарного дня. */
 export function isoDay(date: Date): string {
   const year = date.getFullYear()
@@ -55,13 +80,16 @@ export function groupOf(task: PoTask, today: Date): GroupKey {
 
 /**
  * Раскладывает задачи вкладки по секциям.
- * Пустые секции не возвращаются: заголовок с нулём — шум, а не информация.
+ *
+ * Пустые секции не возвращаются: заголовок с нулём — шум, а не информация. Выполненное
+ * старше суток не возвращается вовсе — см. `DONE_WINDOW_MS`.
  */
 export function groupTasks(tasks: readonly PoTask[], kind: PoTaskKind, today: Date): Group[] {
   const buckets = new Map<GroupKey, PoTask[]>()
   for (const task of tasks) {
     if (task.kind !== kind) continue
     const key = groupOf(task, today)
+    if (key === 'done' && !isFreshDone(task, today)) continue
     const bucket = buckets.get(key)
     if (bucket) bucket.push(task)
     else buckets.set(key, [task])

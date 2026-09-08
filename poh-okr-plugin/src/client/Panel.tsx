@@ -527,8 +527,14 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             ))}
           </div>
           <span style={{ flex: 1 }} />
-          <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>⟳</button>
-          <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>✕</button>
+          {/* Иконки, а не символы «⟳» и «✕»: шрифтовые глифы приходят разного кегля и
+              толщины, и кнопка обновления рядом с закрытием выглядела мельче и жирнее. */}
+          <button type="button" className={css.iconButton} onClick={reload} aria-label={t('refresh')}>
+            <Icon name="refresh" />
+          </button>
+          <button type="button" className={css.iconButton} onClick={() => { actions.close() }} aria-label={t('close')}>
+            <Icon name="close" />
+          </button>
         </div>
 
         <div className={css.body}>

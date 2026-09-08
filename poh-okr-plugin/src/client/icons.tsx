@@ -22,6 +22,8 @@ const PATHS = {
   chevronLeft: 'M10 3.5L5.5 8l4.5 4.5',
   chevronRight: 'M6 3.5L10.5 8 6 12.5',
   dots: 'M4 8h.01M8 8h.01M12 8h.01',
+  refresh: 'M13.2 8a5.2 5.2 0 1 1-1.5-3.7M13.2 2.6v2.8h-2.8',
+  close: 'M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2',
 } as const
 
 export type IconName = keyof typeof PATHS

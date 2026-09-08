@@ -84,3 +84,27 @@ test('внутри секции ближайший срок выше', () => {
   ], 'task', TODAY)
   assert.deepEqual(groups[0].tasks.map(t => t.id), ['PO-1', 'PO-2'])
 })
+
+test('выполненное показывается сутки, более старое скрывается', () => {
+  // Отметки «когда выполнено» у Backlog.md нет — свежесть считается по времени правки.
+  const now = new Date(2026, 8, 5, 12, 0, 0)
+  const fresh = task({ id: 'PO-2', status: 'Done', updatedAt: new Date(2026, 8, 5, 1, 0, 0).toISOString() })
+  const stale = task({ id: 'PO-3', status: 'Done', updatedAt: new Date(2026, 8, 3, 12, 0, 0).toISOString() })
+  const done = groupTasks([fresh, stale], 'task', now).find(group => group.key === 'done')
+  assert.deepEqual(done?.tasks.map(t => t.id), ['PO-2'])
+})
+
+test('граница суток включительно', () => {
+  const now = new Date(2026, 8, 5, 12, 0, 0)
+  const edge = task({ id: 'PO-4', status: 'Done', updatedAt: new Date(2026, 8, 4, 12, 0, 0).toISOString() })
+  const past = task({ id: 'PO-5', status: 'Done', updatedAt: new Date(2026, 8, 4, 11, 59, 0).toISOString() })
+  const done = groupTasks([edge, past], 'task', now).find(group => group.key === 'done')
+  assert.deepEqual(done?.tasks.map(t => t.id), ['PO-4'])
+})
+
+test('выполненное без отметки времени остаётся видимым', () => {
+  // Старый CLI не отдаёт updatedAt: прятать по неизвестному признаку хуже, чем показать.
+  const now = new Date(2026, 8, 5, 12, 0, 0)
+  const done = groupTasks([task({ id: 'PO-6', status: 'Done' })], 'task', now).find(g => g.key === 'done')
+  assert.deepEqual(done?.tasks.map(t => t.id), ['PO-6'])
+})

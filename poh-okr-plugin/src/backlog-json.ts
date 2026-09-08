@@ -22,6 +22,8 @@ export interface RawTask {
   labels: string[]
   milestone: string | null
   dueDate: string | null
+  /** ISO-отметка последней правки задачи. Появляется в машинном выводе Backlog.md. */
+  updatedAt: string | null
   assignees: string[]
   references: string[]
   parentTaskId: string | null
@@ -124,6 +126,7 @@ function decodeTask(value: unknown): RawTask {
     labels: strList(raw, 'labels'),
     milestone: str(raw, 'milestone'),
     dueDate: str(raw, 'dueDate'),
+    updatedAt: str(raw, 'updatedAt'),
     assignees: strList(raw, 'assignees'),
     references: strList(raw, 'references'),
     parentTaskId: str(raw, 'parentTaskId'),
@@ -181,5 +184,6 @@ export function toSummary(raw: RawTask): TaskSummary {
     labels: raw.labels,
     ...(raw.dueDate ? { dueDate: raw.dueDate } : {}),
     ...(raw.milestone ? { milestone: raw.milestone } : {}),
+    ...(raw.updatedAt ? { updatedAt: raw.updatedAt } : {}),
   }
 }
