@@ -72,6 +72,12 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 STOP-пауза после каждой — PO подтверждает переход. Полный workflow:
 `/okr-index → /okr-context → /okr-draft → /okr-debate → /okr-roadmap → /okr-decompose → /okr-plan-deck → /okr-equator`
 
+Начинать можно и с `/okr-draft`: навык сам проверяет `.okr/index/` и контекст-пак
+квартала и добирает `/okr-index` с `/okr-context`, если их нет или они устарели.
+Готовый свежий контекст он не пересобирает — решение принимает сам и называет его
+в отчёте. То же и с кнопкой «Планирование OKR» в разделе харнесса: одно нажатие
+проводит пайплайн с нужного места, а не падает на «нет контекст-пака».
+
 ## Рабочая папка
 
 ```

@@ -35,7 +35,9 @@ description: Objective/KR Designer — формирует черновик OKR-<
 
 ## Инструкция для LLM
 
-Следуй процессу из `skills/okr-draft/SKILL.md`.
+Следуй процессу из `skills/okr-draft/SKILL.md`. Команду можно звать первой:
+навык сам проверяет `.okr/index/` и контекст-пак квартала и добирает
+`/okr-index` с `/okr-context`, если их нет или они устарели.
 
 ## Отчёт
 
