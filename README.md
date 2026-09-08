@@ -22,7 +22,9 @@ Node.js/npm (устанавливается автоматически чере�
 curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
 ```
 Скрипт спросит IDE-агента (Claude Code / Codex / Cline / DevX / Universal) и
-синкнет команды и навыки в нужный корень. Если найден `npm` — заодно
+синкнет навыки в нужный корень — плюс команды тем агентам, которые каталога
+навыков не читают (Codex / Cline / DevX / Universal). Claude Code показывает
+навыки слэш-командами сам, поэтому туда команды не синкаются. Если найден `npm` — заодно
 установит `pptxgenjs` (нужен только для `.pptx`-вывода `/okr-equator` и
 `/okr-plan-deck`; `.md`-артефакты и остальные команды работают без Node.js).
 После установки запусти `/okr-index` — навык проведёт первичную аналитику
@@ -62,6 +64,11 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | 7 | `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
 | 8 | `/okr-validate <path>` | Validator | структурный отчёт линтера |
 
+У каждой команды есть одноимённый навык в `skills/`: команда — точка входа с
+форматом вызова и отчёта, процесс живёт в `skills/<команда>/SKILL.md`. Так
+пайплайн доступен и там, где слэш-команд нет, а есть только каталог навыков —
+например в DeepSeek Harness, куда его подключает `poh-okr-plugin`.
+
 STOP-пауза после каждой — PO подтверждает переход. Полный workflow:
 `/okr-index → /okr-context → /okr-draft → /okr-debate → /okr-roadmap → /okr-decompose → /okr-plan-deck → /okr-equator`
 
@@ -93,6 +100,22 @@ python3 <корень установки>/skills/okr-equator/scripts/okr-lint.py
 PBV вне диапазона, недопустимое значение статуса. `/okr-equator` прогоняет
 линтер перед каждой записью файла и не сохраняет документ с ошибками.
 Самотест линтера: `bash <корень установки>/skills/okr-equator/scripts/test-okr-lint.sh`.
+
+## Плагин для DeepSeek Harness (необязательно)
+
+`poh-okr-plugin/` — раздел «Управление целями» для DeepSeek Harness: доска OKR на квартал,
+планирование по спринтам и операционные задачи PO.
+
+Плагин необязателен. `install.sh` синкает только `commands/` и `skills/`, эта папка в
+установку не попадает: навыки `/okr-*` работают в Claude Code без Node.js и без харнесса,
+как и раньше.
+
+Хранилища у плагина своего нет — всё живёт в [Backlog.md](https://github.com/MrLesk/Backlog.md):
+объектив это milestone, ключевой результат — задача типа `okr` с привязкой к нему,
+операционная задача PO — задача типа `potask`, связанная с KR зависимостью. Нужен
+Backlog.md **1.51.0 или новее**: на нём появились дедлайны задач и объективов.
+
+Установка, настройки и подключение к профилю харнесса — `poh-okr-plugin/README.md`.
 
 ## Место в конвейере poh-org
 

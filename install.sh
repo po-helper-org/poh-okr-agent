@@ -25,8 +25,12 @@ else
   choice=""
 fi
 choice="${choice:-1}"
+# CMD_DIR пустой — команды не синкаются. Claude Code сам показывает навыки как
+# слэш-команды, а у каждой команды теперь есть одноимённый навык: синк дал бы
+# каждую `/okr-*` в меню дважды. Остальным агентам каталог навыков не виден,
+# им команды нужны как единственная точка входа.
 case "$choice" in
-  1) ROOT=".claude";     CMD_DIR="commands" ;;
+  1) ROOT=".claude";     CMD_DIR="" ;;
   2) ROOT=".agents";     CMD_DIR="prompts" ;;
   3) ROOT=".clinerules"; CMD_DIR="workflows" ;;
   4) ROOT=".clinerules"; CMD_DIR="workflows" ;;
@@ -35,8 +39,18 @@ case "$choice" in
 esac
 
 # Синк команд
-mkdir -p "$ROOT/$CMD_DIR"
-cp -R "$SRC"/commands/. "$ROOT/$CMD_DIR"/
+if [ -n "$CMD_DIR" ]; then
+  mkdir -p "$ROOT/$CMD_DIR"
+  cp -R "$SRC"/commands/. "$ROOT/$CMD_DIR"/
+else
+  # Прошлые установки синкали команды и сюда — снимаем ровно те файлы, что
+  # синкали мы, иначе `/okr-*` останется в меню дважды.
+  for cmd_src in "$SRC"/commands/*.md; do
+    [ -f "$cmd_src" ] || continue
+    rm -f "$ROOT/commands/$(basename "$cmd_src")"
+  done
+  rmdir "$ROOT/commands" 2>/dev/null || true
+fi
 
 # Синк навыков с инъекцией frontmatter (name + description из первой строки SKILL.md)
 mkdir -p "$ROOT/skills"
