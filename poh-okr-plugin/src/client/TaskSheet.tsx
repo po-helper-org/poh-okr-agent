@@ -15,6 +15,7 @@ import { Calendar } from './Calendar.js'
 import { Icon, PriorityFlag } from './icons.js'
 import type { OkrLocaleKey } from './locales.js'
 import { Popover, PopoverItem } from './Popover.js'
+import { KrPicker } from './KrPicker.js'
 import { classNames as css, dueLabel } from './styles.js'
 
 export interface TaskSheetProps {
@@ -306,19 +307,13 @@ export function TaskSheet(props: TaskSheetProps) {
               onSelect={() => { props.onSetKind(item); setMenu(null) }} />
           ))}
           {menu === 'kr' && (
-            <>
-              <PopoverItem glyph={<Icon name="ban" size={15} />} label={t('krNone')}
-                selected={task.relatedKrIds.length === 0}
-                onSelect={() => { props.onSetKr(null); setMenu(null) }} />
-              {krs.map(kr => (
-                <PopoverItem key={kr.id} selected={task.relatedKrIds.includes(kr.id)}
-                  glyph={<Icon name="inbox" size={15} />} label={kr.title} sub={kr.id}
-                  onSelect={() => { props.onSetKr(kr.id); setMenu(null) }} />
-              ))}
-              <PopoverItem glyph={<Icon name="weekAhead" size={15} />} label={t('importKrs')}
-                sub={t('importKrsHint')}
-                onSelect={() => { props.onImportKrs(); setMenu(null) }} />
-            </>
+            <KrPicker
+              krs={krs}
+              selected={task.relatedKrIds}
+              t={t}
+              onPick={krId => { props.onSetKr(krId); setMenu(null) }}
+              onImport={() => { props.onImportKrs(); setMenu(null) }}
+            />
           )}
           {menu === 'blocks' && BLOCK_TYPES.map(type => (
             <PopoverItem

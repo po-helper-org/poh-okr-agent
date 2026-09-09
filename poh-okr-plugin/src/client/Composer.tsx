@@ -15,6 +15,7 @@ import { Icon, PriorityFlag } from './icons.js'
 import type { OkrLocaleKey } from './locales.js'
 import { Popover, PopoverItem } from './Popover.js'
 import { Calendar } from './Calendar.js'
+import { KrPicker } from './KrPicker.js'
 import { classNames as css, dueLabel } from './styles.js'
 
 export interface ComposerDraft {
@@ -280,29 +281,13 @@ export function Composer({ t, tab, krs, onSubmit, onImportKrs }: ComposerProps) 
           ))}
 
           {menu === 'kr' && (
-            <>
-              <PopoverItem glyph={<Icon name="ban" size={15} />} label={t('krNone')}
-                selected={draft.krId === null}
-                onSelect={() => { setDraft(current => ({ ...current, krId: null })); dropTrigger(); closeMenu() }} />
-              {krs.map(kr => (
-                <PopoverItem
-                  key={kr.id}
-                  selected={kr.id === draft.krId}
-                  glyph={<Icon name="inbox" size={15} />}
-                  label={kr.title}
-                  sub={kr.id}
-                  onSelect={() => { setDraft(current => ({ ...current, krId: kr.id })); dropTrigger(); closeMenu() }}
-                />
-              ))}
-              {/* Настоящие цели PO живут в нексусах воркспейса, а плагин управляет задачами
-                  Backlog.md. Пункт переносит их туда — иначе меню пустует, и непонятно почему. */}
-              <PopoverItem
-                glyph={<Icon name="weekAhead" size={15} />}
-                label={t('importKrs')}
-                sub={t('importKrsHint')}
-                onSelect={() => { onImportKrs(); dropTrigger(); closeMenu() }}
-              />
-            </>
+            <KrPicker
+              krs={krs}
+              selected={draft.krId === null ? [] : [draft.krId]}
+              t={t}
+              onPick={krId => { setDraft(current => ({ ...current, krId })); dropTrigger(); closeMenu() }}
+              onImport={() => { onImportKrs(); dropTrigger(); closeMenu() }}
+            />
           )}
 
           {menu === 'date' && (

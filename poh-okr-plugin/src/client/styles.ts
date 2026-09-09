@@ -54,6 +54,8 @@ export const classNames = {
   popItem: 'okr-pop-item',
   popGlyph: 'okr-pop-glyph',
   popSub: 'okr-pop-sub',
+  pickerInput: 'okr-picker-input',
+  pickerHint: 'okr-picker-hint',
   cal: 'okr-cal',
   calQuick: 'okr-cal-quick',
   calHead: 'okr-cal-head',
@@ -320,6 +322,14 @@ div:has(> div > .${c.navLayer}){flex-wrap:wrap;}
 .${c.popGlyph}{width:22px;flex-shrink:0;text-align:center;font-size:12px;
   color:var(--dsw-alias-label-tertiary);display:flex;justify-content:center;}
 .${c.popSub}{display:block;font-size:11px;color:var(--dsw-alias-label-caption);}
+/* Поиск в меню целей. Ширина задаётся здесь, а не содержимым: пустое меню без строк
+ * схлопнулось бы до размеров подсказки и прыгало при первом же совпадении. */
+.${c.pickerInput}{width:320px;max-width:calc(100vw - 32px);box-sizing:border-box;margin-bottom:4px;
+  padding:7px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;
+  background:var(--dsw-alias-fill-tsp-gray-l3);color:var(--dsw-alias-label-primary);
+  font-size:13px;outline:none;}
+.${c.pickerInput}:focus{border-color:var(--dsw-alias-border-l1);}
+.${c.pickerHint}{padding:7px 9px;font-size:12px;color:var(--dsw-alias-label-caption);}
 .${c.cal}{width:268px;padding:10px;}
 .${c.calQuick}{display:flex;gap:4px;padding:2px 2px 8px;
   border-bottom:1px solid var(--dsw-alias-border-l2);}
