@@ -35,6 +35,15 @@ test('правило запрещает запись мимо Backlog.md и ру
   assert.ok(text.includes('backlog/tasks/*.md'))
 })
 
+test('приоритет запрещено выводить из тона и срока', () => {
+  // Живой прогон показал обратное: приоритет проставлялся там, где важность не звучала,
+  // и панель красила задачу по догадке модели, а не по решению PO.
+  const text = capturePolicy(CONFIG)
+  assert.ok(text.includes('Приоритет не выводится'))
+  assert.ok(text.includes('Тон беседы'))
+  assert.ok(text.includes('пусто лучше выдуманного'))
+})
+
 test('привязка к KR требует и метку, и зависимость', () => {
   const text = capturePolicy(CONFIG)
   assert.ok(text.includes('okr-kr:<id KR>'))
