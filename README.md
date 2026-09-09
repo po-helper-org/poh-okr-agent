@@ -54,6 +54,8 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 
 | # | Команда | Роль | Артефакт |
 |---|---|---|---|
+| — | `/okr-fast <quarter>` | Стенографист | `OKR-<quarter>-fast.md` + страница отбора |
+| — | `/okr-deep <quarter>` | Аудитор | `OKR-<quarter>.md` + расширенная страница |
 | 0 | `/okr-index` | Context Builder | `.okr/index/` |
 | 1 | `/okr-context <quarter>` | Context Builder | `.okr/<quarter>/artefacts/okr-context-pack.md` |
 | 2 | `/okr-draft <quarter>` | Objective/KR Designer | `.okr/<quarter>/OKR-<quarter>.md` |
@@ -63,6 +65,18 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | 6 | `/okr-plan-deck <quarter>` | Deck Builder | `.okr/<quarter>/plan-deck.pptx` |
 | 7 | `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
 | 8 | `/okr-validate <path>` | Validator | структурный отчёт линтера |
+
+`/okr-fast` и `/okr-deep` — два входа в пайплайн, а не ещё два шага. Fast
+раскладывает присланный текст и наружу не ходит вовсе: чего PO не сказал, того в
+документе нет — только `[УТОЧНИТЬ]` в своей ячейке, и это проверяется машинным
+гейтом, а не самоотчётом. Deep берёт черновик fast как исходник, поднимает
+контекст (шаги 0—1), **сначала задаёт вопросы по шести срезам** и только потом
+собирает документ шагами 2—3. Обе команды отдают ещё и `.html` — рабочий стол
+PO: отбор в квартал галочкой, PBV, карточка KR заметкой, замечания правой
+кнопкой, промт агенту одной кнопкой.
+
+Пошаговый пайплайн ниже остаётся: он нужен, когда квартал собирают по частям, а
+не одним заходом.
 
 У каждой команды есть одноимённый навык в `skills/`: команда — точка входа с
 форматом вызова и отчёта, процесс живёт в `skills/<команда>/SKILL.md`. Так
