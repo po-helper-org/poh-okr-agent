@@ -65,7 +65,8 @@
     return {
       kr: row.getAttribute("data-kr"),
       title: row.children[1].textContent.trim(),
-      goal: row.children[2].textContent.trim(),
+      asis: row.children[2].textContent.trim(),
+      tobe: row.children[3].textContent.trim(),
       take: row.querySelector("td.take input").checked,
       pbv: pbv === "—" ? null : pbv,
       isNew: row.hasAttribute("data-new")
@@ -76,6 +77,25 @@
      набор заголовков, но это обычная заметка: разделы можно переименовать,
      удалить, поменять местами и дописать свои. */
   var SKELETON = ["Подход к оценке результата", "План", "Вопросы", "Риски", "Исполнители"];
+
+  /* Типы задач декомпозиции. План KR строится из этого блока целиком: строка
+     остаётся в плане и тогда, когда роль не нужна, — иначе по карточке не
+     видно, спросили ли про неё вообще. */
+  var TASK_TYPES = [
+    ["PO",   "подготовительные действия и координация"],
+    ["BA",   "бизнес-аналитика и сбор требований"],
+    ["SA",   "системная аналитика"],
+    ["BE",   "Backend разработка"],
+    ["FE",   "Frontend разработка"],
+    ["DBA",  "Разработка в базах данных"],
+    ["ADR",  "Архитектурное согласование"],
+    ["RM",   "Релиз на стенд"],
+    ["QA",   "Стабилизация и отладка"],
+    ["DOPS", "Devops и задачи на инфраструктуру"]
+  ];
+  var PLAN_SKELETON = TASK_TYPES.map(function(t){
+    return "- [" + t[0] + "] " + t[1] + ": ";
+  }).join("\n");
 
   /** Раскладывает заметку по заготовке: известные разделы встают по порядку,
       недостающие добавляются пустыми, чужие остаются в конце. */
@@ -102,6 +122,7 @@
     SKELETON.concat(extra).forEach(function(name){
       lines.push("## " + name);
       var body = (found[name] || []).join("\n").replace(/^\n+|\n+$/g, "");
+      if(name === "План" && !body) body = PLAN_SKELETON;
       lines.push(body);
       lines.push("");
     });
@@ -444,7 +465,8 @@
     tr.innerHTML =
       '<td class="kr">' + item.kr + "</td>" +
       "<td>" + item.text + "</td>" +
-      '<td class="goal">формулировку напишет агент</td>' +
+      '<td class="asis">—</td>' +
+      '<td class="tobe">формулировку напишет агент</td>' +
       '<td class="pbv"' + (item.pbv ? "" : " data-empty") + '><select data-field="pbv">' + options + "</select></td>" +
       '<td class="take"><input type="checkbox"' + (item.take === false ? "" : " checked") + "></td>";
     tbody.appendChild(tr);

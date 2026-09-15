@@ -28,6 +28,11 @@ a.anchor-link{ text-decoration:none; border-bottom:1px dotted var(--link); }
 .layout{ max-width:860px; margin:0 auto; padding:2rem 1.5rem 6rem; }
 main{ min-width:0; max-width:760px; margin:0 auto; }
 
+/* Отбор квартала: таблица KR с ASIS/TOBE не читается в колонке 760px —
+   страница OKR идёт во всю ширину экрана. */
+.layout.wide{ max-width:100%; padding-left:1.5rem; padding-right:1.5rem; }
+.layout.wide main{ max-width:100%; }
+
 h1{ font-size:1.65rem; line-height:1.25; margin:0 0 .5rem; }
 h2{ font-size:1.25rem; margin:2.4rem 0 1rem; padding-top:1.6rem; border-top:1px solid var(--line-soft); }
 h2:first-of-type{ border-top:none; padding-top:0; }
@@ -271,6 +276,7 @@ mark.unc.flash{ outline:2px solid #e00000; outline-offset:1px; }
 table.pick{ table-layout:fixed; }
 table.pick td{ vertical-align:middle; }
 col.c-kr{ width:3.4rem; }
+col.c-name{ width:16rem; }
 col.c-pbv{ width:4.2rem; }
 col.c-take{ width:5.2rem; }
 
@@ -279,6 +285,12 @@ tr.row{ cursor:pointer; }
 tr.row:hover td{ background:var(--mark); }
 td.kr{ font-family:"Courier New",monospace; font-weight:bold; white-space:nowrap; }
 td.goal{ color:var(--muted); font-size:.82rem; }
+
+/* ASIS — то, что есть сейчас; TOBE — то, к чему идём за квартал. Разный вес
+   намеренно: глаз ищет целевое состояние, текущее читается вторым. */
+td.asis{ color:var(--muted); font-size:.82rem; background:var(--mark); }
+td.tobe{ font-size:.84rem; }
+th.h-asis, th.h-tobe{ white-space:nowrap; }
 
 /* Взятое помечено, невзятое просто не помечено: гасить весь список нельзя —
    до первого отбора документ выглядел выключенным. */

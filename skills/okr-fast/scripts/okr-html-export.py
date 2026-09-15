@@ -117,7 +117,14 @@ def parse_document(text):
             if obj is None:
                 doc['warnings'].append(f'строка KR «{row[0]}» вне цели — потеряна')
                 continue
-            obj['krs'].append({'id': row[0], 'title': row[1], 'goal': row[2], 'pbv': row[3]})
+            # Пять колонок — текущий формат (ASIS/TOBE), четыре — документы до
+            # его введения: там одна колонка «образ результата», она читается
+            # как TOBE, а ASIS остаётся незаполненным.
+            if len(row) >= 5:
+                kr = {'id': row[0], 'title': row[1], 'asis': row[2], 'tobe': row[3], 'pbv': row[4]}
+            else:
+                kr = {'id': row[0], 'title': row[1], 'asis': '', 'tobe': row[2], 'pbv': row[3]}
+            obj['krs'].append(kr)
 
     flush_note()
     doc['meta'] = meta
@@ -141,7 +148,8 @@ def render_rows(objective, verdict):
             f'<option{" selected" if value == (pbv or "—") else ""}>{value}</option>'
             for value in PBV_OPTIONS
         )
-        goal = kr['goal'] if not unclear(kr['goal']) else '[УТОЧНИТЬ]'
+        asis = kr['asis'] if not unclear(kr['asis']) else '[УТОЧНИТЬ]'
+        tobe = kr['tobe'] if not unclear(kr['tobe']) else '[УТОЧНИТЬ]'
         note = verdict.get(kr['id'])
         mark = f' title="{esc(note)}"' if note else ''
         rows.append(
@@ -150,7 +158,8 @@ def render_rows(objective, verdict):
             + '>'
             f'<td class="kr"{mark}>{esc(kr["id"])}</td>'
             f'<td>{esc(kr["title"])}</td>'
-            f'<td class="goal">{esc(goal)}</td>'
+            f'<td class="asis">{esc(asis or "—")}</td>'
+            f'<td class="tobe">{esc(tobe)}</td>'
             f'<td class="pbv"><select data-field="pbv">{options}</select></td>'
             '<td class="take"><input type="checkbox"></td>'
             '</tr>'
@@ -175,8 +184,11 @@ def build(doc, stage, quarter):
             obj_options.append(f'<option value="{anchor}">{esc(objective["title"][:60])}</option>')
             body.append(
                 '<div class="table-wrap"><table class="pick">'
-                '<colgroup><col class="c-kr"><col><col><col class="c-pbv"><col class="c-take"></colgroup>'
-                '<thead><tr><th>KR</th><th>Название</th><th>Образ результата</th>'
+                '<colgroup><col class="c-kr"><col class="c-name"><col><col>'
+                '<col class="c-pbv"><col class="c-take"></colgroup>'
+                '<thead><tr><th>KR</th><th>Название</th>'
+                '<th class="h-asis">ASIS — как сейчас</th>'
+                '<th class="h-tobe">TOBE — к концу квартала</th>'
                 '<th>PBV</th><th>В квартал</th></tr></thead>'
                 f'<tbody>{render_rows(objective, doc["verdict"])}</tbody></table></div>'
             )
@@ -239,7 +251,7 @@ def build(doc, stage, quarter):
   </div>
 </div>
 
-<div class="layout">
+<div class="layout wide">
 <main>
 <div class="head"><h1>{esc(doc["title"] or "OKR " + quarter)}</h1></div>
 {chr(10).join(body)}
