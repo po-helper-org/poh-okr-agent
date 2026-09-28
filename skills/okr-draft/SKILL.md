@@ -1,7 +1,15 @@
 ---
 name: okr-draft
-description: Objective/KR Designer — формирует черновик OKR-<quarter>.md из контекст-пака. 3-5 Objectives, у каждого 3-6 измеримых Key Results с PBV. Используй когда — /okr-draft, черновик OKR квартала, сформулировать Objectives и Key Results.
+description: '[deprecated] Устарело, используй /okr-scope. Objective/KR Designer — формирует черновик OKR-<quarter>.md из контекст-пака. 3-5 Objectives, у каждого 3-6 измеримых Key Results с PBV. Используй когда — /okr-draft, черновик OKR квартала, сформулировать Objectives и Key Results.'
 ---
+
+> **[deprecated]** `/okr-draft` устарела и больше не поддерживается. Планирование
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> Замена: `/okr-scope <quarter>`: PO рассказывает план своими словами, навык собирает драфт.
+
+**Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-draft`
+устарела и неактуальна, назови замену и предложи запустить её. Продолжай по
+старому процессу ниже, только если пользователь явно попросит именно его.
 
 # Навык: Objective/KR Designer
 

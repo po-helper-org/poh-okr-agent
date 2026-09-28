@@ -1,6 +1,14 @@
 ---
-description: Deck Builder — собирает plan-deck.pptx (кикофф-презентация квартала для команды) из OKR-<quarter>.md и roadmap.md.
+description: '[deprecated] Устарело, используй /okr-scope, /okr-stages, /okr-teamplanner. Deck Builder — собирает plan-deck.pptx (кикофф-презентация квартала для команды) из OKR-<quarter>.md и roadmap.md.'
 ---
+
+> **[deprecated]** `/okr-plan-deck` устарела и больше не поддерживается. Планирование
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> Замена: документ `scope-<quarter>.html` из `/okr-scope` и `/okr-stages` для команды и `/okr-teamplanner <quarter>` для техлидов.
+
+**Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-plan-deck`
+устарела и неактуальна, назови замену и предложи запустить её. Продолжай по
+старому процессу ниже, только если пользователь явно попросит именно его.
 
 ## Использование
 
