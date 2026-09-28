@@ -13,13 +13,16 @@ description: Equator Reporter — генерирует отчёт-экватор
 
 ## Принцип нулевого допуска
 
-Каждый факт (статус KR, риск, коммитмент) → источник: `OKR-<quarter>.md`,
-`roadmap.md`, `KR-EPIC-MAP.md`, JIRA (если подключён), или прямой ответ PO в
+Каждый факт (статус KR, риск, коммитмент) → источник: `scope-<quarter>.json`
+или `OKR-<quarter>.md`, `roadmap.md`, `KR-EPIC-MAP.md`, JIRA (если подключён), или прямой ответ PO в
 диалоге. Неизвестное → `[УТОЧНИТЬ у PO]`, никогда не придумывается.
 
 ## Процесс
 
-1. Прочитай `.okr/<quarter>/OKR-<quarter>.md`, `roadmap.md`, `KR-EPIC-MAP.md`.
+1. Прочитай план квартала. Есть `.okr/<quarter>/plan/scope-<quarter>.json`
+   (новый пайплайн) — это план: цели → `objectives`, KR → `initiatives`,
+   этапы, риски и зависимости → `notes`. Иначе — `.okr/<quarter>/OKR-<quarter>.md`,
+   `roadmap.md`, `KR-EPIC-MAP.md` (старый пайплайн).
 2. Если `okr-config.md → tracker_projects` задан и JIRA MCP доступен — подтяни
    статус связанных эпиков/задач одним запросом на проект (не на каждый KR
    отдельно, чтобы не захлёбываться в вызовах).

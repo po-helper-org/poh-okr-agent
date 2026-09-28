@@ -1,12 +1,11 @@
 # poh-okr-agent
 
-Единственная цель — управление OKR-целями Product Owner: формирование OKR,
-roadmap и верхнеуровневой декомпозиции с требованиями, сборка квартальной
-презентации плана для команды, и отчёт «экватор квартала» (`.md` + `.pptx`) о
-статусе исполнения на середине квартала. Переносимый навык: подключается в
-любой воркспейс, сам строит контекст, работает без обязательных внешних
-runtime-зависимостей для `.md`-артефактов; `.pptx`-генерация требует
-Node.js/npm (устанавливается автоматически через `install.sh`, см. ниже).
+Единственная цель — управление OKR-целями Product Owner: планирование
+квартала от итогов прошлого до таблицы ресурсов для техлидов, и отчёт «экватор
+квартала» (`.md` + `.pptx`) о статусе исполнения на середине квартала.
+Переносимый навык: подключается в любой воркспейс, сам строит контекст.
+Планирование работает без внешних зависимостей, кроме Python 3; `.pptx`-генерация
+экватора требует Node.js/npm (устанавливается автоматически через `install.sh`).
 
 **Функция [манифеста](https://github.com/po-helper-org/.github/blob/main/profile/README.md):**
 1 · 4 — снятие неопределённости (OKR/roadmap, забирает контур у
@@ -25,10 +24,9 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 синкнет навыки в нужный корень — плюс команды тем агентам, которые каталога
 навыков не читают (Codex / Cline / DevX / Universal). Claude Code показывает
 навыки слэш-командами сам, поэтому туда команды не синкаются. Если найден `npm` — заодно
-установит `pptxgenjs` (нужен только для `.pptx`-вывода `/okr-equator` и
-`/okr-plan-deck`; `.md`-артефакты и остальные команды работают без Node.js).
-После установки запусти `/okr-index` — навык проведёт первичную аналитику
-воркспейса.
+установит `pptxgenjs` (нужен только для `.pptx`-вывода `/okr-equator`;
+остальные команды работают без Node.js). После установки запусти
+`/okr-index` — навык проведёт первичную аналитику воркспейса.
 
 ## Для ИИ-помощника (bootstrap)
 
@@ -36,58 +34,83 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 `curl -ksSL <repo>/install.sh | bash` или склонируй и запусти `install.sh`,
 выбрав IDE-агента пользователя; (2) после синка сразу запусти `/okr-index`
 для первичной аналитики воркспейса; (3) покажи `MANIFEST.md` и предложи
-`/okr-context <quarter>`.
+`/okr-retro <quarter>`.
 
 ## HowToDemo
 
 1. Открываю репозиторий.
 2. Устанавливаю себе скиллы `okr-agent` (curl-бутстрап выше).
-3. Прохожу онбординг (`/okr-index`) и формирую OKR (`/okr-context` →
-   `/okr-draft` → `/okr-debate`).
-4. Для OKR формирую roadmap (`/okr-roadmap`) и верхнеуровневую декомпозицию с
-   требованиями (`/okr-decompose`).
-5. Собираю планы квартала в презентацию для команды (`/okr-plan-deck`).
-6. Создаю экватор квартала — отчёт `.md` + презентация `.pptx`
+3. Прохожу онбординг (`/okr-index`).
+4. Закрываю прошлый квартал: `/okr-retro` — экран фактических итогов и того,
+   что переходит в новый квартал.
+5. Рассказываю голосом, что хочу увидеть в квартале, — `/okr-scope` собирает
+   драфт, правим его вместе до «принято».
+6. `/okr-stages` раскладывает каждую инициативу на этапы по ролям с рисками и
+   зависимостями.
+7. `/okr-teamplanner` выгружает таблицу, в которой техлиды заполняют ресурсы.
+8. В середине квартала — экватор, отчёт `.md` + презентация `.pptx`
    (`/okr-equator`).
 
-## Команды
+## Планирование квартала
 
-| # | Команда | Роль | Артефакт |
+Планирование начинается с разговора с PO и идёт вокруг двух HTML-документов.
+Каждый этап заканчивается принятием PO: документ проходит проверку и получает
+статус «принято».
+
+| # | Команда | Что происходит | Итог этапа |
 |---|---|---|---|
-| 0 | `/okr-index` | Context Builder | `.okr/index/` |
-| 1 | `/okr-context <quarter>` | Context Builder | `.okr/<quarter>/artefacts/okr-context-pack.md` |
-| 2 | `/okr-draft <quarter>` | Objective/KR Designer | `.okr/<quarter>/OKR-<quarter>.md` |
-| 3 | `/okr-debate <quarter>` | Devil's Advocate | вердикт в `OKR-<quarter>.md` |
-| 4 | `/okr-roadmap <quarter>` | Roadmap Architect | `.okr/<quarter>/roadmap.md` |
-| 5 | `/okr-decompose <quarter>` | Decomposer | `.okr/<quarter>/KR-EPIC-MAP.md` |
-| 6 | `/okr-plan-deck <quarter>` | Deck Builder | `.okr/<quarter>/plan-deck.pptx` |
-| 7 | `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
-| 8 | `/okr-validate <path>` | Validator | структурный отчёт линтера |
+| 1 | `/okr-retro <quarter>` | Фактические итоги прошлого квартала по каждому KR: что сделано, источник, что переходит (продолжение, доделка) | принятый `retro-<prev>.html` |
+| 2 | `/okr-scope <quarter>` | PO в свободной форме, можно голосом, рассказывает, что и для каких команд хочет увидеть. Из рассказа — первичный драфт, дальше итерации и выравнивание | принятый `scope-<quarter>.html` |
+| 3 | `/okr-stages <quarter>` | Каждая инициатива — этапы по ролям `PO, SA, BE, FE, ADR`, условия, риски, зависимости, неопределённости | заметки с декомпозицией в том же `scope-<quarter>.html` |
+| 4 | `/okr-teamplanner <quarter>` | Перенос в табличную форму: строка на этап, сквозная нумерация | `teamplanner-<quarter>.csv` для техлидов |
+
+`<quarter>` везде — планируемый квартал (`2026Q4`); ретро закрывает предыдущий.
+Начинать всегда можно с `/okr-retro`: он видит, на каком этапе остановились, и
+предлагает продолжить оттуда. Туда же ведёт кнопка «Планирование OKR» в
+разделе харнесса.
+
+Источник истины каждого этапа — JSON рядом с HTML. PO правит словами, навык
+меняет JSON, а HTML и таблица пересобираются скриптом
+`skills/okr-scope/scripts/okr-plan.py`. Он же проверяет документ перед
+принятием. Формат и правила проверки — `skills/okr-scope/resources/plan_schema.md`.
+Самотест скрипта: `python3 -m unittest discover -s <корень установки>/skills/okr-scope/scripts`.
+
+## Другие команды
+
+| Команда | Роль | Артефакт |
+|---|---|---|
+| `/okr-index` | Context Builder | `.okr/index/` |
+| `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
+| `/okr-validate <path>` | Validator | структурный отчёт линтера экватора |
 
 У каждой команды есть одноимённый навык в `skills/`: команда — точка входа с
 форматом вызова и отчёта, процесс живёт в `skills/<команда>/SKILL.md`. Так
 пайплайн доступен и там, где слэш-команд нет, а есть только каталог навыков —
 например в DeepSeek Harness, куда его подключает `poh-okr-plugin`.
 
-STOP-пауза после каждой — PO подтверждает переход. Полный workflow:
-`/okr-index → /okr-context → /okr-draft → /okr-debate → /okr-roadmap → /okr-decompose → /okr-plan-deck → /okr-equator`
+## Устаревшие команды
 
-Начинать можно и с `/okr-draft`: навык сам проверяет `.okr/index/` и контекст-пак
-квартала и добирает `/okr-index` с `/okr-context`, если их нет или они устарели.
-Готовый свежий контекст он не пересобирает — решение принимает сам и называет его
-в отчёте. То же и с кнопкой «Планирование OKR» в разделе харнесса: одно нажатие
-проводит пайплайн с нужного места, а не падает на «нет контекст-пака».
+Прошлый пайплайн был длинным и начинался с анкеты, а не с разговора с PO. Его
+команды остаются для совместимости, помечены `[deprecated]` и при вызове
+предлагают замену.
+
+| Команда | Замена |
+|---|---|
+| `/okr-context` | `/okr-retro` + `/okr-scope` |
+| `/okr-draft` | `/okr-scope` |
+| `/okr-debate` | выравнивание внутри `/okr-scope` |
+| `/okr-roadmap` | `/okr-stages` |
+| `/okr-decompose` | `/okr-stages` |
+| `/okr-plan-deck` | `scope-<quarter>.html` + `/okr-teamplanner` |
 
 ## Рабочая папка
 
 ```
 .okr/index/{domain.md, glossary.md, stakeholders.md, sources.md, MANIFEST.md}
 .okr/<quarter>/
-  artefacts/okr-context-pack.md
-  OKR-<quarter>.md
-  roadmap.md
-  KR-EPIC-MAP.md
-  plan-deck.pptx
+  plan/retro-<prev>.json + .html
+  plan/scope-<quarter>.json + .html
+  plan/teamplanner-<quarter>.csv
   equator/экватор-<quarter>.md
   equator/экватор-<quarter>.pptx
 ```
@@ -126,7 +149,7 @@ Backlog.md **1.51.0 или новее**: на нём появились дедл
 ## Место в конвейере poh-org
 
 `poh-strategy-agents` (идея → проблема → ставка) → **`poh-okr-agent`**
-(OKR → roadmap → декомпозиция → квартальный план → экватор) →
+(ретро → скоуп → этапы → TeamPlanner → экватор) →
 `poh-bft-writer` (полные требования на эпик) → `poh-sprint-agents`
 (исполнение спринта). `poh-okr-agent` полностью забирает OKR/roadmap-контур,
 ранее заявленный в `poh-strategy-agents`.

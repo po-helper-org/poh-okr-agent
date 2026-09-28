@@ -454,7 +454,7 @@ export function OkrPanel({ t, useStore, actions, call, openChatWithDraft }: OkrP
             t={t}
             onOpenKr={(kr, objectiveTitle) => { setOpenObjective(null); setOpenKr({ kr, objectiveTitle }) }}
             onOpenObjective={(id, title) => { setOpenKr(null); setOpenObjective({ id, title }) }}
-            onPlan={() => { openChatAndClose(`/okr-draft ${quarter}`) }}
+            onPlan={() => { openChatAndClose(`/okr-retro ${quarter}`) }}
             onPresent={() => { openChatAndClose(`/okr-equator ${quarter}`) }}
             onClose={() => { setRoute({ view: 'panel' }) }}
           />
