@@ -340,7 +340,9 @@
     var b = e.target.closest("[data-obj]");
     if(!b) return;
     cur = +b.getAttribute("data-obj");
-    history.replaceState(null, "", "#obj=" + encodeURIComponent(objs[cur].id));
+    /* Во встроенной странице (iframe srcdoc, превью) адрес менять нельзя — цель
+       всё равно переключается, просто не запоминается в ссылке. */
+    try { history.replaceState(null, "", "#obj=" + encodeURIComponent(objs[cur].id)); } catch(e){}
     setDrawer(null);
     render();
     window.scrollTo(0, 0);
