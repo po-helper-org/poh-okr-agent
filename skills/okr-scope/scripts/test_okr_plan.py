@@ -300,36 +300,120 @@ class Render(Case):
 
 
 class TeamPlanner(Case):
-    def export(self, scope):
-        self.write(self.retro, "retro-2026Q3.json")
-        path = self.write(scope, "scope-2026Q4.json")
-        out = os.path.join(self.tmp.name, "teamplanner.csv")
-        okr_plan.teamplanner(path, out)
-        with open(out, encoding="utf-8-sig", newline="") as f:
-            return list(csv.DictReader(f, delimiter=";"))
+    def setUp(self):
+        super().setUp()
+        self.tp = fixture("teamplanner-2026Q4.json")
 
-    def test_one_row_per_stage_with_continuous_numbering(self):
-        rows = self.export(self.scope)
-        self.assertEqual(len(rows), 4 + 5 + 2 + 1)
-        self.assertEqual([r["№"] for r in rows], [str(n) for n in range(1, len(rows) + 1)])
-        self.assertEqual(rows[2]["Внешняя команда"], "да")
-        self.assertTrue(rows[0]["Риски"].startswith("[RISK] "))
-        self.assertEqual(rows[1]["Риски"], "")
-        self.assertEqual(rows[-1]["Этап"], "")
-        self.assertEqual(rows[0]["Программа (OBJ)"], "OBJ 1. Продавать подписку без ручных операций")
+    def lint_tp(self, tp=None, final=False, scope=True):
+        if scope:
+            self.write(self.retro, "retro-2026Q3.json")
+            self.write(self.scope, "scope-2026Q4.json")
+        return okr_plan.lint(self.write(tp or self.tp, "teamplanner-2026Q4.json"), final=final)
 
-    def test_cancelled_initiative_is_not_exported(self):
-        rows = self.export(self.scope)
-        self.assertNotIn("2.2", {r["KR"] for r in rows})
+    def kr(self, kid):
+        return next(k for o in self.tp["objectives"] for k in o["krs"] if k["id"] == kid)
 
-    def test_not_taken_initiative_is_not_exported(self):
-        rows = self.export(self.scope)
-        self.assertNotIn("1.3", {r["KR"] for r in rows})
+    def test_valid(self):
+        self.assertEqual(self.lint_tp().errors, [])
 
-    def test_requires_accepted_stages(self):
+    def test_seed_takes_only_initiatives_in_quarter(self):
+        out = os.path.join(self.tmp.name, "seed.json")
+        okr_plan.seed(self.write(self.scope, "scope-2026Q4.json"), out)
+        with open(out, encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual([k["id"] for o in doc["objectives"] for k in o["krs"]], ["1.1", "1.2", "2.1", "3.1"])
+        self.assertEqual(doc["roles"], okr_plan.TP_ROLES)
+        ext = [s for s in doc["objectives"][0]["krs"][0]["steps"] if s["ext"]]
+        self.assertEqual([(s["role"], s["ext"]) for s in ext], [("BE", "partner")])
+        self.assertEqual(doc["status"], "черновик")
+
+    def test_seed_requires_accepted_scope(self):
         self.scope["status"] = "черновик"
         with self.assertRaises(SystemExit):
-            self.export(self.scope)
+            okr_plan.seed(self.write(self.scope, "s.json"), os.path.join(self.tmp.name, "x.json"))
+
+    def test_derived_progress_status_dates(self):
+        kr = self.kr("1.1")
+        self.assertEqual(okr_plan.kr_pct(kr), 23)
+        self.assertEqual(okr_plan.kr_status(kr), "BLOCKED")
+        self.assertEqual(okr_plan.kr_dates(kr), ("2026-10-01", "2026-11-20"))
+        self.assertEqual(okr_plan.kr_status({"steps": [{"status": "DONE"}, {"status": "TODO"}]}), "IN PROGRESS")
+        self.assertIsNone(okr_plan.kr_pct({"steps": []}))
+
+    def test_step_state(self):
+        kr = self.kr("1.2")
+        states = [okr_plan.step_state(self.tp, kr, s) for s in kr["steps"]]
+        self.assertEqual([i + 1 for i, st in enumerate(states) if st["norole"]], [7])
+        self.assertEqual([i + 1 for i, st in enumerate(states) if st["unassigned"]], [6])
+        ext = okr_plan.step_state(self.tp, self.kr("1.1"), self.kr("1.1")["steps"][2])
+        self.assertEqual(ext, {"ext": "partner", "unassigned": False, "norole": False})
+
+    def test_missing_executors_block_acceptance_only(self):
+        rep = self.lint_tp(final=True)
+        self.assertIn("KR 1.2, этап 6: нет исполнителя", rep.errors)
+        self.assertTrue(any("этап 7: нет исполнителя, и роли DOPS нет" in e for e in rep.errors))
+
+    def test_step_values(self):
+        step = self.kr("2.1")["steps"][0]
+        step.update(role="DEV", who="Кто-то", ext="nobody", start="01.10.2026", progress=120)
+        rep = self.lint_tp()
+        for fragment in ("роль 'DEV'", "исполнитель 'Кто-то'", "внешняя команда 'nobody'",
+                         "start — дата", "progress — целое"):
+            self.assertError(rep, fragment)
+
+    def test_dates_order_and_quarter(self):
+        step = self.kr("2.1")["steps"][0]
+        step.update(start="2026-10-20", end="2026-10-10")
+        self.assertError(self.lint_tp(), "начало позже конца")
+        step.update(start="2026-12-20", end="2027-01-15")
+        rep = self.lint_tp()
+        self.assertTrue(any("выходят за квартал 2026Q4" in w for w in rep.warnings))
+
+    def test_every_initiative_in_quarter_is_planned(self):
+        self.tp["objectives"][1]["krs"] = []
+        rep = self.lint_tp(final=True)
+        self.assertIn("KR 2.1 идёт в квартал по Scope, но его нет в TeamPlanner", rep.errors)
+
+    def test_page(self):
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
+        self.assertIn("<title>TEAMPLANNER 2026Q4 — Витрина</title>", page)
+        self.assertIn("без исполнителя 1 · нет роли в команде 2 · внешний ресурс 1", page)
+        self.assertIn('<td class="role">EXT[BE]</td>', page)
+        self.assertIn("<td>внешний ресурс: Биллинг партнёра</td>", page)
+        self.assertEqual(page.count("<tr data-norole>"), 2)
+        data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
+        self.assertEqual(data["doc"], self.tp)
+        self.assertIn('id="tpBar"', page)
+
+    def test_page_escapes(self):
+        self.kr("1.1")["steps"][0]["title"] = "</script><script>alert(1)</script>"
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            self.assertNotIn("<script>alert", f.read())
+
+    def test_csv_rows(self):
+        self.write(self.scope, "scope-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.csv")
+        okr_plan.export_csv(self.write(self.tp, "teamplanner-2026Q4.json"), out)
+        with open(out, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f, delimiter=";"))
+        self.assertEqual(len(rows), 3 + 4 + 17)
+        self.assertEqual(rows[0]["Название"], "OBJ 1 — Продавать подписку без ручных операций")
+        kr = rows[1]
+        self.assertEqual((kr["Название"], kr["Статус"], kr["Прогресс, %"], kr["Начало"], kr["Конец"]),
+                         ("KR 1.1 Биллинг партнёра минуя ручную сверку (общий прогресс)", "Заблокирована", "23",
+                          "2026-10-01", "2026-11-20"))
+        ext = next(r for r in rows if r["Роль"] == "EXT[BE]")
+        self.assertEqual((ext["Название"], ext["Исполнитель"]),
+                         ("Стенд партнёра для тестов (EXT[BE])", "внешний ресурс: Биллинг партнёра"))
+        self.assertEqual(sum(r["Исполнитель"] == "нет роли в команде" for r in rows), 2)
+
 
 
 if __name__ == "__main__":

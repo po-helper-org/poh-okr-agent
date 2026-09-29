@@ -1,0 +1,88 @@
+/* Страница TEAMPLANNER: KR раскрываются в список этапов, этапы правятся прямо на
+   странице. Цвета строк — как в листе TeamPlanner: сиреневый — внешний ресурс,
+   розовый — роли нет в команде, красное поле — исполнитель не выбран. */
+:root{
+  --tp-kr:#cfdcf0;
+  --tp-ext:#efe9f7;
+  --tp-norole:#f6d5d8;
+  --tp-unassigned:#f3b9bf;
+}
+
+.lg{ display:inline-block; padding:0 .45rem; font-family:"Courier New",monospace; font-size:.72rem; border:1px solid var(--line-soft); }
+.lg-ext{ background:var(--tp-ext); }
+.lg-norole{ background:var(--tp-norole); }
+.lg-unassigned{ background:var(--tp-unassigned); }
+
+.tp-bar{ display:flex; flex-wrap:wrap; gap:.5rem .8rem; align-items:center; margin:0 0 1rem;
+  font-family:"Courier New",monospace; font-size:.78rem; }
+.tp-bar label{ display:inline-flex; align-items:center; gap:.35rem; }
+.tp-bar select, .tp-bar button{ font:inherit; font-size:.78rem; padding:.25rem .5rem; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+.tp-bar button.primary{ background:var(--fg); color:var(--bg); }
+.tp-bar .sp{ flex:1 1 auto; }
+.tp-dirty{ border:1px dashed var(--line); background:#fff7d6; padding:.5rem .8rem; margin:0 0 1rem; font-size:.88rem; }
+
+details.tp-load{ margin:0 0 1.2rem; border:1px solid var(--line-soft); padding:.5rem .8rem; }
+details.tp-load > summary{ cursor:pointer; font-family:"Courier New",monospace; font-size:.8rem; }
+details.tp-load table{ margin:.6rem 0 .4rem; width:auto; min-width:60%; }
+details.tp-load td.num{ text-align:right; font-family:"Courier New",monospace; }
+details.tp-load tr.warn td{ background:var(--tp-norole); }
+
+h3.tp-obj{ background:#dfe7f5; border-top:2px solid var(--line); margin:1.6rem 0 .6rem; padding:.45rem .6rem; font-size:.95rem; }
+
+details.kr{ border:1px solid var(--line-soft); margin:0 0 .7rem; background:var(--bg); }
+details.kr[hidden]{ display:none; }
+details.kr > summary{ list-style:none; cursor:pointer; background:var(--tp-kr); padding:.55rem .7rem; display:flex; flex-wrap:wrap; gap:.3rem .7rem; align-items:baseline; }
+details.kr > summary::-webkit-details-marker{ display:none; }
+details.kr > summary::before{ content:"▸"; font-size:.8rem; }
+details.kr[open] > summary::before{ content:"▾"; }
+.kr-id{ font-family:"Courier New",monospace; font-weight:bold; white-space:nowrap; }
+.kr-title{ font-weight:bold; flex:1 1 18rem; min-width:0; }
+.kr-meta{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); display:flex; flex-wrap:wrap; gap:.2rem .7rem; align-items:center; }
+.kr-flag{ font-family:"Courier New",monospace; font-size:.7rem; background:var(--tp-unassigned); padding:0 .35rem; }
+.kr-flag.ok{ background:transparent; color:var(--muted); }
+.pbar{ display:inline-block; width:4.5rem; height:8px; border:1px solid var(--line-soft); background:var(--bg); vertical-align:middle; }
+.pbar i{ display:block; height:100%; background:#57bb8a; }
+.stb{ display:inline-block; padding:0 .35rem; border:1px solid var(--line-soft); background:var(--bg); }
+.stb[data-s="IN PROGRESS"]{ background:#fff1c2; }
+.stb[data-s="BLOCKED"]{ background:#f6c1c1; }
+.stb[data-s="DONE"]{ background:#d4eedd; }
+.kr-comment{ margin:.5rem .7rem .2rem; font-size:.88rem; color:var(--muted); cursor:pointer; }
+.kr-comment:hover{ color:var(--fg); }
+button.note-btn{ font:inherit; font-size:.8rem; border:1px solid var(--line-soft); background:var(--bg); cursor:pointer; padding:.05rem .4rem; }
+button.note-btn[data-has]{ border-color:var(--fg); font-weight:bold; }
+
+table.tp{ table-layout:fixed; min-width:960px; margin:.4rem 0 .3rem; font-size:.82rem; }
+table.tp th, table.tp td{ padding:.25rem .3rem; vertical-align:middle; border-left:0; border-right:0; }
+table.tp col.c-n{ width:3.4rem; } table.tp col.c-role{ width:5.2rem; } table.tp col.c-ext{ width:8.5rem; }
+table.tp col.c-who{ width:11rem; } table.tp col.c-d{ width:8.4rem; } table.tp col.c-st{ width:8.2rem; }
+table.tp col.c-p{ width:3.6rem; } table.tp col.c-b{ width:2.2rem; }
+table.tp td.n{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); white-space:nowrap; }
+table.tp input, table.tp select{ width:100%; font:inherit; font-size:.8rem; padding:.2rem .25rem; border:1px solid var(--line-soft); background:transparent; }
+table.tp input:focus, table.tp select:focus{ outline:2px solid var(--link); outline-offset:-1px; background:var(--bg); }
+table.tp select.role{ font-family:"Courier New",monospace; font-weight:bold; }
+table.tp tr[data-ext] td{ background:var(--tp-ext); }
+table.tp tr[data-norole] td{ background:var(--tp-norole); }
+table.tp tr[data-unassigned] select.who{ background:var(--tp-unassigned); }
+table.tp .extname{ font-family:"Courier New",monospace; font-size:.74rem; }
+table.tp tr[hidden]{ display:none; }
+table.tp select.st[data-s="IN PROGRESS"]{ background:#fff1c2; }
+table.tp select.st[data-s="BLOCKED"]{ background:#f6c1c1; }
+table.tp select.st[data-s="DONE"]{ background:#d4eedd; }
+button.del{ font:inherit; border:0; background:none; cursor:pointer; color:var(--faint); font-size:1rem; }
+button.del:hover{ color:#a33; }
+button.add{ font:inherit; font-family:"Courier New",monospace; font-size:.76rem; margin:.1rem .7rem .7rem; border:1px dashed var(--line); background:var(--bg); padding:.2rem .6rem; cursor:pointer; }
+
+table.tp-static{ font-size:.82rem; }
+table.tp-static tr[data-ext] td{ background:var(--tp-ext); }
+table.tp-static tr[data-norole] td{ background:var(--tp-norole); }
+.muted{ color:var(--muted); font-size:.8rem; }
+
+#sideForm label{ display:block; font-weight:bold; font-size:.9rem; margin:.9rem 0 .3rem; }
+#sideForm label small{ font-weight:normal; color:var(--muted); }
+#sideForm textarea, #sideForm select{ width:100%; font:inherit; font-size:.9rem; border:1px solid var(--line-soft); padding:.4rem .5rem; }
+#sideForm textarea{ min-height:5.5rem; resize:vertical; }
+#sideForm .ctx{ font-size:.85rem; color:var(--muted); margin:.2rem 0 0; }
+
+@media print{
+  .tp-bar, .tp-dirty, button.add, button.del, button.note-btn{ display:none; }
+}

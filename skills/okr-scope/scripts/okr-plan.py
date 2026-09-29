@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope, выгрузка TeamPlanner.
+"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, выгрузка CSV.
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
   okr-plan.py render <file.json> <out.html>
-  okr-plan.py teamplanner <scope.json> <out.csv>
+  okr-plan.py seed <scope.json> <teamplanner.json>    заготовка TeamPlanner из принятого Scope
+  okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
 
 Источник истины — JSON. HTML и CSV всегда пересобираются из него, руками не правятся.
 Только стандартная библиотека Python.
@@ -32,16 +33,18 @@ TAGS = ["", "RESEARCH", "POC", "BUG", "ACTIVITY"]
 STATUSES = ["черновик", "принято"]
 PHASES = ["scope", "stages"]
 DEFAULT_ROLES = ["PO", "SA", "BE", "FE", "ADR"]
+# TeamPlanner — полный операционный цикл: подготовка и согласования → архитектура →
+# аналитика → разработка → тестирование → инфраструктура → выкатка.
+# Внешний ресурс — не роль, а ext у этапа: EXT[BE] = BE-работа смежной команды.
+TP_ROLES = ["PO", "ADR", "SA", "BA", "BE", "FE", "QA", "DOPS", "RM"]
+STATUS_RU = {"TODO": "Не начата", "IN PROGRESS": "В процессе", "BLOCKED": "Заблокирована", "DONE": "Готово"}
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 QUARTER_RE = re.compile(r"^\d{4}Q[1-4]$")
 KR_ID_RE = re.compile(r"^\d+(\.\d+)+$")
 UNSURE_RE = re.compile(r"\[УТОЧНИТЬ[^\]\n]*\]")
 
-TEAMPLANNER_COLUMNS = [
-    "№", "Программа (OBJ)", "KR", "Инициатива", "PBV", "Тег", "Команды",
-    "Этап №", "Роль", "Внешняя команда", "Этап", "Условия", "Риски",
-    "Зависимости", "Неопределённости",
-    "Ресурс (заполняет техлид)", "Сроки (заполняет техлид)", "Комментарий техлида",
-]
+TEAMPLANNER_COLUMNS = ["Название", "Комментарий", "Роль", "Исполнитель", "Начало", "Конец",
+                       "Статус", "Прогресс, %", "Образ результата", "Образ действия"]
 
 
 def text(value):
@@ -446,8 +449,10 @@ def lint(path, final=False, retro_path=None):
         lint_retro(doc, rep)
     elif kind == "scope":
         lint_scope(doc, rep, resolve_retro(doc, path, retro_path))
+    elif kind == "teamplanner":
+        lint_teamplanner(doc, rep, path)
     else:
-        rep.error("kind: ожидается 'retro' или 'scope'")
+        rep.error("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     return rep
 
 
@@ -799,67 +804,356 @@ def render(path, out):
         page_html = render_retro(doc, path)
     elif doc.get("kind") == "scope":
         page_html = render_scope(doc, path, resolve_retro(doc, path, None))
+    elif doc.get("kind") == "teamplanner":
+        page_html = render_teamplanner(doc, path)
     else:
-        raise SystemExit("kind: ожидается 'retro' или 'scope'")
+        raise SystemExit("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     with open(out, "w", encoding="utf-8") as f:
         f.write(page_html)
 
 
-# ---------------------------------------------------------------- TeamPlanner
+# ---------------------------------------------------------------- TeamPlanner: данные
 
-def teamplanner(path, out):
-    doc = load(path)
-    if doc.get("kind") != "scope" or doc.get("phase") != "stages" or doc.get("status") != "принято":
-        raise SystemExit("TeamPlanner собирается только из принятого Scope с декомпозицией "
-                         "(kind=scope, phase=stages, status=принято)")
-    rep = lint(path)
-    if rep.errors:
-        raise SystemExit("Scope не проходит проверку: " + "; ".join(rep.errors))
-    teams = {text(t.get("id")): t for t in doc.get("teams") or []}
-    rows = []
+def tp_krs(doc):
     for obj in doc.get("objectives") or []:
-        program = f'OBJ {text(obj.get("id"))}. {text(obj.get("title"))}'
+        for kr in obj.get("krs") or []:
+            yield obj, kr
+
+
+def tp_teams(doc):
+    return {text(t.get("id")): t for t in doc.get("teams") or []}
+
+
+def tp_people(doc, team_ids=None):
+    """Люди своих (не внешних) команд; team_ids — только эти команды."""
+    out = []
+    for tid, team in tp_teams(doc).items():
+        if team.get("external") or (team_ids is not None and tid not in team_ids):
+            continue
+        out += [dict(p, team=tid) for p in team.get("people") or []]
+    return out
+
+
+def step_state(doc, kr, step):
+    """Производные признаки этапа. Внешний ресурс — делает смежная команда. Без
+    исполнителя: norole — такой роли в командах KR нет вовсе (ресурс искать извне),
+    unassigned — роль есть, человека ещё не выбрали."""
+    ext = text(step.get("ext"))
+    if ext or text(step.get("who")):
+        return {"ext": ext, "unassigned": False, "norole": False}
+    roles_here = {text(p.get("role")) for p in tp_people(doc, kr.get("teams") or [])}
+    norole = text(step.get("role")) not in roles_here
+    return {"ext": "", "unassigned": not norole, "norole": norole}
+
+
+def step_pct(step):
+    if is_int(step.get("progress")):
+        return step["progress"]
+    return 100 if text(step.get("status")) == "DONE" else 0
+
+
+def kr_pct(kr):
+    steps = kr.get("steps") or []
+    return half_up(sum(step_pct(s) for s in steps) / len(steps)) if steps else None
+
+
+def kr_status(kr):
+    statuses = [text(s.get("status")) or "TODO" for s in kr.get("steps") or []]
+    if statuses and all(st == "DONE" for st in statuses):
+        return "DONE"
+    if "BLOCKED" in statuses:
+        return "BLOCKED"
+    if any(st in ("IN PROGRESS", "DONE") for st in statuses):
+        return "IN PROGRESS"
+    return "TODO"
+
+
+def kr_dates(kr):
+    starts = [text(s.get("start")) for s in kr.get("steps") or [] if text(s.get("start"))]
+    ends = [text(s.get("end")) for s in kr.get("steps") or [] if text(s.get("end"))]
+    return (min(starts) if starts else "", max(ends) if ends else "")
+
+
+def who_text(doc, kr, step):
+    st = step_state(doc, kr, step)
+    if st["ext"]:
+        team = tp_teams(doc).get(st["ext"], {})
+        return f"внешний ресурс: {text(team.get('name') or st['ext'])}"
+    if text(step.get("who")):
+        return text(step.get("who"))
+    return "нет роли в команде" if st["norole"] else ""
+
+
+def role_text(doc, step):
+    ext = text(step.get("ext"))
+    if not ext:
+        return text(step.get("role"))
+    return f"EXT[{text(step.get('role'))}]"
+
+
+def quarter_bounds(quarter):
+    m = QUARTER_RE.match(quarter or "")
+    if not m:
+        return None
+    year, q = int(quarter[:4]), int(quarter[-1])
+    start = f"{year}-{3 * q - 2:02d}-01"
+    end = f"{year}-{3 * q:02d}-{[31, 30, 30, 31][q - 1]}"
+    return start, end
+
+
+# ---------------------------------------------------------------- TeamPlanner: заготовка из Scope
+
+def seed(scope_path, out):
+    scope = load(scope_path)
+    if scope.get("kind") != "scope" or scope.get("status") != "принято":
+        raise SystemExit("Заготовка TeamPlanner собирается только из принятого Scope (kind=scope, status=принято)")
+    teams = [dict({k: v for k, v in t.items() if k in ("id", "name", "external")}, people=[])
+             for t in scope.get("teams") or []]
+    external = [text(t.get("id")) for t in scope.get("teams") or [] if t.get("external")]
+    objectives = []
+    for obj in scope.get("objectives") or []:
+        krs = []
         for ini in obj.get("initiatives") or []:
-            if not taken(ini):
+            if cancelled(ini) or ini.get("in_quarter") is not True:
                 continue
             notes = ini.get("notes") or {}
-            head = {
-                "Программа (OBJ)": program,
-                "KR": text(ini.get("id")),
-                "Инициатива": text(ini.get("title")),
-                "PBV": text(ini.get("pbv")),
-                "Тег": text(ini.get("tag")),
-                "Команды": ", ".join(text(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or []),
-            }
-            extra = {
-                "Условия": "; ".join(text(c) for c in notes.get("conditions") or []),
-                "Риски": "; ".join(f"[RISK] {text(r)}" for r in notes.get("risks") or []),
-                "Зависимости": "; ".join(text(d) for d in notes.get("dependencies") or []),
-                "Неопределённости": "; ".join(text(u) for u in notes.get("uncertainties") or []),
-            }
-            stages = notes.get("stages") or [{}]
-            for n, stage in enumerate(stages, 1):
-                row = dict(head)
-                if stage:
-                    row.update({"Этап №": f"{text(ini.get('id'))}.{n}", "Роль": text(stage.get("role")),
-                                "Внешняя команда": "да" if stage.get("ext") else "",
-                                "Этап": text(stage.get("title"))})
-                if n == 1:
-                    row.update(extra)
-                rows.append(row)
+            ext_team = next((t for t in ini.get("teams") or [] if t in external), "")
+            steps = [{"role": text(st.get("role")), "title": text(st.get("title")),
+                      "ext": ext_team if st.get("ext") else "", "who": "", "start": "", "end": "",
+                      "status": text(st.get("status")) or "TODO", "result": "", "action": "", "comment": ""}
+                     for st in notes.get("stages") or []]
+            context = [f"Риск: {text(r)}" for r in notes.get("risks") or []]
+            context += [f"Зависимость: {text(d)}" for d in notes.get("dependencies") or []]
+            krs.append({"id": text(ini.get("id")), "title": text(ini.get("title")), "pbv": ini.get("pbv"),
+                        "tag": text(ini.get("tag")), "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
+                        "result": text(ini.get("result")), "comment": "; ".join(context), "steps": steps})
+        if krs:
+            objectives.append({"id": text(obj.get("id")), "title": text(obj.get("title")), "krs": krs})
+    doc = {"kind": "teamplanner", "quarter": scope.get("quarter"), "team": scope.get("team"),
+           "po": scope.get("po"), "status": "черновик", "updated": scope.get("updated"),
+           "scope": {"file": os.path.basename(scope_path)}, "roles": TP_ROLES,
+           "teams": teams, "objectives": objectives}
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return sum(len(o["krs"]) for o in objectives)
+
+
+# ---------------------------------------------------------------- TeamPlanner: проверка
+
+def lint_teamplanner(doc, rep, path):
+    quarter = text(doc.get("quarter"))
+    if not QUARTER_RE.match(quarter):
+        rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
+    if not text(doc.get("team")):
+        rep.gate("team: не указана команда")
+    roles = doc.get("roles") or TP_ROLES
+    teams = tp_teams(doc)
+    if not teams or "" in teams or len(teams) != len(doc.get("teams") or []):
+        rep.error("teams: у каждой команды нужен уникальный id")
+    names = set()
+    for tid, team in teams.items():
+        for n, person in enumerate(team.get("people") or [], 1):
+            if not text(person.get("name")) or not text(person.get("role")):
+                rep.error(f"команда {tid}, человек {n}: нужны name и role")
+            names.add(text(person.get("name")))
+    bounds = quarter_bounds(quarter)
+
+    seen = set()
+    for obj, kr in tp_krs(doc):
+        kid = text(kr.get("id"))
+        where = f"KR {kid or '?'}"
+        if not KR_ID_RE.match(kid) or not kid.startswith(text(obj.get("id")) + "."):
+            rep.error(f"{where}: id должен иметь вид {text(obj.get('id'))}.N")
+        if kid in seen:
+            rep.error(f"{where}: id повторяется")
+        seen.add(kid)
+        for tid in kr.get("teams") or []:
+            if tid not in teams:
+                rep.error(f"{where}: команда {tid!r} не описана в teams")
+        steps = kr.get("steps") or []
+        if not steps and kr.get("tag") != "ACTIVITY":
+            rep.gate(f"{where}: нет ни одного этапа")
+        for n, step in enumerate(steps, 1):
+            at = f"{where}, этап {n}"
+            if text(step.get("role")) not in roles:
+                rep.error(f"{at}: роль {step.get('role')!r} не из {roles}")
+            if not text(step.get("title")):
+                rep.error(f"{at}: нет названия")
+            if (text(step.get("status")) or "TODO") not in STEP_STATUSES:
+                rep.error(f"{at}: status — одно из {STEP_STATUSES}")
+            ext = text(step.get("ext"))
+            if ext and ext not in teams:
+                rep.error(f"{at}: внешняя команда {ext!r} не описана в teams")
+            elif ext and not teams[ext].get("external"):
+                rep.warn(f"{at}: команда {ext!r} указана как внешний ресурс, но не помечена external")
+            who = text(step.get("who"))
+            if who and who not in names:
+                rep.error(f"{at}: исполнитель {who!r} не найден в составе команд")
+            progress = step.get("progress")
+            if progress is not None and (not is_int(progress) or not 0 <= progress <= 100):
+                rep.error(f"{at}: progress — целое 0..100")
+            for key in ("start", "end"):
+                if text(step.get(key)) and not DATE_RE.match(text(step.get(key))):
+                    rep.error(f"{at}: {key} — дата ГГГГ-ММ-ДД")
+            start, end = text(step.get("start")), text(step.get("end"))
+            if start and end and DATE_RE.match(start) and DATE_RE.match(end):
+                if start > end:
+                    rep.error(f"{at}: начало позже конца")
+                if bounds and (start < bounds[0] or end > bounds[1]):
+                    rep.warn(f"{at}: сроки выходят за квартал {quarter}")
+            state = step_state(doc, kr, step)
+            if state["norole"]:
+                rep.gate(f"{at}: нет исполнителя, и роли {text(step.get('role'))} нет в командах KR — нужен ресурс извне")
+            elif state["unassigned"]:
+                rep.gate(f"{at}: нет исполнителя")
+
+    scope_file = text((doc.get("scope") or {}).get("file"))
+    if scope_file:
+        candidate = os.path.join(os.path.dirname(os.path.abspath(path)), scope_file)
+        if not os.path.exists(candidate):
+            rep.gate(f"scope: файл {scope_file} не найден рядом с TeamPlanner")
+        else:
+            scope = load(candidate)
+            planned = {text(i.get("id")) for o in scope.get("objectives") or []
+                       for i in o.get("initiatives") or [] if taken(i) and i.get("in_quarter") is True}
+            for kid in sorted(planned - seen):
+                rep.gate(f"KR {kid} идёт в квартал по Scope, но его нет в TeamPlanner")
+            for kid in sorted(seen - planned):
+                rep.warn(f"KR {kid} нет среди взятых в квартал инициатив Scope")
+
+
+# ---------------------------------------------------------------- TeamPlanner: HTML
+
+def tp_summary(doc):
+    steps = [(kr, s) for _, kr in tp_krs(doc) for s in kr.get("steps") or []]
+    states = [step_state(doc, kr, s) for kr, s in steps]
+    return {"krs": sum(1 for _ in tp_krs(doc)), "steps": len(steps),
+            "unassigned": sum(1 for st in states if st["unassigned"]),
+            "norole": sum(1 for st in states if st["norole"]),
+            "ext": sum(1 for st in states if st["ext"])}
+
+
+def tp_static(doc):
+    """Та же таблица без JS: читается и печатается, если скрипт не запустился."""
+    teams = tp_teams(doc)
+    parts = []
+    for obj in doc.get("objectives") or []:
+        parts.append(f'<h3 class="tp-obj">OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</h3>')
+        for kr in obj.get("krs") or []:
+            start, end = kr_dates(kr)
+            pct = kr_pct(kr)
+            rows = []
+            for n, step in enumerate(kr.get("steps") or [], 1):
+                st = step_state(doc, kr, step)
+                flags = (" data-ext" if st["ext"] else "") + (" data-norole" if st["norole"] else "") \
+                    + (" data-unassigned" if st["unassigned"] else "")
+                rows.append(f'<tr{flags}><td class="n">{esc(kr.get("id"))}.{n}</td>'
+                            f'<td class="role">{esc(role_text(doc, step))}</td>'
+                            f'<td>{esc_unc(step.get("title"))}</td><td>{esc(who_text(doc, kr, step)) or "—"}</td>'
+                            f'<td class="d">{esc(step.get("start")) or "—"}</td><td class="d">{esc(step.get("end")) or "—"}</td>'
+                            f'<td>{esc(STATUS_RU.get(text(step.get("status")) or "TODO"))}</td></tr>')
+            team_names = ", ".join(text(teams.get(t, {}).get("name") or t) for t in kr.get("teams") or [])
+            parts.append(
+                f'<details class="kr" open><summary><b>KR {esc(kr.get("id"))}</b> {esc_unc(kr.get("title"))} '
+                f'{pbv_cell(kr.get("pbv"))} <span class="muted">{esc(team_names)} · {esc(kr.get("owner"))} · '
+                f'{esc(start) or "—"} — {esc(end) or "—"} · {esc(STATUS_RU[kr_status(kr)])} · '
+                f'{"—" if pct is None else str(pct) + " %"}</span></summary>'
+                + (f'<p class="muted">{esc_unc(kr.get("comment"))}</p>' if text(kr.get("comment")) else "")
+                + '<div class="table-wrap"><table class="tp-static"><thead><tr><th>№</th><th>Роль</th><th>Этап</th>'
+                  '<th>Исполнитель</th><th>Начало</th><th>Конец</th><th>Статус</th></tr></thead><tbody>'
+                + "".join(rows) + "</tbody></table></div></details>")
+    return "\n".join(parts)
+
+
+def render_teamplanner(doc, source):
+    quarter, team = text(doc.get("quarter")), text(doc.get("team"))
+    title = f"TEAMPLANNER {quarter}" + (f" — {team}" if team else "")
+    sm = tp_summary(doc)
+    quote = [
+        f"KR {sm['krs']} · этапов {sm['steps']} · без исполнителя {sm['unassigned']} · "
+        f"нет роли в команде {sm['norole']} · внешний ресурс {sm['ext']}.",
+        "Роли: PO — подготовка и согласования · ADR — архитектура · SA — системная аналитика · "
+        "BA — бизнес-аналитика · BE — бэкенд · FE — фронтенд · QA — тестирование · DOPS — инфраструктура · "
+        "RM — выкатка · EXT[роль] — внешний ресурс.",
+        '<span class="lg lg-ext">внешний ресурс</span> <span class="lg lg-norole">нет роли в команде</span> '
+        '<span class="lg lg-unassigned">нет исполнителя</span>',
+    ]
+    if text((doc.get("scope") or {}).get("file")):
+        quote.insert(1, f"Scope: {esc((doc.get('scope') or {}).get('file'))}.")
+    data = json.dumps({"file": os.path.basename(source), "doc": doc, "roles": doc.get("roles") or TP_ROLES,
+                       "statuses": STATUS_RU}, ensure_ascii=False).replace("<", "\\u003c")
+    body = "\n".join([
+        '<div class="layout wide"><main>',
+        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, "ресурсы и этапы")}</p></div>',
+        f'<blockquote class="quote">{"<br>".join(quote)}</blockquote>',
+        '<div class="tp-bar" id="tpBar"></div>',
+        '<div class="tp-dirty" id="tpDirty" hidden></div>',
+        '<details class="tp-load" id="tpLoad"><summary>Нагрузка по людям и ролям</summary><div id="tpLoadBody"></div></details>',
+        f'<div id="tp">{tp_static(doc)}</div>',
+        '</main></div>',
+        '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
+        '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
+        '<h3 class="side-title" id="sideTitle"></h3><div id="sideForm"></div>'
+        '<p class="hintline">Правки сохраняются в этом браузере. Чтобы они попали в документ — '
+        '«Скачать JSON» и отдать файл агенту.</p></div>',
+        f'<script type="application/json" id="page-data">{data}</script>',
+        f'<script>{asset("teamplanner.js")}</script>',
+    ])
+    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n'
+            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
+            f'<style>\n{asset("page.css")}{asset("teamplanner.css")}</style>\n</head>\n<body>\n{body}\n</body>\n</html>\n')
+
+
+# ---------------------------------------------------------------- TeamPlanner: CSV
+
+def tp_rows(doc):
+    """Строки таблицы в порядке листа TeamPlanner: цель, KR (общий прогресс), этапы.
+    Та же логика — в teamplanner.js (кнопка «Скопировать для Google Sheets»)."""
+    rows = []
+    for obj in doc.get("objectives") or []:
+        rows.append({"Название": f"OBJ {text(obj.get('id'))} — {text(obj.get('title'))}"})
+        for kr in obj.get("krs") or []:
+            start, end = kr_dates(kr)
+            pct = kr_pct(kr)
+            tag = text(kr.get("tag"))
+            rows.append({"Название": f"KR {text(kr.get('id'))} " + (f"[{tag}] " if tag else "")
+                                     + f"{text(kr.get('title'))} (общий прогресс)",
+                         "Комментарий": "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment"))) if x),
+                         "Исполнитель": text(kr.get("owner")), "Начало": start, "Конец": end,
+                         "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct})
+            for step in kr.get("steps") or []:
+                rows.append({"Название": f"{text(step.get('title'))} ({role_text(doc, step)})",
+                             "Комментарий": text(step.get("comment")), "Роль": role_text(doc, step),
+                             "Исполнитель": who_text(doc, kr, step),
+                             "Начало": text(step.get("start")), "Конец": text(step.get("end")),
+                             "Статус": STATUS_RU.get(text(step.get("status")) or "TODO", ""),
+                             "Прогресс, %": step_pct(step),
+                             "Образ результата": text(step.get("result")), "Образ действия": text(step.get("action"))})
+    return rows
+
+
+def export_csv(path, out):
+    doc = load(path)
+    if doc.get("kind") != "teamplanner":
+        raise SystemExit("csv собирается из TeamPlanner (kind=teamplanner)")
+    rep = lint(path)
+    if rep.errors:
+        raise SystemExit("TeamPlanner не проходит проверку: " + "; ".join(rep.errors))
+    rows = tp_rows(doc)
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TEAMPLANNER_COLUMNS, delimiter=";", restval="")
         writer.writeheader()
-        for n, row in enumerate(rows, 1):
-            row["№"] = n
-            writer.writerow(row)
+        writer.writerows(rows)
     return len(rows)
 
 
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("lint", "render", "teamplanner"):
+    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv"):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd, path = argv[0], argv[1]
@@ -882,7 +1176,11 @@ def main(argv):
         render(path, argv[2])
         print(f"Written {argv[2]}")
         return 0
-    count = teamplanner(path, argv[2])
+    if cmd == "seed":
+        count = seed(path, argv[2])
+        print(f"Written {argv[2]} ({count} KR)")
+        return 0
+    count = export_csv(path, argv[2])
     print(f"Written {argv[2]} ({count} строк)")
     return 0
 

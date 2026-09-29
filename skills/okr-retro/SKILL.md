@@ -59,9 +59,10 @@ HTML руками.
 
 Проверь `.okr/<quarter>/plan/`:
 
-1. `scope-<quarter>.json` со `status: принято` и `phase: stages` → планирование
-   дошло до этапа 4. Скажи это и предложи `/okr-teamplanner <quarter>`.
-2. `scope-<quarter>.json` принят, `phase: scope` → предложи `/okr-stages <quarter>`.
+1. `teamplanner-<quarter>.json` есть → планирование на этапе 4: предложи
+   продолжить `/okr-teamplanner <quarter>` (принят — скажи, что квартал спланирован).
+2. `scope-<quarter>.json` принят → предложи `/okr-teamplanner <quarter>`;
+   `/okr-stages <quarter>` — по желанию, если нужны риски и условия в ПЛАН.
 3. `scope-<quarter>.json` есть, не принят → предложи продолжить: при
    `phase: stages` — `/okr-stages <quarter>`, иначе `/okr-scope <quarter>`.
 4. `retro-<prev>.json` принят → ретро готово, предложи `/okr-scope <quarter>`.
