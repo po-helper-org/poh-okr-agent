@@ -381,7 +381,6 @@ class TeamPlanner(Case):
         with open(out, encoding="utf-8") as f:
             page = f.read()
         self.assertIn("<title>TEAMPLANNER 2026Q4 — Витрина</title>", page)
-        self.assertIn("подзадач 17 · без исполнителя 3", page)
         self.assertIn('<li><span class="t">EXT[BE]</span> Стенд партнёра для тестов — внешний ресурс: Биллинг партнёра</li>', page)
         self.assertEqual(page.count("— нет роли в команде</li>"), 2)
         data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
@@ -389,8 +388,25 @@ class TeamPlanner(Case):
         self.assertIn('id="tpDrawer"', page)
         self.assertIn('id="tpPeople"', page)
 
+    def test_details_rich_text(self):
+        note = ('<h3>Образ действия</h3><p onclick="x()">Две <b>встречи</b><script>alert(1)</script></p>'
+                '<ul><li>раз</li><li>два</li></ul><div>ещё<br>строка</div><img src=x onerror=alert(2)>')
+        self.assertEqual(okr_plan.rich_html(note),
+                         "<h3>Образ действия</h3><p>Две <b>встречи</b></p><ul><li>раз</li><li>два</li></ul>"
+                         "<p>ещё<br>строка</p>")
+        self.assertEqual(okr_plan.rich_text(note), "Образ действия\nДве встречи\n- раз\n- два\nещё\nстрока")
+
+    def test_details_markup_is_checked_and_exported(self):
+        self.kr("1.1")["details"] = '<p style="color:red">x</p>'
+        self.assertError(self.lint_tp(), "KR 1.1: в details недопустимая разметка")
+        self.kr("1.1")["details"] = "<h3>Дополнительно</h3><p>Граница: без скидок</p>"
+        self.assertEqual(self.lint_tp().errors, [])
+        rows = okr_plan.tp_rows(self.tp)
+        self.assertTrue(rows[1]["Комментарий"].endswith("Дополнительно\nГраница: без скидок"))
+
     def test_page_escapes(self):
         self.kr("1.1")["steps"][0]["title"] = "</script><script>alert(1)</script>"
+        self.kr("1.1")["details"] = "<p>ok</p><script>alert(1)</script>"
         path = self.write(self.tp, "teamplanner-2026Q4.json")
         out = os.path.join(self.tmp.name, "tp.html")
         okr_plan.render(path, out)

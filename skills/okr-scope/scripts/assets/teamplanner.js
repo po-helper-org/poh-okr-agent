@@ -72,6 +72,39 @@
     if(s.who) return s.who;
     return st.norole ? "нет роли в команде" : "";
   }
+  /* Заметка KR («Детальнее»): только эти теги, без атрибутов — как RICH_TAGS в okr-plan.py. */
+  var RICH = {H3: "h3", P: "p", DIV: "p", B: "b", STRONG: "strong", I: "i", EM: "em", UL: "ul", OL: "ol", LI: "li", BR: "br"};
+  var DROP = {SCRIPT: 1, STYLE: 1, TEMPLATE: 1, IFRAME: 1, OBJECT: 1};
+  var BLOCKS = {H3: 1, P: 1, UL: 1, OL: 1, LI: 1, DIV: 1};
+  function richClean(node){
+    var out = "";
+    node.childNodes.forEach(function(n){
+      if(n.nodeType === 3){ out += esc(n.data); return; }
+      if(n.nodeType !== 1 || DROP[n.tagName]) return;
+      var tag = RICH[n.tagName];
+      if(tag === "br"){ out += "<br>"; return; }
+      out += tag ? "<" + tag + ">" + richClean(n) + "</" + tag + ">" : richClean(n);
+    });
+    return out;
+  }
+  function parse(html){ var t = document.createElement("template"); t.innerHTML = html || ""; return t.content; }
+  /* Простым текстом для таблицы — то же правило, что rich_text в okr-plan.py. */
+  function richText(html){
+    var out = "";
+    (function walk(node){
+      node.childNodes.forEach(function(n){
+        if(n.nodeType === 3){ out += n.data; return; }
+        if(n.nodeType !== 1 || DROP[n.tagName]) return;
+        if(n.tagName === "BR"){ out += "\n"; return; }
+        out += n.tagName === "LI" ? "\n- " : BLOCKS[n.tagName] ? "\n" : "";
+        walk(n);
+        if(BLOCKS[n.tagName]) out += "\n";
+      });
+    })(parse(html));
+    return out.split("\n").map(function(l){ return l.trim(); }).filter(Boolean).join("\n");
+  }
+  var TEMPLATE = "<h3>Образ действия</h3><p><br></p><h3>Образ результата</h3><p><br></p><h3>Дополнительно</h3><p><br></p>";
+
   function tableRows(){
     var rows = [];
     (doc.objectives || []).forEach(function(o){
@@ -79,7 +112,7 @@
       (o.krs || []).forEach(function(kr){
         var d = krDates(kr), pct = krPct(kr);
         rows.push({"Название": "KR " + kr.id + " " + (kr.tag ? "[" + kr.tag + "] " : "") + kr.title + " (общий прогресс)",
-                   "Комментарий": [kr.result, kr.comment].filter(Boolean).join("\n"),
+                   "Комментарий": [kr.result, kr.comment, richText(kr.details)].filter(Boolean).join("\n"),
                    "Исполнитель": kr.owner || "", "Начало": d[0], "Конец": d[1],
                    "Статус": ST[krStatus(kr)], "Прогресс, %": pct == null ? "" : pct});
         (kr.steps || []).forEach(function(s){
@@ -131,7 +164,9 @@
     var open = (kr.steps || []).filter(function(s){ var st = state(kr, s); return st.unassigned || st.norole; }).length;
     return '<details class="kr" data-kr="' + esc(kr.id) + '"' + (opened[kr.id] ? " open" : "") + ">"
       + '<summary><span class="kr-id">' + esc(kr.id) + '</span><span class="kr-title">' + esc(kr.title) + "</span>"
-      + '<span class="kr-count">' + n + (open ? ' · <b>без исполнителя ' + open + "</b>" : "") + "</span></summary>"
+      + '<span class="kr-count">' + n + (open ? ' · <b>без исполнителя ' + open + "</b>" : "") + "</span>"
+      + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
+      + esc(kr.id) + '">Детальнее</button></summary>'
       + '<div class="steps">' + (kr.steps || []).map(function(s, i){ return stepRow(kr, s, i); }).join("") + "</div>"
       + '<button type="button" class="add" data-act="add" data-kr="' + esc(kr.id) + '">+ подзадача</button></details>';
   }
@@ -217,7 +252,9 @@
   });
 
   var tp = document.getElementById("tp"), list = document.getElementById("tpObjs");
-  var drawer = document.getElementById("tpDrawer"), tab = document.getElementById("tpTab");
+  var tab = document.getElementById("tpTab");
+  var drawers = [].slice.call(document.querySelectorAll(".drawer"));
+  var tabs = [].slice.call(document.querySelectorAll(".rail-tab"));
 
   function render(){
     var active = document.activeElement, key = active && active.getAttribute && active.getAttribute("data-k");
@@ -238,23 +275,30 @@
     return hit;
   }
 
-  function setDrawer(open){
-    drawer.classList.toggle("open", open);
-    document.body.classList.toggle("drawer-open", open);
+  /* Две панели слева — «Цели» и «Команда»; открыта не больше одной. */
+  function setDrawer(id){
+    drawers.forEach(function(d){ d.classList.toggle("open", d.id === id); });
+    tabs.forEach(function(t){ t.classList.toggle("on", t.getAttribute("data-drawer") === id); });
+    document.body.classList.toggle("drawer-open", !!id);
   }
-  tab.onclick = function(){ setDrawer(!drawer.classList.contains("open")); };
-  document.getElementById("tpDrawerClose").onclick = function(){ setDrawer(false); };
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") setDrawer(false); });
+  tabs.forEach(function(t){
+    t.onclick = function(){
+      var id = t.getAttribute("data-drawer");
+      setDrawer(document.getElementById(id).classList.contains("open") ? null : id);
+    };
+  });
+  drawers.forEach(function(d){ d.querySelector(".drawer-close").onclick = function(){ setDrawer(null); }; });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") setDrawer(null); });
   document.addEventListener("click", function(e){
-    if(!e.target.isConnected) return;
-    if(drawer.classList.contains("open") && !drawer.contains(e.target) && e.target !== tab) setDrawer(false);
+    if(!e.target.isConnected || !document.body.classList.contains("drawer-open")) return;
+    if(!drawers.some(function(d){ return d.contains(e.target); }) && tabs.indexOf(e.target) < 0) setDrawer(null);
   });
   list.addEventListener("click", function(e){
     var b = e.target.closest("[data-obj]");
     if(!b) return;
     cur = +b.getAttribute("data-obj");
     history.replaceState(null, "", "#obj=" + encodeURIComponent(objs[cur].id));
-    setDrawer(false);
+    setDrawer(null);
     render();
     window.scrollTo(0, 0);
   });
@@ -282,7 +326,10 @@
     if(!b) return;
     var kr = findKr(b.getAttribute("data-kr")), i = +b.getAttribute("data-i");
     if(!kr) return;
-    if(b.getAttribute("data-act") === "add"){
+    if(b.getAttribute("data-act") === "more"){
+      e.preventDefault();
+      openSide(kr);
+    } else if(b.getAttribute("data-act") === "add"){
       kr.steps = kr.steps || [];
       kr.steps.push({role: ROLES[0], title: kr.title, ext: "", who: "", start: "", end: "", status: "TODO",
                      result: "", action: "", comment: ""});
@@ -296,6 +343,46 @@
   tp.addEventListener("toggle", function(e){
     if(e.target.matches && e.target.matches("details.kr")) opened[e.target.getAttribute("data-kr")] = e.target.open;
   }, true);
+
+  /* ---------- «Детальнее»: свободная заметка KR в правой панели ---------- */
+  var side = document.getElementById("side"), rt = document.getElementById("rt"), sideKr = null;
+  function openSide(kr){
+    sideKr = kr;
+    document.getElementById("sideKr").textContent = "KR " + kr.id;
+    document.getElementById("sideTitle").textContent = kr.title;
+    rt.innerHTML = kr.details == null ? TEMPLATE : richClean(parse(kr.details));
+    side.classList.add("open");
+    document.body.setAttribute("data-side", "");
+    rt.focus();
+  }
+  function closeSide(){
+    if(!side.classList.contains("open")) return;
+    side.classList.remove("open");
+    document.body.removeAttribute("data-side");
+    sideKr = null;
+    render();
+  }
+  rt.addEventListener("input", function(){
+    if(!sideKr) return;
+    sideKr.details = richText(rt.innerHTML) ? richClean(rt) : "";
+    save();
+  });
+  rt.addEventListener("paste", function(e){
+    var html = e.clipboardData && e.clipboardData.getData("text/html");
+    if(!html) return;
+    e.preventDefault();
+    document.execCommand("insertHTML", false, richClean(parse(html)));
+  });
+  document.getElementById("rtBar").addEventListener("mousedown", function(e){ e.preventDefault(); });
+  document.getElementById("rtBar").addEventListener("click", function(e){
+    var b = e.target.closest("[data-cmd]");
+    if(!b) return;
+    document.execCommand(b.getAttribute("data-cmd"), false, b.getAttribute("data-arg"));
+    rt.focus();
+  });
+  document.getElementById("sideClose").onclick = closeSide;
+  document.getElementById("scrim").onclick = closeSide;
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSide(); });
 
   /* ---------- выгрузка ---------- */
   document.getElementById("bJson").onclick = function(){

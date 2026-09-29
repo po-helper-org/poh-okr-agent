@@ -11,6 +11,7 @@
 """
 import csv
 import html
+import html.parser
 import json
 import os
 import re
@@ -812,6 +813,74 @@ def render(path, out):
         f.write(page_html)
 
 
+# ---------------------------------------------------------------- TeamPlanner: заметки KR (rich text)
+
+# Заметки KR («Детальнее») — HTML из этих тегов, без атрибутов. Всё прочее
+# редактор вычищает при сохранении, а скрипт — при сборке страницы.
+RICH_TAGS = {"h3", "p", "b", "strong", "i", "em", "ul", "ol", "li", "br"}
+RICH_BLOCKS = {"h3", "p", "ul", "ol", "li", "div"}
+RICH_DROP = {"script", "style", "template", "iframe", "object"}
+
+
+class _Rich(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.text, self.bad, self.skip = [], [], [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in RICH_DROP:
+            self.skip += 1
+        if self.skip:
+            return
+        if tag not in RICH_TAGS or attrs:
+            self.bad.append(tag)
+        clean = "p" if tag == "div" else tag
+        if clean in RICH_TAGS:
+            self.out.append(f"<{clean}>")
+        if tag == "br":
+            self.text.append("\n")
+        elif tag == "li":
+            self.text.append("\n- ")
+        elif tag in RICH_BLOCKS:
+            self.text.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in RICH_DROP:
+            self.skip = max(0, self.skip - 1)
+            return
+        if self.skip:
+            return
+        clean = "p" if tag == "div" else tag
+        if clean in RICH_TAGS and clean != "br":
+            self.out.append(f"</{clean}>")
+        if tag in RICH_BLOCKS:
+            self.text.append("\n")
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(html.escape(data, quote=False))
+            self.text.append(data)
+
+
+def rich(value):
+    parser = _Rich()
+    parser.feed(text(value))
+    parser.close()
+    return parser
+
+
+def rich_html(value):
+    """Безопасный HTML заметки: только теги из RICH_TAGS, без атрибутов."""
+    return "".join(rich(value).out)
+
+
+def rich_text(value):
+    """Заметка простым текстом для CSV: блоки — строками, пункты списка — «- ».
+    То же правило — в teamplanner.js (richText)."""
+    lines = (line.strip() for line in "".join(rich(value).text).split("\n"))
+    return "\n".join(line for line in lines if line)
+
+
 # ---------------------------------------------------------------- TeamPlanner: данные
 
 def tp_krs(doc):
@@ -971,6 +1040,11 @@ def lint_teamplanner(doc, rep, path):
         for tid in kr.get("teams") or []:
             if tid not in teams:
                 rep.error(f"{where}: команда {tid!r} не описана в teams")
+        if kr.get("details") is not None:
+            if not isinstance(kr.get("details"), str):
+                rep.error(f"{where}: details — строка с HTML заметки")
+            elif rich(kr["details"]).bad:
+                rep.error(f"{where}: в details недопустимая разметка — только {sorted(RICH_TAGS)} без атрибутов")
         steps = kr.get("steps") or []
         if not steps and kr.get("tag") != "ACTIVITY":
             rep.gate(f"{where}: нет ни одного этапа")
@@ -1025,15 +1099,6 @@ def lint_teamplanner(doc, rep, path):
 
 # ---------------------------------------------------------------- TeamPlanner: HTML
 
-def tp_summary(doc):
-    steps = [(kr, s) for _, kr in tp_krs(doc) for s in kr.get("steps") or []]
-    states = [step_state(doc, kr, s) for kr, s in steps]
-    return {"krs": sum(1 for _ in tp_krs(doc)), "steps": len(steps),
-            "unassigned": sum(1 for st in states if st["unassigned"]),
-            "norole": sum(1 for st in states if st["norole"]),
-            "ext": sum(1 for st in states if st["ext"])}
-
-
 def tp_static(doc):
     """То же без JS: цели, KR и подзадачи списком — читается и печатается."""
     parts = []
@@ -1044,26 +1109,28 @@ def tp_static(doc):
                 f'<li><span class="t">{esc(role_text(doc, step))}</span> {esc_unc(step.get("title"))}'
                 f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}</li>'
                 for step in kr.get("steps") or [])
+            note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
             parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
                          f'<span class="kr-title">{esc(kr.get("title"))}</span></summary>'
-                         f'<ul class="tp-static">{items}</ul></details>')
+                         f'{note}<ul class="tp-static">{items}</ul></details>')
     return "\n".join(parts)
 
 
 def render_teamplanner(doc, source):
     quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     title = f"TEAMPLANNER {quarter}" + (f" — {team}" if team else "")
-    sm = tp_summary(doc)
-    counts = f"подзадач {sm['steps']} · без исполнителя {sm['unassigned'] + sm['norole']}"
     data = json.dumps({"file": os.path.basename(source), "doc": doc, "roles": doc.get("roles") or TP_ROLES,
                        "statuses": STATUS_RU}, ensure_ascii=False).replace("<", "\\u003c")
     body = "\n".join([
-        '<div class="rail"><button class="rail-tab" id="tpTab" type="button">Цели</button></div>'
+        '<div class="rail"><button class="rail-tab" id="tpTab" type="button" data-drawer="tpDrawer">Цели</button>'
+        '<button class="rail-tab" id="tpTeamTab" type="button" data-drawer="tpTeamDrawer">Команда</button></div>'
         '<div class="drawer" id="tpDrawer"><div class="drawer-head"><h4>Цели</h4>'
-        '<button class="drawer-close" id="tpDrawerClose" type="button">×</button></div><div id="tpObjs"></div>'
-        '<h4 class="tp-sec">Команда</h4><div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
+        '<button class="drawer-close" type="button">×</button></div><div id="tpObjs"></div></div>'
+        '<div class="drawer" id="tpTeamDrawer"><div class="drawer-head"><h4>Команда</h4>'
+        '<button class="drawer-close" type="button">×</button></div>'
+        '<p class="drawer-hint">Команда · тип · ФИО. Из этого состава выбирают исполнителей подзадач.</p>'
+        '<div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
         '<div class="layout wide"><main>',
-        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, counts)}</p></div>',
         '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'
         '<button type="button" id="bTsv">Копировать в Sheets</button>'
         '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
@@ -1071,6 +1138,19 @@ def render_teamplanner(doc, source):
         '<button type="button" id="bReset">Сбросить</button></p>',
         f'<div id="tp">{tp_static(doc)}</div>',
         '</main></div>',
+        '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
+        '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
+        '<h3 class="side-title" id="sideTitle"></h3>'
+        '<div class="rt-bar" id="rtBar">'
+        '<button type="button" data-cmd="formatBlock" data-arg="h3">Заголовок</button>'
+        '<button type="button" data-cmd="formatBlock" data-arg="p">Текст</button>'
+        '<button type="button" data-cmd="bold"><b>Ж</b></button>'
+        '<button type="button" data-cmd="italic"><i>К</i></button>'
+        '<button type="button" data-cmd="insertUnorderedList">• список</button>'
+        '<button type="button" data-cmd="insertOrderedList">1. список</button></div>'
+        '<div class="rt" id="rt" contenteditable="true" role="textbox" aria-multiline="true"></div>'
+        '<p class="hintline">Мнения, ожидания, границы и всё, что поможет спланировать. Сохраняется в этом '
+        'браузере; в документ — через «Скачать JSON».</p></div>',
         f'<script type="application/json" id="page-data">{data}</script>',
         f'<script>{asset("teamplanner.js")}</script>',
     ])
@@ -1095,7 +1175,8 @@ def tp_rows(doc):
             tag = text(kr.get("tag"))
             rows.append({"Название": f"KR {text(kr.get('id'))} " + (f"[{tag}] " if tag else "")
                                      + f"{text(kr.get('title'))} (общий прогресс)",
-                         "Комментарий": "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment"))) if x),
+                         "Комментарий": "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment")),
+                                                             rich_text(kr.get("details"))) if x),
                          "Исполнитель": text(kr.get("owner")), "Начало": start, "Конец": end,
                          "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct})
             for step in kr.get("steps") or []:
