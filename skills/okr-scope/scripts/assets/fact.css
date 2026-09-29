@@ -1,0 +1,19 @@
+/* Страница ФАКТ: колонки, «влёт», исход KR. */
+col.c-fly{ width:3.4rem; }
+col.c-name{ width:auto; }
+col.c-prog{ width:13rem; }
+col.c-pct{ width:4.2rem; }
+
+td.fly{ text-align:center; }
+td.fly span{ font-family:"Courier New",monospace; font-size:.62rem; letter-spacing:.04em;
+  background:#ffe0b2; color:#7a4100; padding:.1rem .3rem; }
+
+/* Исход KR. */
+.st{ display:inline-block; width:1.35em; text-align:center; font-weight:700; }
+.st-done{ color:#0a7a3d; } .st-partial{ color:#b07000; }
+.st-failed{ color:#c00000; } .st-dropped{ color:#777; } .st-unknown{ color:#777; }
+td.pct{ text-align:right; font-family:"Courier New",monospace; font-size:.8rem; font-weight:bold; }
+td.pct.st-done{ color:#0a7a3d; } td.pct.st-partial{ color:#8a6100; }
+td.pct.st-failed{ color:#c00000; } td.pct.st-dropped, td.pct.st-unknown{ color:var(--faint); }
+td.pct.st-dropped{ font-size:.72rem; letter-spacing:.04em; }
+

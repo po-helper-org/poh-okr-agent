@@ -19,8 +19,8 @@ description: Equator Reporter — генерирует экватор-<quarter>.
 ## Инструкция для LLM
 
 Следуй процессу из `skills/okr-equator/SKILL.md`. Коротко:
-1. Собери факты из `OKR-<quarter>.md`/`roadmap.md`/`KR-EPIC-MAP.md`
-   (+ трекер, если подключён).
+1. Собери факты из `plan/scope-<quarter>.json`, а если его нет — из
+   `OKR-<quarter>.md`/`roadmap.md`/`KR-EPIC-MAP.md` (+ трекер, если подключён).
 2. Заполни `экватор-<quarter>.md` по шаблону, прогони `okr-lint.py`, почини
    структурные ошибки, пока не станет `OK`.
 3. Собери тот же материал в JSON и вызови `build_equator_pptx.js` для
