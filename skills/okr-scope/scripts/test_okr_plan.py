@@ -192,6 +192,33 @@ class StagesLint(Case):
         rep = self.lint(scope=self.scope)
         self.assertEqual([e for e in rep.errors if "2.2" in e], ["KR 2.2: отменено без причины и даты решения (cancel_reason)"])
 
+    def ini(self, kid):
+        return next(i for o in self.scope["objectives"] for i in o["initiatives"] if i["id"] == kid)
+
+    def test_in_quarter_is_bool(self):
+        self.ini("1.1")["in_quarter"] = "да"
+        self.assertError(self.lint(scope=self.scope), "KR 1.1: in_quarter — true или false")
+
+    def test_undecided_in_quarter_blocks_acceptance_only(self):
+        del self.ini("1.1")["in_quarter"]
+        self.assertError(self.lint(scope=self.scope), "KR 1.1: не решено, берём ли в квартал")
+        self.scope["status"] = "черновик"
+        rep = self.lint(scope=self.scope)
+        self.assertEqual(rep.errors, [])
+        self.assertTrue(any("не решено, берём ли в квартал" in w for w in rep.warnings))
+
+    def test_cancelled_cannot_go_to_quarter(self):
+        self.ini("2.2")["in_quarter"] = True
+        self.assertError(self.lint(scope=self.scope), "KR 2.2: отменённая инициатива не может идти в квартал")
+
+    def test_not_taken_skips_stage_checks(self):
+        self.assertNotIn("notes", self.ini("1.3"))
+        self.assertEqual([e for e in self.lint(scope=self.scope).errors if "1.3" in e], [])
+
+    def test_not_taken_carryover_counts_as_decided(self):
+        self.ini("2.1")["in_quarter"] = False
+        self.assertEqual([e for e in self.lint(scope=self.scope).errors if "Retro" in e], [])
+
     def test_scope_phase_skips_stage_checks(self):
         self.scope["phase"] = "scope"
         self.scope["objectives"][0]["initiatives"][1]["notes"] = {}
@@ -256,7 +283,9 @@ class Render(Case):
         self.assertIn("<title>ПЛАН 2026Q4 — Витрина</title>", page)
         self.assertIn("продолжается 2 KR, в плане 2, не берём 0, не решено 0", page)
         self.assertIn('data-kr="2.2" data-tags="back" data-cancelled', page)
-        self.assertIn("инициатив 4 ·", page)
+        self.assertIn("инициатив 5, в квартал 4 ·", page)
+        self.assertIn('data-kr="1.3" data-tags="front back" data-out', page)
+        self.assertIn('<span class="inq" data-v="yes">✓ да</span>', page)
         self.assertIn('data-value="partner" data-name="Биллинг партнёра">', page)
         self.assertIn('title="BE · [EXT] Стенд партнёра для тестов · TODO"', page)
         self.assertIn('<span class="segn">1&thinsp;/&thinsp;4</span>', page)
@@ -292,6 +321,10 @@ class TeamPlanner(Case):
     def test_cancelled_initiative_is_not_exported(self):
         rows = self.export(self.scope)
         self.assertNotIn("2.2", {r["KR"] for r in rows})
+
+    def test_not_taken_initiative_is_not_exported(self):
+        rows = self.export(self.scope)
+        self.assertNotIn("1.3", {r["KR"] for r in rows})
 
     def test_requires_accepted_stages(self):
         self.scope["status"] = "черновик"

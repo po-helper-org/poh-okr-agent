@@ -64,6 +64,12 @@ def cancelled(item):
     return text(item.get("status")) == "Отменено"
 
 
+def taken(item):
+    """Инициатива претендует на квартал: не отменена и не отмечена «не берём».
+    Нерешённая (in_quarter нет) считается кандидатом — так фокус не завышается."""
+    return not cancelled(item) and item.get("in_quarter") is not False
+
+
 def pbv_of(item):
     pbv = item.get("pbv")
     return pbv if is_int(pbv) else 0
@@ -338,8 +344,8 @@ def lint_scope(doc, rep, retro):
         initiatives = obj.get("initiatives") or []
         if not initiatives:
             rep.error(f"{where_obj}: нет инициатив")
-        elif len([i for i in initiatives if not cancelled(i)]) > 6:
-            rep.warn(f"{where_obj}: больше 6 активных инициатив")
+        elif len([i for i in initiatives if taken(i)]) > 6:
+            rep.warn(f"{where_obj}: больше 6 инициатив в квартал")
         for ini in initiatives:
             kid = text(ini.get("id"))
             where = f"KR {kid or '?'}"
@@ -361,8 +367,15 @@ def lint_scope(doc, rep, retro):
             if ini.get("tag", "") not in TAGS:
                 rep.error(f"{where}: tag — один из {TAGS}")
             check_item_status(ini, where, rep)
+            in_quarter = ini.get("in_quarter")
+            if in_quarter is not None and not isinstance(in_quarter, bool):
+                rep.error(f"{where}: in_quarter — true или false, получено {in_quarter!r}")
             if cancelled(ini):
+                if in_quarter is True:
+                    rep.error(f"{where}: отменённая инициатива не может идти в квартал (in_quarter: true)")
                 continue
+            if in_quarter is None:
+                rep.gate(f"{where}: не решено, берём ли в квартал (in_quarter)")
             result = text(ini.get("result"))
             if not result:
                 rep.gate(f"{where}: нет образа результата")
@@ -370,10 +383,10 @@ def lint_scope(doc, rep, retro):
                 rep.gate(f"{where}: у инициативы с PBV ≥ 7 в образе результата [УТОЧНИТЬ]")
             if bool(text(ini.get("before"))) != bool(text(ini.get("after"))):
                 rep.error(f"{where}: БЫЛО и СТАЛО заполняются парой")
-            if phase == "stages":
+            if phase == "stages" and in_quarter is not False:
                 lint_notes(ini, where, roles, rep)
 
-    active = [i for i in all_initiatives if not cancelled(i)]
+    active = [i for i in all_initiatives if taken(i)]
     if len([i for i in active if i.get("tag") != "ACTIVITY"]) > 20:
         rep.warn("Всего больше 20 инициатив — у квартала нет фокуса")
     critical = [text(i.get("id")) for i in active if i.get("pbv") == 9]
@@ -455,6 +468,17 @@ def asset(name):
 
 def pbv_cell(pbv):
     return f'<span class="pbvtag" data-tier="{pbv_tier(pbv)}">{pbv if is_int(pbv) else "—"}</span>'
+
+
+IN_QUARTER_TEXT = {True: "в квартал", False: "не в квартал", None: "в квартал: не решено"}
+
+
+def in_quarter_cell(ini):
+    if cancelled(ini):
+        return "—"
+    value = ini.get("in_quarter")
+    mark, label = {True: ("yes", "✓ да"), False: ("no", "нет")}.get(value, ("undecided", "?"))
+    return f'<span class="inq" data-v="{mark}">{label}</span>'
 
 
 def card_steps(steps):
@@ -631,6 +655,8 @@ def scope_card(obj, ini, teams, retro_quarter):
     line = [f"PBV {ini.get('pbv') if is_int(ini.get('pbv')) else '—'}", names, origin]
     if cancelled(ini):
         line.insert(0, "отменено")
+    else:
+        line.insert(0, IN_QUARTER_TEXT[ini.get("in_quarter")])
     flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
              {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
     stages = notes.get("stages") or []
@@ -664,8 +690,11 @@ def render_scope(doc, source, retro=None):
     quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     teams = {text(t.get("id")): t for t in doc.get("teams") or []}
     stages_phase = doc.get("phase") == "stages"
-    active = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or [] if not cancelled(i)]
     all_inis = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or []]
+    active = [i for i in all_inis if not cancelled(i)]
+    chosen = [i for i in active if taken(i)]
+    yes = sum(1 for i in active if i.get("in_quarter") is True)
+    undecided = sum(1 for i in active if i.get("in_quarter") is None)
     title = f"ПЛАН {quarter}" + (f" — {team}" if team else "")
     retro_quarter = text((retro or {}).get("quarter"))
 
@@ -678,16 +707,19 @@ def render_scope(doc, source, retro=None):
     strategic = [o for o in doc.get("objectives") or [] if not o.get("activity")]
     quote.append(f"Целей {len(strategic)}"
                  + (f" + {len(doc['objectives']) - len(strategic)} поддержка" if len(doc.get("objectives") or []) > len(strategic) else "")
-                 + f" · инициатив {len(active)} · с PBV ≥ 7: {sum(1 for i in active if pbv_of(i) >= 7)}"
-                 + f" · с PBV 9: {sum(1 for i in active if pbv_of(i) == 9)}"
-                 + f" · из прошлого квартала {sum(1 for i in active if text(i.get('from_retro')))}"
+                 + f" · инициатив {len(active)}, в квартал {yes}"
+                 + (f", не решено {undecided}" if undecided else "")
+                 + f" · с PBV ≥ 7: {sum(1 for i in chosen if pbv_of(i) >= 7)}"
+                 + f" · с PBV 9: {sum(1 for i in chosen if pbv_of(i) == 9)}"
+                 + f" · из прошлого квартала {sum(1 for i in chosen if text(i.get('from_retro')))}"
                  + (f" · отменено {len(all_inis) - len(active)}" if len(all_inis) > len(active) else "") + ".")
     if text((doc.get("retro") or {}).get("file")):
         line = f"Retro: {esc((doc.get('retro') or {}).get('file'))}"
         if retro is not None:
             carried = carried_forward(retro)
-            linked = {text(i.get("from_retro")) for i in all_inis}
+            linked = {text(i.get("from_retro")) for i in all_inis if taken(i)}
             dropped = {text(d.get("id")) for d in doc.get("retro_dropped") or []}
+            dropped |= {text(i.get("from_retro")) for i in all_inis if not taken(i) and text(i.get("from_retro"))}
             line += (f" — продолжается {len(carried)} KR, в плане {len(set(carried) & linked)}, "
                      f"не берём {len(set(carried) & dropped)}, не решено {len(set(carried) - linked - dropped)}")
         quote.append(line + ".")
@@ -708,8 +740,8 @@ def render_scope(doc, source, retro=None):
     if text(doc.get("po_brief")):
         parts.append(f'<details class="brief"><summary>Исходный рассказ PO</summary><p>{esc(doc.get("po_brief"))}</p></details>')
 
-    cols = ["kr", "team", "name", "asis", "tobe", "pbv"] + (["prog"] if stages_phase else [])
-    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV"] + (["Подзадачи"] if stages_phase else [])
+    cols = ["kr", "team", "name", "asis", "tobe", "pbv", "inq"] + (["prog"] if stages_phase else [])
+    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV", "В квартал"] + (["Подзадачи"] if stages_phase else [])
     cards, asks = {}, []
     for obj in doc.get("objectives") or []:
         band = f'<b>OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</b>'
@@ -723,21 +755,25 @@ def render_scope(doc, source, retro=None):
             new = "" if text(ini.get("from_retro")) or obj.get("activity") else ' <b class="new">+</b>'
             team_names = "<br>".join(esc(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
             row = (f'<tr class="row" data-kr="{html.escape(kid)}" data-tags="{html.escape(" ".join(ini.get("teams") or []))}"'
-                   f'{" data-cancelled" if cancelled(ini) else ""}>'
+                   f'{" data-cancelled" if cancelled(ini) else ""}'
+                   f'{" data-out" if not cancelled(ini) and not taken(ini) else ""}>'
                    f'<td class="kr">{html.escape(kid)}{new}</td>'
                    f'<td class="team">{team_names}</td>'
                    f'<td class="name"><span class="txt">{"[" + esc(tag) + "] " if tag else ""}{esc_unc(ini.get("title"))}</span>'
                    f'{"<span class=cancel>отменено</span>" if cancelled(ini) else ""}</td>'
                    f'<td class="asis">{esc_unc(ini.get("before")) or "—"}</td>'
                    f'<td class="tobe">{esc_unc(ini.get("result")) or "—"}</td>'
-                   f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>')
+                   f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>'
+                   f'<td class="inq">{in_quarter_cell(ini)}</td>')
             if stages_phase:
                 subtasks = [{"role": s.get("role"), "step": ("[EXT] " if s.get("ext") else "") + text(s.get("title")),
                              "status": text(s.get("status")) or "TODO"}
                             for s in (ini.get("notes") or {}).get("stages") or []]
                 row += f'<td class="prog">{fact_segs(subtasks)}</td>'
             rows.append(row + "</tr>")
-            if not cancelled(ini):
+            if not cancelled(ini) and ini.get("in_quarter") is None:
+                asks.append(f"KR {esc(kid)}: берём в квартал? <mark class=\"unc\">[УТОЧНИТЬ у PO]</mark>")
+            if taken(ini):
                 asks += [f"KR {esc(kid)}: {esc_unc(q)}" for q in ini.get("open") or [] if text(q)]
                 places = unsure_places(ini)
                 if places:
@@ -784,7 +820,7 @@ def teamplanner(path, out):
     for obj in doc.get("objectives") or []:
         program = f'OBJ {text(obj.get("id"))}. {text(obj.get("title"))}'
         for ini in obj.get("initiatives") or []:
-            if cancelled(ini):
+            if not taken(ini):
                 continue
             notes = ini.get("notes") or {}
             head = {
