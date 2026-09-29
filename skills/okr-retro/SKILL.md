@@ -14,10 +14,12 @@ description: OKR Retro — этап 1 планирования квартала.
 `<quarter>` — **планируемый** квартал (`2026Q4`). Ретро подводит итоги
 предыдущего (`2026Q3`).
 
-Пайплайн планирования — четыре этапа вокруг двух HTML-документов:
+Пайплайн планирования — четыре этапа вокруг трёх HTML-документов: ФАКТ (что
+было), ПЛАН (что хотим), TEAMPLANNER (кто и когда делает). `/okr-stages` —
+необязательный.
 
 ```
-/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner
+/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner
 ```
 
 ## На выходе
@@ -28,9 +30,10 @@ description: OKR Retro — этап 1 планирования квартала.
 ```
 
 Схема JSON, правила вывода и проверки — `skills/okr-scope/resources/plan_schema.md`,
-раздел «Retro». Эталон — `skills/okr-scope/scripts/fixtures/retro-2026Q3.json`.
-Скрипт — `<корень установки>/skills/okr-scope/scripts/okr-plan.py` (корень —
-куда `install.sh` синкнул навыки, обычно `.claude/`). Ниже он — `okr-plan.py`.
+раздел «Retro»; как запускать скрипт и что значат его ответы — там же, «Работа
+со скриптом». Эталон — `skills/okr-scope/scripts/fixtures/retro-2026Q3.json`:
+пиши JSON по его образцу. Скрипт — `<корень установки>/skills/okr-scope/scripts/okr-plan.py`
+(корень — куда `install.sh` синкнул навыки, обычно `.claude/`). Ниже он — `okr-plan.py`.
 
 ## Разделение труда
 
@@ -59,9 +62,10 @@ HTML руками.
 
 Проверь `.okr/<quarter>/plan/`:
 
-1. `scope-<quarter>.json` со `status: принято` и `phase: stages` → планирование
-   дошло до этапа 4. Скажи это и предложи `/okr-teamplanner <quarter>`.
-2. `scope-<quarter>.json` принят, `phase: scope` → предложи `/okr-stages <quarter>`.
+1. `teamplanner-<quarter>.json` есть → планирование на этапе 4: предложи
+   продолжить `/okr-teamplanner <quarter>` (принят — скажи, что квартал спланирован).
+2. `scope-<quarter>.json` принят → предложи `/okr-teamplanner <quarter>`;
+   `/okr-stages <quarter>` — по желанию, если нужны риски и условия в ПЛАН.
 3. `scope-<quarter>.json` есть, не принят → предложи продолжить: при
    `phase: stages` — `/okr-stages <quarter>`, иначе `/okr-scope <quarter>`.
 4. `retro-<prev>.json` принят → ретро готово, предложи `/okr-scope <quarter>`.
@@ -71,9 +75,18 @@ HTML руками.
 
 ### Этап 1: Каркас из плана квартала
 
+Шапка JSON: `"kind": "retro"`, `quarter` — закрываемый (`<prev>`),
+`next_quarter` — планируемый, `team`, `po`, `status: "черновик"`, `updated`,
+`basis`, `objectives`.
+
 Найди план закрываемого квартала, первое найденное:
-- `.okr/<prev>/plan/scope-<prev>.json` — план из нового пайплайна: цели →
-  `objectives`, инициативы → `krs`, этапы из заметок → `plan` со статусом `TODO`;
+- `.okr/<prev>/plan/teamplanner-<prev>.json` — план с этапами: цели →
+  `objectives`, KR → `krs` (`id`, `title`, `pbv`, `result` → `goal`), этапы
+  `steps` → `plan`: `role` (у внешнего ресурса — та же роль), `step` ← `title`,
+  `status` как был;
+- `.okr/<prev>/plan/scope-<prev>.json` — план без TeamPlanner: только
+  инициативы с `in_quarter: true` и не отменённые; этапы из заметок → `plan` со
+  статусом `TODO`;
 - `.okr/<prev>/OKR-<prev>.md` — план из старого пайплайна;
 - `.okr/index/` — если план лежал где-то в воркспейсе.
 

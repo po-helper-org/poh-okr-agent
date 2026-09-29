@@ -4,7 +4,7 @@ description: '[deprecated] Устарело, используй /okr-scope. Obje
 ---
 
 > **[deprecated]** `/okr-draft` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 > Замена: `/okr-scope <quarter>`: PO рассказывает план своими словами, навык собирает драфт.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-draft`

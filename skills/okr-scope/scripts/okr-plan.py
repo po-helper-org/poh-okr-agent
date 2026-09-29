@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope, выгрузка TeamPlanner.
+"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, выгрузка CSV.
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
   okr-plan.py render <file.json> <out.html>
-  okr-plan.py teamplanner <scope.json> <out.csv>
+  okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
+  okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
 
 Источник истины — JSON. HTML и CSV всегда пересобираются из него, руками не правятся.
 Только стандартная библиотека Python.
 """
 import csv
 import html
+import html.parser
 import json
 import os
 import re
@@ -32,16 +34,18 @@ TAGS = ["", "RESEARCH", "POC", "BUG", "ACTIVITY"]
 STATUSES = ["черновик", "принято"]
 PHASES = ["scope", "stages"]
 DEFAULT_ROLES = ["PO", "SA", "BE", "FE", "ADR"]
+# TeamPlanner — полный операционный цикл: подготовка и согласования → архитектура →
+# аналитика → разработка → тестирование → инфраструктура → выкатка.
+# Внешний ресурс — не роль, а ext у этапа: EXT[BE] = BE-работа смежной команды.
+TP_ROLES = ["PO", "ADR", "SA", "BA", "BE", "FE", "QA", "DOPS", "RM"]
+STATUS_RU = {"TODO": "Не начата", "IN PROGRESS": "В процессе", "BLOCKED": "Заблокирована", "DONE": "Готово"}
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 QUARTER_RE = re.compile(r"^\d{4}Q[1-4]$")
 KR_ID_RE = re.compile(r"^\d+(\.\d+)+$")
 UNSURE_RE = re.compile(r"\[УТОЧНИТЬ[^\]\n]*\]")
 
-TEAMPLANNER_COLUMNS = [
-    "№", "Программа (OBJ)", "KR", "Инициатива", "PBV", "Тег", "Команды",
-    "Этап №", "Роль", "Внешняя команда", "Этап", "Условия", "Риски",
-    "Зависимости", "Неопределённости",
-    "Ресурс (заполняет техлид)", "Сроки (заполняет техлид)", "Комментарий техлида",
-]
+TEAMPLANNER_COLUMNS = ["Название", "Комментарий", "Роль", "Исполнитель", "Начало", "Конец",
+                       "Статус", "Прогресс, %", "Образ результата", "Образ действия"]
 
 
 def text(value):
@@ -64,9 +68,107 @@ def cancelled(item):
     return text(item.get("status")) == "Отменено"
 
 
+def taken(item):
+    """Инициатива претендует на квартал: не отменена и не отмечена «не берём».
+    Нерешённая (in_quarter нет) считается кандидатом — так фокус не завышается."""
+    return not cancelled(item) and item.get("in_quarter") is not False
+
+
 def pbv_of(item):
     pbv = item.get("pbv")
     return pbv if is_int(pbv) else 0
+
+
+# ---------------------------------------------------------------- структура документа
+
+# Структура каждого вида документа: что — объект, что — список объектов, что —
+# значение. Проверяется до всего остального: JSON пишет LLM, и строка на месте
+# списка не должна ронять скрипт трейсбэком — только понятной ошибкой.
+V = "значение"            # строка, число, true/false или null
+T = "текст"               # значение или список значений
+L = "список"              # список строк (null — пусто)
+STEP = {"role": V, "step": V, "title": V, "status": V, "ext": V}
+SHAPES = {
+    "retro": {
+        "kind": V, "quarter": V, "next_quarter": V, "team": V, "po": V, "status": V, "updated": V, "basis": L,
+        "objectives": [{"id": V, "title": V, "outcome": T, "krs": [{
+            "id": V, "title": V, "pbv": V, "pct": V, "status": V, "unplanned": V, "comment": T, "goal": T,
+            "plan": [STEP], "deps": [STEP], "risks": L, "who": L, "cancel_reason": T,
+            "next": {"action": V, "kr": V, "note": T}}]}],
+    },
+    "scope": {
+        "kind": V, "quarter": V, "team": V, "po": V, "status": V, "phase": V, "updated": V, "summary": T,
+        "retro": {"file": V}, "retro_skipped": T, "po_brief": T, "roles": L,
+        "teams": [{"id": V, "name": V, "external": V}],
+        "objectives": [{"id": V, "title": V, "why": T, "activity": V, "initiatives": [{
+            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "tag": V, "status": V, "cancel_reason": T,
+            "from_retro": V, "result": T, "before": T, "after": T, "open": L,
+            "notes": {"description": T, "stages": [STEP], "conditions": L, "risks": L, "dependencies": L,
+                      "uncertainties": L}}]}],
+        "retro_dropped": [{"id": V, "reason": T}], "open_questions": L,
+    },
+    "teamplanner": {
+        "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "scope": {"file": V}, "roles": L,
+        "teams": [{"id": V, "name": V, "external": V, "people": [{"name": V, "role": V}]}],
+        "objectives": [{"id": V, "title": V, "krs": [{
+            "id": V, "title": V, "pbv": V, "tag": V, "teams": L, "owner": V, "result": T, "comment": T, "details": V,
+            "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
+                       "progress": V, "result": T, "action": T, "comment": T}]}]}],
+    },
+}
+
+
+def _scalar(value):
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def shape_errors(doc, spec=None, where=""):
+    """Несовпадения со структурой: [«objectives[0].krs: ожидается список, получено строка»]."""
+    if spec is None:
+        kind = doc.get("kind")
+        spec = SHAPES.get(kind) if isinstance(kind, str) else None
+        if spec is None:
+            return ["kind: ожидается 'retro', 'scope' или 'teamplanner'"]
+    names = {str: "строка", int: "число", float: "число", bool: "true/false", list: "список", dict: "объект"}
+    got = lambda v: names.get(type(v), type(v).__name__)
+    out = []
+    for key, sub in spec.items():
+        value = doc.get(key)
+        at = f"{where}.{key}" if where else key
+        if value is None:
+            continue
+        if sub is V and not _scalar(value):
+            out.append(f"{at}: ожидается значение, получено {got(value)}")
+        elif sub is T and not (_scalar(value) or (isinstance(value, list) and all(_scalar(v) for v in value))):
+            out.append(f"{at}: ожидается текст или список строк, получено {got(value)}")
+        elif sub is L and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            out.append(f"{at}: ожидается список строк [\"…\"], получено {got(value)}")
+        elif isinstance(sub, dict):
+            if not isinstance(value, dict):
+                out.append(f"{at}: ожидается объект {{...}}, получено {got(value)}")
+            else:
+                out += shape_errors(value, sub, at)
+        elif isinstance(sub, list):
+            if not isinstance(value, list):
+                out.append(f"{at}: ожидается список [...], получено {got(value)}")
+                continue
+            for i, item in enumerate(value):
+                if not isinstance(item, dict):
+                    out.append(f"{at}[{i}]: ожидается объект {{...}}, получено {got(item)}")
+                else:
+                    out += shape_errors(item, sub[0], f"{at}[{i}]")
+    return out
+
+
+def load_checked(path, kind=None):
+    """load + проверка структуры. Для render/seed/csv: сломанная структура — стоп с перечнем."""
+    doc = load(path)
+    if kind and doc.get("kind") != kind:
+        raise SystemExit(f"{path}: ожидается kind={kind!r}, получено {doc.get('kind')!r}")
+    errors = shape_errors(doc)
+    if errors:
+        raise SystemExit(f"{path}: структура не совпадает со схемой —\n  " + "\n  ".join(errors))
+    return doc
 
 
 class Report:
@@ -87,8 +189,17 @@ class Report:
 
 
 def load(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    """JSON-документ. Нет файла, битый JSON, не объект — понятная ошибка вместо трейсбэка."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        raise SystemExit(f"{path}: файл не найден")
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{path}: не JSON — строка {e.lineno}, позиция {e.colno}: {e.msg}")
+    if not isinstance(doc, dict):
+        raise SystemExit(f"{path}: ожидается JSON-объект {{...}}, получено {type(doc).__name__}")
+    return doc
 
 
 # ---------------------------------------------------------------- Retro: правила вывода
@@ -284,17 +395,33 @@ def check_pbv(item, where, rep, required):
         rep.error(f"{where}: PBV — целое 1..9, получено {pbv!r}")
 
 
+def load_linked(path, kind):
+    """Связанный документ (Retro для Scope, Scope для TeamPlanner): (doc, None) или
+    (None, почему не годится) — без трейсбэка и без остановки проверки."""
+    if not os.path.exists(path):
+        return None, "не найден"
+    try:
+        doc = load(path)
+    except SystemExit as e:
+        return None, f"не читается — {str(e).split(': ', 1)[-1]}"
+    if doc.get("kind") != kind:
+        return None, f"не {kind} (kind={doc.get('kind')!r})"
+    if shape_errors(doc):
+        return None, "не проходит проверку структуры — сначала lint этого файла"
+    return doc, None
+
+
 def resolve_retro(doc, doc_path, retro_path):
+    """(retro, проблема). Явный --retro и retro.file рядом со Scope проверяются одинаково."""
     if retro_path:
-        return load(retro_path)
+        return load_linked(retro_path, "retro")
     ref = text((doc.get("retro") or {}).get("file"))
     if not ref:
-        return None
-    candidate = os.path.join(os.path.dirname(os.path.abspath(doc_path)), ref)
-    return load(candidate) if os.path.exists(candidate) else None
+        return None, None
+    return load_linked(os.path.join(os.path.dirname(os.path.abspath(doc_path)), ref), "retro")
 
 
-def lint_scope(doc, rep, retro):
+def lint_scope(doc, rep, retro, retro_problem=None):
     if not QUARTER_RE.match(text(doc.get("quarter"))):
         rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
     if not text(doc.get("team")):
@@ -312,8 +439,8 @@ def lint_scope(doc, rep, retro):
     retro_ref = doc.get("retro") or {}
     if not text(retro_ref.get("file")) and not text(doc.get("retro_skipped")):
         rep.error("retro: укажи retro.file или причину в retro_skipped")
-    if text(retro_ref.get("file")) and retro is None:
-        rep.gate(f"retro: файл {retro_ref.get('file')} не найден рядом со scope")
+    if retro_problem:
+        rep.gate(f"retro: файл {text(retro_ref.get('file')) or 'из --retro'} {retro_problem}")
 
     objectives = doc.get("objectives") or []
     if not objectives:
@@ -338,8 +465,8 @@ def lint_scope(doc, rep, retro):
         initiatives = obj.get("initiatives") or []
         if not initiatives:
             rep.error(f"{where_obj}: нет инициатив")
-        elif len([i for i in initiatives if not cancelled(i)]) > 6:
-            rep.warn(f"{where_obj}: больше 6 активных инициатив")
+        elif len([i for i in initiatives if taken(i)]) > 6:
+            rep.warn(f"{where_obj}: больше 6 инициатив в квартал")
         for ini in initiatives:
             kid = text(ini.get("id"))
             where = f"KR {kid or '?'}"
@@ -361,8 +488,15 @@ def lint_scope(doc, rep, retro):
             if ini.get("tag", "") not in TAGS:
                 rep.error(f"{where}: tag — один из {TAGS}")
             check_item_status(ini, where, rep)
+            in_quarter = ini.get("in_quarter")
+            if in_quarter is not None and not isinstance(in_quarter, bool):
+                rep.error(f"{where}: in_quarter — true или false, получено {in_quarter!r}")
             if cancelled(ini):
+                if in_quarter is True:
+                    rep.error(f"{where}: отменённая инициатива не может идти в квартал (in_quarter: true)")
                 continue
+            if in_quarter is None:
+                rep.gate(f"{where}: не решено, берём ли в квартал (in_quarter)")
             result = text(ini.get("result"))
             if not result:
                 rep.gate(f"{where}: нет образа результата")
@@ -370,10 +504,10 @@ def lint_scope(doc, rep, retro):
                 rep.gate(f"{where}: у инициативы с PBV ≥ 7 в образе результата [УТОЧНИТЬ]")
             if bool(text(ini.get("before"))) != bool(text(ini.get("after"))):
                 rep.error(f"{where}: БЫЛО и СТАЛО заполняются парой")
-            if phase == "stages":
-                lint_notes(ini, where, roles, rep)
+            if phase == "stages" and in_quarter is not False:
+                lint_notes(ini, where, roles, rep, any(t.get("external") for t in teams))
 
-    active = [i for i in all_initiatives if not cancelled(i)]
+    active = [i for i in all_initiatives if taken(i)]
     if len([i for i in active if i.get("tag") != "ACTIVITY"]) > 20:
         rep.warn("Всего больше 20 инициатив — у квартала нет фокуса")
     critical = [text(i.get("id")) for i in active if i.get("pbv") == 9]
@@ -383,7 +517,7 @@ def lint_scope(doc, rep, retro):
     lint_retro_link(doc, all_initiatives, retro, rep)
 
 
-def lint_notes(ini, where, roles, rep):
+def lint_notes(ini, where, roles, rep, has_external=True):
     notes = ini.get("notes") or {}
     tag = ini.get("tag", "")
     if tag == "ACTIVITY":
@@ -402,6 +536,8 @@ def lint_notes(ini, where, roles, rep):
             rep.error(f"{where}, этап {n}: нет названия")
         if "status" in stage and stage.get("status") not in STEP_STATUSES:
             rep.error(f"{where}, этап {n}: status — одно из {STEP_STATUSES}")
+        if stage.get("ext") and not has_external:
+            rep.error(f"{where}, этап {n}: ext — этап смежной команды, но в teams нет команды с external: true")
     for key in ("conditions", "risks", "dependencies", "uncertainties"):
         if key in notes and not isinstance(notes[key], list):
             rep.error(f"{where}: notes.{key} — список")
@@ -426,15 +562,21 @@ def lint_retro_link(doc, initiatives, retro, rep):
 def lint(path, final=False, retro_path=None):
     doc = load(path)
     rep = Report(final or doc.get("status") == "принято")
+    shape = shape_errors(doc)
+    if shape:
+        rep.errors += shape
+        return rep
     if doc.get("status", "черновик") not in STATUSES:
         rep.error(f"status: одно из {STATUSES}")
     kind = doc.get("kind")
     if kind == "retro":
         lint_retro(doc, rep)
     elif kind == "scope":
-        lint_scope(doc, rep, resolve_retro(doc, path, retro_path))
+        lint_scope(doc, rep, *resolve_retro(doc, path, retro_path))
+    elif kind == "teamplanner":
+        lint_teamplanner(doc, rep, path)
     else:
-        rep.error("kind: ожидается 'retro' или 'scope'")
+        rep.error("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     return rep
 
 
@@ -455,6 +597,17 @@ def asset(name):
 
 def pbv_cell(pbv):
     return f'<span class="pbvtag" data-tier="{pbv_tier(pbv)}">{pbv if is_int(pbv) else "—"}</span>'
+
+
+IN_QUARTER_TEXT = {True: "в квартал", False: "не в квартал", None: "в квартал: не решено"}
+
+
+def in_quarter_cell(ini):
+    if cancelled(ini):
+        return "—"
+    value = ini.get("in_quarter")
+    mark, label = {True: ("yes", "✓ да"), False: ("no", "нет")}.get(value, ("undecided", "?"))
+    return f'<span class="inq" data-v="{mark}">{label}</span>'
 
 
 def card_steps(steps):
@@ -631,6 +784,8 @@ def scope_card(obj, ini, teams, retro_quarter):
     line = [f"PBV {ini.get('pbv') if is_int(ini.get('pbv')) else '—'}", names, origin]
     if cancelled(ini):
         line.insert(0, "отменено")
+    else:
+        line.insert(0, IN_QUARTER_TEXT.get(ini.get("in_quarter"), IN_QUARTER_TEXT[None]))
     flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
              {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
     stages = notes.get("stages") or []
@@ -664,8 +819,11 @@ def render_scope(doc, source, retro=None):
     quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     teams = {text(t.get("id")): t for t in doc.get("teams") or []}
     stages_phase = doc.get("phase") == "stages"
-    active = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or [] if not cancelled(i)]
     all_inis = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or []]
+    active = [i for i in all_inis if not cancelled(i)]
+    chosen = [i for i in active if taken(i)]
+    yes = sum(1 for i in active if i.get("in_quarter") is True)
+    undecided = sum(1 for i in active if i.get("in_quarter") is None)
     title = f"ПЛАН {quarter}" + (f" — {team}" if team else "")
     retro_quarter = text((retro or {}).get("quarter"))
 
@@ -678,16 +836,19 @@ def render_scope(doc, source, retro=None):
     strategic = [o for o in doc.get("objectives") or [] if not o.get("activity")]
     quote.append(f"Целей {len(strategic)}"
                  + (f" + {len(doc['objectives']) - len(strategic)} поддержка" if len(doc.get("objectives") or []) > len(strategic) else "")
-                 + f" · инициатив {len(active)} · с PBV ≥ 7: {sum(1 for i in active if pbv_of(i) >= 7)}"
-                 + f" · с PBV 9: {sum(1 for i in active if pbv_of(i) == 9)}"
-                 + f" · из прошлого квартала {sum(1 for i in active if text(i.get('from_retro')))}"
+                 + f" · инициатив {len(active)}, в квартал {yes}"
+                 + (f", не решено {undecided}" if undecided else "")
+                 + f" · с PBV ≥ 7: {sum(1 for i in chosen if pbv_of(i) >= 7)}"
+                 + f" · с PBV 9: {sum(1 for i in chosen if pbv_of(i) == 9)}"
+                 + f" · из прошлого квартала {sum(1 for i in chosen if text(i.get('from_retro')))}"
                  + (f" · отменено {len(all_inis) - len(active)}" if len(all_inis) > len(active) else "") + ".")
     if text((doc.get("retro") or {}).get("file")):
         line = f"Retro: {esc((doc.get('retro') or {}).get('file'))}"
         if retro is not None:
             carried = carried_forward(retro)
-            linked = {text(i.get("from_retro")) for i in all_inis}
+            linked = {text(i.get("from_retro")) for i in all_inis if taken(i)}
             dropped = {text(d.get("id")) for d in doc.get("retro_dropped") or []}
+            dropped |= {text(i.get("from_retro")) for i in all_inis if not taken(i) and text(i.get("from_retro"))}
             line += (f" — продолжается {len(carried)} KR, в плане {len(set(carried) & linked)}, "
                      f"не берём {len(set(carried) & dropped)}, не решено {len(set(carried) - linked - dropped)}")
         quote.append(line + ".")
@@ -708,8 +869,8 @@ def render_scope(doc, source, retro=None):
     if text(doc.get("po_brief")):
         parts.append(f'<details class="brief"><summary>Исходный рассказ PO</summary><p>{esc(doc.get("po_brief"))}</p></details>')
 
-    cols = ["kr", "team", "name", "asis", "tobe", "pbv"] + (["prog"] if stages_phase else [])
-    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV"] + (["Подзадачи"] if stages_phase else [])
+    cols = ["kr", "team", "name", "asis", "tobe", "pbv", "inq"] + (["prog"] if stages_phase else [])
+    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV", "В квартал"] + (["Подзадачи"] if stages_phase else [])
     cards, asks = {}, []
     for obj in doc.get("objectives") or []:
         band = f'<b>OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</b>'
@@ -723,21 +884,25 @@ def render_scope(doc, source, retro=None):
             new = "" if text(ini.get("from_retro")) or obj.get("activity") else ' <b class="new">+</b>'
             team_names = "<br>".join(esc(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
             row = (f'<tr class="row" data-kr="{html.escape(kid)}" data-tags="{html.escape(" ".join(ini.get("teams") or []))}"'
-                   f'{" data-cancelled" if cancelled(ini) else ""}>'
+                   f'{" data-cancelled" if cancelled(ini) else ""}'
+                   f'{" data-out" if not cancelled(ini) and not taken(ini) else ""}>'
                    f'<td class="kr">{html.escape(kid)}{new}</td>'
                    f'<td class="team">{team_names}</td>'
                    f'<td class="name"><span class="txt">{"[" + esc(tag) + "] " if tag else ""}{esc_unc(ini.get("title"))}</span>'
                    f'{"<span class=cancel>отменено</span>" if cancelled(ini) else ""}</td>'
                    f'<td class="asis">{esc_unc(ini.get("before")) or "—"}</td>'
                    f'<td class="tobe">{esc_unc(ini.get("result")) or "—"}</td>'
-                   f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>')
+                   f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>'
+                   f'<td class="inq">{in_quarter_cell(ini)}</td>')
             if stages_phase:
                 subtasks = [{"role": s.get("role"), "step": ("[EXT] " if s.get("ext") else "") + text(s.get("title")),
                              "status": text(s.get("status")) or "TODO"}
                             for s in (ini.get("notes") or {}).get("stages") or []]
                 row += f'<td class="prog">{fact_segs(subtasks)}</td>'
             rows.append(row + "</tr>")
-            if not cancelled(ini):
+            if not cancelled(ini) and ini.get("in_quarter") is None:
+                asks.append(f"KR {esc(kid)}: берём в квартал? <mark class=\"unc\">[УТОЧНИТЬ у PO]</mark>")
+            if taken(ini):
                 asks += [f"KR {esc(kid)}: {esc_unc(q)}" for q in ini.get("open") or [] if text(q)]
                 places = unsure_places(ini)
                 if places:
@@ -758,72 +923,428 @@ def render_scope(doc, source, retro=None):
 
 
 def render(path, out):
-    doc = load(path)
+    doc = load_checked(path)
     if doc.get("kind") == "retro":
         page_html = render_retro(doc, path)
     elif doc.get("kind") == "scope":
-        page_html = render_scope(doc, path, resolve_retro(doc, path, None))
+        page_html = render_scope(doc, path, resolve_retro(doc, path, None)[0])
+    elif doc.get("kind") == "teamplanner":
+        page_html = render_teamplanner(doc, path)
     else:
-        raise SystemExit("kind: ожидается 'retro' или 'scope'")
+        raise SystemExit("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     with open(out, "w", encoding="utf-8") as f:
         f.write(page_html)
 
 
-# ---------------------------------------------------------------- TeamPlanner
+# ---------------------------------------------------------------- TeamPlanner: заметки KR (rich text)
 
-def teamplanner(path, out):
-    doc = load(path)
-    if doc.get("kind") != "scope" or doc.get("phase") != "stages" or doc.get("status") != "принято":
-        raise SystemExit("TeamPlanner собирается только из принятого Scope с декомпозицией "
-                         "(kind=scope, phase=stages, status=принято)")
-    rep = lint(path)
-    if rep.errors:
-        raise SystemExit("Scope не проходит проверку: " + "; ".join(rep.errors))
-    teams = {text(t.get("id")): t for t in doc.get("teams") or []}
-    rows = []
+# Заметки KR («Детальнее») — HTML из этих тегов, без атрибутов. Всё прочее
+# редактор вычищает при сохранении, а скрипт — при сборке страницы.
+RICH_TAGS = {"h3", "p", "b", "strong", "i", "em", "ul", "ol", "li", "br"}
+RICH_BLOCKS = {"h3", "p", "ul", "ol", "li", "div"}
+RICH_DROP = {"script", "style", "template", "iframe", "object"}
+
+
+class _Rich(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.text, self.bad, self.skip = [], [], [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in RICH_DROP:
+            self.skip += 1
+        if self.skip:
+            return
+        if tag not in RICH_TAGS or attrs:
+            self.bad.append(tag)
+        clean = "p" if tag == "div" else tag
+        if clean in RICH_TAGS:
+            self.out.append(f"<{clean}>")
+        if tag == "br":
+            self.text.append("\n")
+        elif tag == "li":
+            self.text.append("\n- ")
+        elif tag in RICH_BLOCKS:
+            self.text.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in RICH_DROP:
+            self.skip = max(0, self.skip - 1)
+            return
+        if self.skip:
+            return
+        clean = "p" if tag == "div" else tag
+        if clean in RICH_TAGS and clean != "br":
+            self.out.append(f"</{clean}>")
+        if tag in RICH_BLOCKS:
+            self.text.append("\n")
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(html.escape(data, quote=False))
+            self.text.append(data)
+
+
+def rich(value):
+    parser = _Rich()
+    parser.feed(text(value))
+    parser.close()
+    return parser
+
+
+def rich_html(value):
+    """Безопасный HTML заметки: только теги из RICH_TAGS, без атрибутов."""
+    return "".join(rich(value).out)
+
+
+def rich_text(value):
+    """Заметка простым текстом для CSV: блоки — строками, пункты списка — «- ».
+    То же правило — в teamplanner.js (richText)."""
+    lines = (line.strip() for line in "".join(rich(value).text).split("\n"))
+    return "\n".join(line for line in lines if line)
+
+
+# ---------------------------------------------------------------- TeamPlanner: данные
+
+def tp_krs(doc):
     for obj in doc.get("objectives") or []:
-        program = f'OBJ {text(obj.get("id"))}. {text(obj.get("title"))}'
+        for kr in obj.get("krs") or []:
+            yield obj, kr
+
+
+def tp_teams(doc):
+    return {text(t.get("id")): t for t in doc.get("teams") or []}
+
+
+def tp_people(doc, team_ids=None):
+    """Люди своих (не внешних) команд; team_ids — только эти команды."""
+    out = []
+    for tid, team in tp_teams(doc).items():
+        if team.get("external") or (team_ids is not None and tid not in team_ids):
+            continue
+        out += [dict(p, team=tid) for p in team.get("people") or []]
+    return out
+
+
+def step_state(doc, kr, step):
+    """Производные признаки этапа. Внешний ресурс — делает смежная команда. Без
+    исполнителя: norole — такой роли в командах KR нет вовсе (ресурс искать извне),
+    unassigned — роль есть, человека ещё не выбрали."""
+    ext = text(step.get("ext"))
+    if ext or text(step.get("who")):
+        return {"ext": ext, "unassigned": False, "norole": False}
+    roles_here = {text(p.get("role")) for p in tp_people(doc, kr.get("teams") or [])}
+    norole = text(step.get("role")) not in roles_here
+    return {"ext": "", "unassigned": not norole, "norole": norole}
+
+
+def step_pct(step):
+    if is_int(step.get("progress")):
+        return step["progress"]
+    return 100 if text(step.get("status")) == "DONE" else 0
+
+
+def kr_pct(kr):
+    steps = kr.get("steps") or []
+    return half_up(sum(step_pct(s) for s in steps) / len(steps)) if steps else None
+
+
+def kr_status(kr):
+    statuses = [text(s.get("status")) or "TODO" for s in kr.get("steps") or []]
+    if statuses and all(st == "DONE" for st in statuses):
+        return "DONE"
+    if "BLOCKED" in statuses:
+        return "BLOCKED"
+    if any(st in ("IN PROGRESS", "DONE") for st in statuses):
+        return "IN PROGRESS"
+    return "TODO"
+
+
+def kr_dates(kr):
+    starts = [text(s.get("start")) for s in kr.get("steps") or [] if text(s.get("start"))]
+    ends = [text(s.get("end")) for s in kr.get("steps") or [] if text(s.get("end"))]
+    return (min(starts) if starts else "", max(ends) if ends else "")
+
+
+def who_text(doc, kr, step):
+    st = step_state(doc, kr, step)
+    if st["ext"]:
+        team = tp_teams(doc).get(st["ext"], {})
+        return f"внешний ресурс: {text(team.get('name') or st['ext'])}"
+    if text(step.get("who")):
+        return text(step.get("who"))
+    return "нет роли в команде" if st["norole"] else ""
+
+
+def role_text(step):
+    ext = text(step.get("ext"))
+    if not ext:
+        return text(step.get("role"))
+    return f"EXT[{text(step.get('role'))}]"
+
+
+def quarter_bounds(quarter):
+    m = QUARTER_RE.match(quarter or "")
+    if not m:
+        return None
+    year, q = int(quarter[:4]), int(quarter[-1])
+    start = f"{year}-{3 * q - 2:02d}-01"
+    end = f"{year}-{3 * q:02d}-{[31, 30, 30, 31][q - 1]}"
+    return start, end
+
+
+# ---------------------------------------------------------------- TeamPlanner: заготовка из Scope
+
+def seed(scope_path, out, force=False):
+    if os.path.exists(out) and not force:
+        raise SystemExit(f"{out} уже есть — заготовка перезаписала бы правки техлидов. "
+                         "Продолжай с ним; начать заново — --force")
+    scope = load_checked(scope_path, "scope")
+    if scope.get("status") != "принято":
+        raise SystemExit("Заготовка TeamPlanner собирается только из принятого Scope (kind=scope, status=принято)")
+    # Связь с Retro заготовке не нужна; всё остальное из lint --final — нужно.
+    errors = [e for e in lint(scope_path, final=True).errors if not e.startswith("retro: файл")]
+    if errors:
+        raise SystemExit("Scope не проходит lint --final — заготовка по нему потеряла бы KR или этапы:\n  "
+                         + "\n  ".join(errors))
+    teams = [dict({k: v for k, v in t.items() if k in ("id", "name", "external")}, people=[])
+             for t in scope.get("teams") or []]
+    external = [text(t.get("id")) for t in scope.get("teams") or [] if t.get("external")]
+    objectives = []
+    for obj in scope.get("objectives") or []:
+        krs = []
         for ini in obj.get("initiatives") or []:
-            if cancelled(ini):
+            if cancelled(ini) or ini.get("in_quarter") is not True:
                 continue
             notes = ini.get("notes") or {}
-            head = {
-                "Программа (OBJ)": program,
-                "KR": text(ini.get("id")),
-                "Инициатива": text(ini.get("title")),
-                "PBV": text(ini.get("pbv")),
-                "Тег": text(ini.get("tag")),
-                "Команды": ", ".join(text(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or []),
-            }
-            extra = {
-                "Условия": "; ".join(text(c) for c in notes.get("conditions") or []),
-                "Риски": "; ".join(f"[RISK] {text(r)}" for r in notes.get("risks") or []),
-                "Зависимости": "; ".join(text(d) for d in notes.get("dependencies") or []),
-                "Неопределённости": "; ".join(text(u) for u in notes.get("uncertainties") or []),
-            }
-            stages = notes.get("stages") or [{}]
-            for n, stage in enumerate(stages, 1):
-                row = dict(head)
-                if stage:
-                    row.update({"Этап №": f"{text(ini.get('id'))}.{n}", "Роль": text(stage.get("role")),
-                                "Внешняя команда": "да" if stage.get("ext") else "",
-                                "Этап": text(stage.get("title"))})
-                if n == 1:
-                    row.update(extra)
-                rows.append(row)
+            # Этап смежной команды (ext: true) — на её команду из инициативы, иначе на первую внешнюю.
+            ext_team = next((t for t in ini.get("teams") or [] if t in external), external[0] if external else "")
+            steps = [{"role": text(st.get("role")), "title": text(st.get("title")) or text(ini.get("title")),
+                      "ext": ext_team if st.get("ext") else "", "who": "", "start": "", "end": "",
+                      "status": text(st.get("status")) or "TODO", "result": "", "action": "", "comment": ""}
+                     for st in notes.get("stages") or []]
+            context = [f"Риск: {text(r)}" for r in notes.get("risks") or []]
+            context += [f"Зависимость: {text(d)}" for d in notes.get("dependencies") or []]
+            krs.append({"id": text(ini.get("id")), "title": text(ini.get("title")), "pbv": ini.get("pbv"),
+                        "tag": text(ini.get("tag")), "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
+                        "result": text(ini.get("result")), "comment": "; ".join(context), "steps": steps})
+        if krs:
+            objectives.append({"id": text(obj.get("id")), "title": text(obj.get("title")), "krs": krs})
+    doc = {"kind": "teamplanner", "quarter": scope.get("quarter"), "team": scope.get("team"),
+           "po": scope.get("po"), "status": "черновик", "updated": scope.get("updated"),
+           "scope": {"file": os.path.basename(scope_path)},
+           # Роли Scope, которых нет в полном цикле, сохраняются: этапы из /okr-stages с ними валидны.
+           "roles": TP_ROLES + [r for r in scope.get("roles") or [] if r not in TP_ROLES],
+           "teams": teams, "objectives": objectives}
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return sum(len(o["krs"]) for o in objectives)
+
+
+# ---------------------------------------------------------------- TeamPlanner: проверка
+
+def lint_teamplanner(doc, rep, path):
+    quarter = text(doc.get("quarter"))
+    if not QUARTER_RE.match(quarter):
+        rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
+    if not text(doc.get("team")):
+        rep.gate("team: не указана команда")
+    roles = doc.get("roles") or TP_ROLES
+    teams = tp_teams(doc)
+    if not teams or "" in teams or len(teams) != len(doc.get("teams") or []):
+        rep.error("teams: у каждой команды нужен уникальный id")
+    names = set()
+    for tid, team in teams.items():
+        for n, person in enumerate(team.get("people") or [], 1):
+            if not text(person.get("name")) or not text(person.get("role")):
+                rep.error(f"команда {tid}, человек {n}: нужны name и role")
+            names.add(text(person.get("name")))
+    bounds = quarter_bounds(quarter)
+
+    seen = set()
+    for obj, kr in tp_krs(doc):
+        kid = text(kr.get("id"))
+        where = f"KR {kid or '?'}"
+        if not KR_ID_RE.match(kid) or not kid.startswith(text(obj.get("id")) + "."):
+            rep.error(f"{where}: id должен иметь вид {text(obj.get('id'))}.N")
+        if kid in seen:
+            rep.error(f"{where}: id повторяется")
+        seen.add(kid)
+        for tid in kr.get("teams") or []:
+            if tid not in teams:
+                rep.error(f"{where}: команда {tid!r} не описана в teams")
+        if kr.get("details") is not None:
+            if not isinstance(kr.get("details"), str):
+                rep.error(f"{where}: details — строка с HTML заметки")
+            elif rich(kr["details"]).bad:
+                rep.error(f"{where}: в details недопустимая разметка — только {sorted(RICH_TAGS)} без атрибутов")
+        steps = kr.get("steps") or []
+        if not steps and kr.get("tag") != "ACTIVITY":
+            rep.gate(f"{where}: нет ни одного этапа")
+        for n, step in enumerate(steps, 1):
+            at = f"{where}, этап {n}"
+            if text(step.get("role")) not in roles:
+                rep.error(f"{at}: роль {step.get('role')!r} не из {roles}")
+            if not text(step.get("title")):
+                rep.error(f"{at}: нет названия")
+            if (text(step.get("status")) or "TODO") not in STEP_STATUSES:
+                rep.error(f"{at}: status — одно из {STEP_STATUSES}")
+            ext = text(step.get("ext"))
+            if ext and ext not in teams:
+                rep.error(f"{at}: внешняя команда {ext!r} не описана в teams")
+            elif ext and not teams[ext].get("external"):
+                rep.warn(f"{at}: команда {ext!r} указана как внешний ресурс, но не помечена external")
+            who = text(step.get("who"))
+            if who and who not in names:
+                rep.error(f"{at}: исполнитель {who!r} не найден в составе команд")
+            progress = step.get("progress")
+            if progress is not None and (not is_int(progress) or not 0 <= progress <= 100):
+                rep.error(f"{at}: progress — целое 0..100")
+            for key in ("start", "end"):
+                if text(step.get(key)) and not DATE_RE.match(text(step.get(key))):
+                    rep.error(f"{at}: {key} — дата ГГГГ-ММ-ДД")
+            start, end = text(step.get("start")), text(step.get("end"))
+            if start and end and DATE_RE.match(start) and DATE_RE.match(end):
+                if start > end:
+                    rep.error(f"{at}: начало позже конца")
+                if bounds and (start < bounds[0] or end > bounds[1]):
+                    rep.warn(f"{at}: сроки выходят за квартал {quarter}")
+            state = step_state(doc, kr, step)
+            if state["norole"]:
+                rep.gate(f"{at}: нет исполнителя, и роли {text(step.get('role'))} нет в командах KR — нужен ресурс извне")
+            elif state["unassigned"]:
+                rep.gate(f"{at}: нет исполнителя")
+
+    scope_file = text((doc.get("scope") or {}).get("file"))
+    if scope_file:
+        scope, problem = load_linked(os.path.join(os.path.dirname(os.path.abspath(path)), scope_file), "scope")
+        if problem:
+            rep.gate(f"scope: файл {scope_file} {problem}")
+        else:
+            planned = {text(i.get("id")) for o in scope.get("objectives") or []
+                       for i in o.get("initiatives") or [] if not cancelled(i) and i.get("in_quarter") is True}
+            for kid in sorted(planned - seen):
+                rep.gate(f"KR {kid} идёт в квартал по Scope, но его нет в TeamPlanner")
+            for kid in sorted(seen - planned):
+                rep.warn(f"KR {kid} нет среди взятых в квартал инициатив Scope")
+
+
+# ---------------------------------------------------------------- TeamPlanner: HTML
+
+def tp_static(doc):
+    """То же без JS: цели, KR и подзадачи списком — читается и печатается."""
+    parts = []
+    for obj in doc.get("objectives") or []:
+        parts.append(f'<h2 class="obj">OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</h2>')
+        for kr in obj.get("krs") or []:
+            items = "".join(
+                f'<li><span class="t">{esc(role_text(step))}</span> {esc_unc(step.get("title"))}'
+                f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}</li>'
+                for step in kr.get("steps") or [])
+            note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
+            parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
+                         f'<span class="kr-title">{esc(kr.get("title"))}</span></summary>'
+                         f'{note}<ul class="tp-static">{items}</ul></details>')
+    return "\n".join(parts)
+
+
+def render_teamplanner(doc, source):
+    quarter, team = text(doc.get("quarter")), text(doc.get("team"))
+    title = f"TEAMPLANNER {quarter}" + (f" — {team}" if team else "")
+    data = json.dumps({"file": os.path.basename(source), "doc": doc, "roles": doc.get("roles") or TP_ROLES,
+                       "statuses": STATUS_RU}, ensure_ascii=False).replace("<", "\\u003c")
+    body = "\n".join([
+        '<div class="rail"><button class="rail-tab" id="tpTab" type="button" data-drawer="tpDrawer">Цели</button>'
+        '<button class="rail-tab" id="tpTeamTab" type="button" data-drawer="tpTeamDrawer">Команда</button></div>'
+        '<div class="drawer" id="tpDrawer"><div class="drawer-head"><h4>Цели</h4>'
+        '<button class="drawer-close" type="button">×</button></div><div id="tpObjs"></div></div>'
+        '<div class="drawer" id="tpTeamDrawer"><div class="drawer-head"><h4>Команда</h4>'
+        '<button class="drawer-close" type="button">×</button></div>'
+        '<p class="drawer-hint">Команда · тип · ФИО. Из этого состава выбирают исполнителей подзадач.</p>'
+        '<div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
+        '<div class="layout wide"><main>',
+        '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'
+        '<button type="button" id="bTsv">Копировать в Sheets</button>'
+        '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
+        '<p class="tp-dirty" id="tpDirty" hidden>Есть правки в этом браузере — «Скачать JSON» и отдайте файл агенту. '
+        '<button type="button" id="bReset">Сбросить</button></p>',
+        '<p class="tp-dirty" id="tpStale" hidden>В этом браузере есть правки к прошлой версии файла — к этой они не '
+        'применены. <button type="button" id="bStaleGet">Скачать их</button> · '
+        '<button type="button" id="bStaleDrop">Отбросить</button></p>',
+        f'<div id="tp">{tp_static(doc)}</div>',
+        '</main></div>',
+        '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
+        '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
+        '<h3 class="side-title" id="sideTitle"></h3>'
+        '<div class="rt-bar" id="rtBar">'
+        '<button type="button" data-cmd="formatBlock" data-arg="h3">Заголовок</button>'
+        '<button type="button" data-cmd="formatBlock" data-arg="p">Текст</button>'
+        '<button type="button" data-cmd="bold"><b>Ж</b></button>'
+        '<button type="button" data-cmd="italic"><i>К</i></button>'
+        '<button type="button" data-cmd="insertUnorderedList">• список</button>'
+        '<button type="button" data-cmd="insertOrderedList">1. список</button></div>'
+        '<div class="rt" id="rt" contenteditable="true" role="textbox" aria-multiline="true"></div>'
+        '<p class="hintline">Мнения, ожидания, границы и всё, что поможет спланировать. Сохраняется в этом '
+        'браузере; в документ — через «Скачать JSON».</p></div>',
+        f'<script type="application/json" id="page-data">{data}</script>',
+        f'<script>{asset("teamplanner.js")}</script>',
+    ])
+    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n'
+            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
+            f'<style>\n{asset("page.css")}{asset("teamplanner.css")}</style>\n</head>\n<body>\n{body}\n</body>\n</html>\n')
+
+
+# ---------------------------------------------------------------- TeamPlanner: CSV
+
+def tp_rows(doc):
+    """Строки таблицы в порядке листа TeamPlanner: цель, KR (общий прогресс), этапы.
+    Та же логика — в teamplanner.js (кнопка «Скопировать для Google Sheets»)."""
+    rows = []
+    for obj in doc.get("objectives") or []:
+        rows.append({"Название": f"OBJ {text(obj.get('id'))} — {text(obj.get('title'))}"})
+        for kr in obj.get("krs") or []:
+            start, end = kr_dates(kr)
+            pct = kr_pct(kr)
+            tag = text(kr.get("tag"))
+            rows.append({"Название": f"KR {text(kr.get('id'))} " + (f"[{tag}] " if tag else "")
+                                     + f"{text(kr.get('title'))} (общий прогресс)",
+                         "Комментарий": "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment")),
+                                                             rich_text(kr.get("details"))) if x),
+                         "Исполнитель": text(kr.get("owner")), "Начало": start, "Конец": end,
+                         "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct})
+            for step in kr.get("steps") or []:
+                rows.append({"Название": f"{text(step.get('title'))} ({role_text(step)})",
+                             "Комментарий": text(step.get("comment")), "Роль": role_text(step),
+                             "Исполнитель": who_text(doc, kr, step),
+                             "Начало": text(step.get("start")), "Конец": text(step.get("end")),
+                             "Статус": STATUS_RU.get(text(step.get("status")) or "TODO", ""),
+                             "Прогресс, %": step_pct(step),
+                             "Образ результата": text(step.get("result")), "Образ действия": text(step.get("action"))})
+    return rows
+
+
+def export_csv(path, out):
+    rep = lint(path)
+    if rep.errors:
+        raise SystemExit("TeamPlanner не проходит проверку: " + "; ".join(rep.errors))
+    doc = load(path)
+    if doc.get("kind") != "teamplanner":
+        raise SystemExit(f"{path}: csv собирается из TeamPlanner (kind=teamplanner)")
+    rows = tp_rows(doc)
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TEAMPLANNER_COLUMNS, delimiter=";", restval="")
         writer.writeheader()
-        for n, row in enumerate(rows, 1):
-            row["№"] = n
-            writer.writerow(row)
+        writer.writerows(rows)
     return len(rows)
 
 
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("lint", "render", "teamplanner"):
+    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv"):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd, path = argv[0], argv[1]
@@ -846,7 +1367,11 @@ def main(argv):
         render(path, argv[2])
         print(f"Written {argv[2]}")
         return 0
-    count = teamplanner(path, argv[2])
+    if cmd == "seed":
+        count = seed(path, argv[2], force="--force" in argv)
+        print(f"Written {argv[2]} ({count} KR)")
+        return 0
+    count = export_csv(path, argv[2])
     print(f"Written {argv[2]} ({count} строк)")
     return 0
 

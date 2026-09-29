@@ -25,3 +25,11 @@ details.brief p{ margin:.6rem 0 0; font-size:.92rem; color:var(--muted); }
 .ask-block{ border:1px solid var(--line); background:var(--mark); padding:.6rem .9rem; margin:1.4rem 0; font-size:.9rem; }
 .ask-block h4{ margin:0 0 .4rem; font-size:.85rem; }
 .ask-block ol{ margin:0; padding-left:1.3rem; }
+
+/* «Берём в квартал»: не взятая остаётся в скоупе кандидатом — приглушена, но не зачёркнута. */
+col.c-inq{ width:6.5rem; }
+td.inq{ font-family:"Courier New",monospace; font-size:.74rem; white-space:nowrap; }
+span.inq[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
+span.inq[data-v="no"]{ color:var(--faint); }
+span.inq[data-v="undecided"]{ background:var(--mark); border:1px dashed var(--line); padding:0 .35rem; }
+tr.row[data-out] td{ color:var(--faint); }

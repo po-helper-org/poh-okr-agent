@@ -1,11 +1,11 @@
 ---
 name: okr-roadmap
-description: '[deprecated] Устарело, используй /okr-stages. Roadmap Architect — строит roadmap.md (now-next-later) из OKR-<quarter>.md, с привязкой каждого пункта к Key Result. Используй когда — /okr-roadmap, роадмап now-next-later по OKR квартала.'
+description: '[deprecated] Устарело, используй /okr-teamplanner. Roadmap Architect — строит roadmap.md (now-next-later) из OKR-<quarter>.md, с привязкой каждого пункта к Key Result. Используй когда — /okr-roadmap, роадмап now-next-later по OKR квартала.'
 ---
 
 > **[deprecated]** `/okr-roadmap` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
-> Замена: `/okr-stages <quarter>` — этапы по ролям; раскладка now/next/later больше не строится.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
+> Замена: `/okr-teamplanner <quarter>` — этапы по ролям с исполнителями и сроками; раскладка now/next/later больше не строится.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-roadmap`
 устарела и неактуальна, назови замену и предложи запустить её. Продолжай по

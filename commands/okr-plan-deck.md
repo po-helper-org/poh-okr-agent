@@ -3,7 +3,7 @@ description: '[deprecated] Устарело, используй /okr-scope, /okr
 ---
 
 > **[deprecated]** `/okr-plan-deck` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 > Замена: документ `scope-<quarter>.html` из `/okr-scope` и `/okr-stages` для команды и `/okr-teamplanner <quarter>` для техлидов.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-plan-deck`

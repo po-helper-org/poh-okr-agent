@@ -9,7 +9,7 @@ description: "OKR Retro — этап 1 планирования квартала
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`). Пайплайн:
-`/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+`/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 
 ## На выходе
 
