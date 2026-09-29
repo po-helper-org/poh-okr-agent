@@ -497,8 +497,8 @@ def page(title, source, css, parts, cards):
         '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
         '<h3 class="side-title" id="sideTitle"></h3><p class="factline" id="sideState"></p>'
         '<div id="sideSegs"></div><div class="note" id="sideNote"></div>'
-        '<p class="hintline">Правый клик по любому пункту — комментарий для ИИ-агента: дописать риск, '
-        'поправить готовность или следующие действия. Сама страница ничего не меняет.</p></div>',
+        '<p class="hintline">Правый клик по пункту или выделенной мышью зоне — комментарий для ИИ-агента: '
+        'дописать риск, поправить готовность или следующие действия. Сама страница ничего не меняет.</p></div>',
         f'<script type="application/json" id="page-data">{data}</script>',
         f'<script>{asset("page.js")}</script>',
     ])

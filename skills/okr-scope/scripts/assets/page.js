@@ -126,12 +126,32 @@
   rows.forEach(function(r){
     r.addEventListener("click", function(){ open(r.getAttribute("data-kr")); });
   });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape"){ if(pop) hidePopover(); else close(); } });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape"){ selBtn.hidden = true; if(pop) hidePopover(); else close(); } });
 
   /* — правый клик: комментарий к пункту — */
   var pop = null;
   function hidePopover(){ if(pop){ pop.remove(); pop = null; } }
+  /* Выделенная мышью зона карточки: цитата — сам текст, разделы — все задетые. */
+  function selectionTarget(){
+    var sel = window.getSelection();
+    if(!openId || !sel.rangeCount || sel.isCollapsed) return null;
+    var quote = sel.toString().replace(/\s+/g, " ").trim();
+    if(!quote || !side.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+    var hit = Array.prototype.filter.call(side.querySelectorAll("[data-sec]"), function(n){
+      return sel.containsNode(n, true);
+    });
+    var sections = [];
+    hit.forEach(function(n){
+      var sec = n.getAttribute("data-sec");
+      if(sections.indexOf(sec) < 0) sections.push(sec);
+    });
+    return {kr: openId, section: sections.join(" / ") || "Выделение",
+            quote: quote.length > 400 ? quote.slice(0, 400) + "…" : quote,
+            blocks: hit.map(function(n){ return n.getAttribute("data-quote"); })};
+  }
   function targetOf(e){
+    var picked = selectionTarget();
+    if(picked) return picked;
     var node = e.target.closest("[data-sec]");
     if(node && side.contains(node) && openId) return {kr: openId, section: node.getAttribute("data-sec"), quote: node.getAttribute("data-quote")};
     var row = e.target.closest("tr.row");
@@ -172,7 +192,9 @@
     ok.addEventListener("click", function(){
       var text = area.value.trim();
       if(!text) return;
-      comments.push({kr: t.kr, section: t.section, quote: t.quote, text: text, at: new Date().toISOString()});
+      var c = {kr: t.kr, section: t.section, quote: t.quote, text: text, at: new Date().toISOString()};
+      if(t.blocks) c.blocks = t.blocks;
+      comments.push(c);
       persist();
       hidePopover();
     });
@@ -190,8 +212,30 @@
     e.preventDefault();
     showPopover(t, e.pageX, e.pageY);
   });
+  /* Кнопка у выделения — для тех, кому правый клик неудобен. */
+  var selBtn = el("button", "sel-btn", "Комментировать выделенное");
+  selBtn.type = "button";
+  selBtn.hidden = true;
+  document.body.appendChild(selBtn);
+  var selPicked = null;
   document.addEventListener("mousedown", function(e){
     if(pop && !pop.contains(e.target)) hidePopover();
+    if(e.target !== selBtn) selBtn.hidden = true;
+  });
+  side.addEventListener("mouseup", function(e){
+    setTimeout(function(){
+      selPicked = selectionTarget();
+      if(!selPicked || pop){ selBtn.hidden = true; return; }
+      selBtn.hidden = false;
+      selBtn.style.left = Math.max(8, Math.min(e.pageX, window.scrollX + document.documentElement.clientWidth - selBtn.offsetWidth - 8)) + "px";
+      selBtn.style.top = (e.pageY + 12) + "px";
+    }, 0);
+  });
+  selBtn.addEventListener("mousedown", function(e){ e.preventDefault(); });
+  selBtn.addEventListener("click", function(){
+    var t = selPicked;
+    selBtn.hidden = true;
+    if(t) showPopover(t, parseInt(selBtn.style.left, 10), parseInt(selBtn.style.top, 10));
   });
 
   /* — отметки и панель комментариев — */
@@ -204,7 +248,9 @@
     if(!openId) return;
     side.querySelectorAll("[data-sec]").forEach(function(node){
       var t = {kr: openId, section: node.getAttribute("data-sec"), quote: node.getAttribute("data-quote")};
-      if(comments.some(function(c){ return sameTarget(c, t); })) node.setAttribute("data-commented", "");
+      if(comments.some(function(c){
+        return sameTarget(c, t) || (c.kr === openId && c.blocks && c.blocks.indexOf(t.quote) >= 0);
+      })) node.setAttribute("data-commented", "");
       else node.removeAttribute("data-commented");
     });
   }
@@ -224,7 +270,7 @@
     var list = document.getElementById("commentsList");
     list.innerHTML = "";
     if(!comments.length){
-      list.appendChild(el("p", "empty", "Пока нет. Правый клик по пункту карточки или строке таблицы — комментарий для ИИ-агента."));
+      list.appendChild(el("p", "empty", "Пока нет. Правый клик по пункту карточки или строке таблицы, или выделите зону в карточке — комментарий для ИИ-агента."));
     }
     comments.forEach(function(c){
       var item = el("div", "item");
