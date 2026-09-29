@@ -3,7 +3,7 @@
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
   okr-plan.py render <file.json> <out.html>
-  okr-plan.py seed <scope.json> <teamplanner.json>    заготовка TeamPlanner из принятого Scope
+  okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
 
 Источник истины — JSON. HTML и CSV всегда пересобираются из него, руками не правятся.
@@ -79,6 +79,98 @@ def pbv_of(item):
     return pbv if is_int(pbv) else 0
 
 
+# ---------------------------------------------------------------- структура документа
+
+# Структура каждого вида документа: что — объект, что — список объектов, что —
+# значение. Проверяется до всего остального: JSON пишет LLM, и строка на месте
+# списка не должна ронять скрипт трейсбэком — только понятной ошибкой.
+V = "значение"            # строка, число, true/false или null
+T = "текст"               # значение или список значений
+L = "список"              # список строк (null — пусто)
+STEP = {"role": V, "step": V, "title": V, "status": V, "ext": V}
+SHAPES = {
+    "retro": {
+        "kind": V, "quarter": V, "next_quarter": V, "team": V, "po": V, "status": V, "updated": V, "basis": L,
+        "objectives": [{"id": V, "title": V, "outcome": T, "krs": [{
+            "id": V, "title": V, "pbv": V, "pct": V, "status": V, "unplanned": V, "comment": T, "goal": T,
+            "plan": [STEP], "deps": [STEP], "risks": L, "who": L, "cancel_reason": T,
+            "next": {"action": V, "kr": V, "note": T}}]}],
+    },
+    "scope": {
+        "kind": V, "quarter": V, "team": V, "po": V, "status": V, "phase": V, "updated": V, "summary": T,
+        "retro": {"file": V}, "retro_skipped": T, "po_brief": T, "roles": L,
+        "teams": [{"id": V, "name": V, "external": V}],
+        "objectives": [{"id": V, "title": V, "why": T, "activity": V, "initiatives": [{
+            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "tag": V, "status": V, "cancel_reason": T,
+            "from_retro": V, "result": T, "before": T, "after": T, "open": L,
+            "notes": {"description": T, "stages": [STEP], "conditions": L, "risks": L, "dependencies": L,
+                      "uncertainties": L}}]}],
+        "retro_dropped": [{"id": V, "reason": T}], "open_questions": L,
+    },
+    "teamplanner": {
+        "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "scope": {"file": V}, "roles": L,
+        "teams": [{"id": V, "name": V, "external": V, "people": [{"name": V, "role": V}]}],
+        "objectives": [{"id": V, "title": V, "krs": [{
+            "id": V, "title": V, "pbv": V, "tag": V, "teams": L, "owner": V, "result": T, "comment": T, "details": V,
+            "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
+                       "progress": V, "result": T, "action": T, "comment": T}]}]}],
+    },
+}
+
+
+def _scalar(value):
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def shape_errors(doc, spec=None, where=""):
+    """Несовпадения со структурой: [«objectives[0].krs: ожидается список, получено строка»]."""
+    if spec is None:
+        kind = doc.get("kind")
+        spec = SHAPES.get(kind) if isinstance(kind, str) else None
+        if spec is None:
+            return ["kind: ожидается 'retro', 'scope' или 'teamplanner'"]
+    names = {str: "строка", int: "число", float: "число", bool: "true/false", list: "список", dict: "объект"}
+    got = lambda v: names.get(type(v), type(v).__name__)
+    out = []
+    for key, sub in spec.items():
+        value = doc.get(key)
+        at = f"{where}.{key}" if where else key
+        if value is None:
+            continue
+        if sub is V and not _scalar(value):
+            out.append(f"{at}: ожидается значение, получено {got(value)}")
+        elif sub is T and not (_scalar(value) or (isinstance(value, list) and all(_scalar(v) for v in value))):
+            out.append(f"{at}: ожидается текст или список строк, получено {got(value)}")
+        elif sub is L and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            out.append(f"{at}: ожидается список строк [\"…\"], получено {got(value)}")
+        elif isinstance(sub, dict):
+            if not isinstance(value, dict):
+                out.append(f"{at}: ожидается объект {{...}}, получено {got(value)}")
+            else:
+                out += shape_errors(value, sub, at)
+        elif isinstance(sub, list):
+            if not isinstance(value, list):
+                out.append(f"{at}: ожидается список [...], получено {got(value)}")
+                continue
+            for i, item in enumerate(value):
+                if not isinstance(item, dict):
+                    out.append(f"{at}[{i}]: ожидается объект {{...}}, получено {got(item)}")
+                else:
+                    out += shape_errors(item, sub[0], f"{at}[{i}]")
+    return out
+
+
+def load_checked(path, kind=None):
+    """load + проверка структуры. Для render/seed/csv: сломанная структура — стоп с перечнем."""
+    doc = load(path)
+    if kind and doc.get("kind") != kind:
+        raise SystemExit(f"{path}: ожидается kind={kind!r}, получено {doc.get('kind')!r}")
+    errors = shape_errors(doc)
+    if errors:
+        raise SystemExit(f"{path}: структура не совпадает со схемой —\n  " + "\n  ".join(errors))
+    return doc
+
+
 class Report:
     def __init__(self, final):
         self.final = final
@@ -97,8 +189,17 @@ class Report:
 
 
 def load(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    """JSON-документ. Нет файла, битый JSON, не объект — понятная ошибка вместо трейсбэка."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except FileNotFoundError:
+        raise SystemExit(f"{path}: файл не найден")
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{path}: не JSON — строка {e.lineno}, позиция {e.colno}: {e.msg}")
+    if not isinstance(doc, dict):
+        raise SystemExit(f"{path}: ожидается JSON-объект {{...}}, получено {type(doc).__name__}")
+    return doc
 
 
 # ---------------------------------------------------------------- Retro: правила вывода
@@ -301,7 +402,10 @@ def resolve_retro(doc, doc_path, retro_path):
     if not ref:
         return None
     candidate = os.path.join(os.path.dirname(os.path.abspath(doc_path)), ref)
-    return load(candidate) if os.path.exists(candidate) else None
+    if not os.path.exists(candidate):
+        return None
+    retro = load(candidate)
+    return None if shape_errors(retro) or retro.get("kind") != "retro" else retro
 
 
 def lint_scope(doc, rep, retro):
@@ -443,6 +547,10 @@ def lint_retro_link(doc, initiatives, retro, rep):
 def lint(path, final=False, retro_path=None):
     doc = load(path)
     rep = Report(final or doc.get("status") == "принято")
+    shape = shape_errors(doc)
+    if shape:
+        rep.errors += shape
+        return rep
     if doc.get("status", "черновик") not in STATUSES:
         rep.error(f"status: одно из {STATUSES}")
     kind = doc.get("kind")
@@ -662,7 +770,7 @@ def scope_card(obj, ini, teams, retro_quarter):
     if cancelled(ini):
         line.insert(0, "отменено")
     else:
-        line.insert(0, IN_QUARTER_TEXT[ini.get("in_quarter")])
+        line.insert(0, IN_QUARTER_TEXT.get(ini.get("in_quarter"), IN_QUARTER_TEXT[None]))
     flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
              {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
     stages = notes.get("stages") or []
@@ -800,7 +908,7 @@ def render_scope(doc, source, retro=None):
 
 
 def render(path, out):
-    doc = load(path)
+    doc = load_checked(path)
     if doc.get("kind") == "retro":
         page_html = render_retro(doc, path)
     elif doc.get("kind") == "scope":
@@ -972,9 +1080,12 @@ def quarter_bounds(quarter):
 
 # ---------------------------------------------------------------- TeamPlanner: заготовка из Scope
 
-def seed(scope_path, out):
-    scope = load(scope_path)
-    if scope.get("kind") != "scope" or scope.get("status") != "принято":
+def seed(scope_path, out, force=False):
+    if os.path.exists(out) and not force:
+        raise SystemExit(f"{out} уже есть — заготовка перезаписала бы правки техлидов. "
+                         "Продолжай с ним; начать заново — --force")
+    scope = load_checked(scope_path, "scope")
+    if scope.get("status") != "принято":
         raise SystemExit("Заготовка TeamPlanner собирается только из принятого Scope (kind=scope, status=принято)")
     teams = [dict({k: v for k, v in t.items() if k in ("id", "name", "external")}, people=[])
              for t in scope.get("teams") or []]
@@ -986,7 +1097,8 @@ def seed(scope_path, out):
             if cancelled(ini) or ini.get("in_quarter") is not True:
                 continue
             notes = ini.get("notes") or {}
-            ext_team = next((t for t in ini.get("teams") or [] if t in external), "")
+            # Этап смежной команды (ext: true) — на её команду из инициативы, иначе на первую внешнюю.
+            ext_team = next((t for t in ini.get("teams") or [] if t in external), external[0] if external else "")
             steps = [{"role": text(st.get("role")), "title": text(st.get("title")) or text(ini.get("title")),
                       "ext": ext_team if st.get("ext") else "", "who": "", "start": "", "end": "",
                       "status": text(st.get("status")) or "TODO", "result": "", "action": "", "comment": ""}
@@ -1087,6 +1199,8 @@ def lint_teamplanner(doc, rep, path):
         candidate = os.path.join(os.path.dirname(os.path.abspath(path)), scope_file)
         if not os.path.exists(candidate):
             rep.gate(f"scope: файл {scope_file} не найден рядом с TeamPlanner")
+        elif shape_errors(load(candidate)):
+            rep.error(f"scope: {scope_file} не проходит проверку структуры — сначала lint Scope")
         else:
             scope = load(candidate)
             planned = {text(i.get("id")) for o in scope.get("objectives") or []
@@ -1191,9 +1305,7 @@ def tp_rows(doc):
 
 
 def export_csv(path, out):
-    doc = load(path)
-    if doc.get("kind") != "teamplanner":
-        raise SystemExit("csv собирается из TeamPlanner (kind=teamplanner)")
+    doc = load_checked(path, "teamplanner")
     rep = lint(path)
     if rep.errors:
         raise SystemExit("TeamPlanner не проходит проверку: " + "; ".join(rep.errors))
@@ -1232,7 +1344,7 @@ def main(argv):
         print(f"Written {argv[2]}")
         return 0
     if cmd == "seed":
-        count = seed(path, argv[2])
+        count = seed(path, argv[2], force="--force" in argv)
         print(f"Written {argv[2]} ({count} KR)")
         return 0
     count = export_csv(path, argv[2])

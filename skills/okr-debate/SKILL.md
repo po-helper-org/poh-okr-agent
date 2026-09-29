@@ -4,7 +4,7 @@ description: "[deprecated] Устарело, используй /okr-scope. Devi
 ---
 
 > **[deprecated]** `/okr-debate` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 > Замена: выравнивание встроено в `/okr-scope <quarter>` — проходит перед принятием драфта.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-debate`

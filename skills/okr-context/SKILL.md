@@ -4,7 +4,7 @@ description: '[deprecated] Устарело, используй /okr-retro и /o
 ---
 
 > **[deprecated]** `/okr-context` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 > Замена: `/okr-retro <quarter>` (итоги прошлого квартала) и `/okr-scope <quarter>` (вводные нового).
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-context`

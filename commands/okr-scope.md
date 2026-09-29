@@ -9,7 +9,7 @@ description: "OKR Scope — этап 2 планирования квартала
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`). Пайплайн:
-`/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+`/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 
 ## На выходе
 
@@ -28,5 +28,6 @@ description: "OKR Scope — этап 2 планирования квартала
 Scope <quarter>: .okr/<quarter>/plan/scope-<quarter>.html  [черновик | принято]
 
 ── СТОП ── PO: правьте словами или голосом, я обновлю документ.
-Дальше, после «принято»: /okr-stages <quarter>
+Дальше, после «принято»: /okr-teamplanner <quarter>
+(или сначала /okr-stages <quarter>, если в ПЛАН нужны риски и условия)
 ```

@@ -190,8 +190,12 @@
 
   var objs = doc.objectives || [];
   var cur = 0, opened = {};
-  var m = location.hash.match(/obj=([^&]+)/);
-  if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
+  function fromHash(){
+    var m = location.hash.match(/obj=([^&]+)/);
+    if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
+  }
+  fromHash();
+  window.addEventListener("hashchange", function(){ fromHash(); render(); });
   /* ---------- состав команды: строки «команда · тип · ФИО» ---------- */
   var roster;
   function initRoster(){

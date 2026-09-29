@@ -9,7 +9,8 @@ description: "Декомпозиция по этапам — этап 3 план
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`). Пайплайн:
-`/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+`/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`. Этап
+необязательный: этапы отсюда станут заготовкой TeamPlanner.
 
 ## На выходе
 

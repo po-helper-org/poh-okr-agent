@@ -11,7 +11,7 @@ description: OKR Scope — этап 2 планирования квартала.
 /okr-scope <quarter>
 ```
 
-Этап 2 из четырёх: `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+Этап 2 из четырёх: `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 
 ## На выходе
 
@@ -20,8 +20,11 @@ description: OKR Scope — этап 2 планирования квартала.
 .okr/<quarter>/plan/scope-<quarter>.html   документ, вокруг которого идут правки
 ```
 
-Формат данных и проверки — `resources/plan_schema.md`, эталон —
-`scripts/fixtures/scope-2026Q4.json`. Скрипт — `scripts/okr-plan.py`.
+Формат данных и проверки — `skills/okr-scope/resources/plan_schema.md` (раздел
+«Scope»; как запускать скрипт и что значат его ответы — «Работа со скриптом»).
+Эталон — `skills/okr-scope/scripts/fixtures/scope-2026Q4.json`: пиши JSON по
+его образцу. Скрипт — `<корень установки>/skills/okr-scope/scripts/okr-plan.py`
+(корень — куда `install.sh` синкнул навыки, обычно `.claude/`). Ниже он — `okr-plan.py`.
 
 ## Принцип
 
@@ -87,13 +90,16 @@ description: OKR Scope — этап 2 планирования квартала.
 5. **Переходящее из ретро.** Каждый KR ретро с `continue` — инициатива с
    `from_retro`. PO о нём не упомянул → всё равно добавь и спроси: «<id> из
    прошлого квартала берём или снимаем?». Снимаем → `retro_dropped` с причиной.
-6. `phase: "scope"`, `status: "черновик"`, `retro.file` или `retro_skipped`.
+6. Шапка: `"kind": "scope"`, `quarter`, `team`, `po`, `updated`, `summary` —
+   одна фраза о квартале, `phase: "scope"`, `status: "черновик"`,
+   `retro: {"file": "retro-<prev>.json"}` или `retro_skipped` с причиной,
+   `po_brief`, `roles` не пиши — по умолчанию подойдут.
 
 Собери, проверь, покажи:
 
 ```bash
-python3 scripts/okr-plan.py render <scope.json> <scope.html>
-python3 scripts/okr-plan.py lint <scope.json>
+python3 okr-plan.py lint .okr/<quarter>/plan/scope-<quarter>.json
+python3 okr-plan.py render .okr/<quarter>/plan/scope-<quarter>.json .okr/<quarter>/plan/scope-<quarter>.html
 ```
 
 ### Этап 3: Итерации и выравнивание
@@ -146,7 +152,7 @@ PO не правит страницу руками: правым кликом о
 ### Этап 4: Принятие
 
 Когда PO говорит «принято»:
-1. `python3 scripts/okr-plan.py lint <scope.json> --final`.
+1. `python3 okr-plan.py lint .okr/<quarter>/plan/scope-<quarter>.json --final`.
 2. Ошибки → покажи PO, что мешает принять. Документ остаётся черновиком.
 3. Чисто → `status: "принято"`, `updated`, `render`.
 
@@ -154,9 +160,10 @@ PO не правит страницу руками: правым кликом о
 
 ```
 Scope <quarter>: .okr/<quarter>/plan/scope-<quarter>.html  [черновик | принято]
-Целей N, инициатив N (PBV ≥ 7: N), команд N. Из прошлого квартала: N, снято: N.
-[УТОЧНИТЬ]: N. Проверка: OK | ошибок N.
+Целей N, инициатив N, в квартал N (PBV ≥ 7: N), не решено N. Команд N.
+Из прошлого квартала: N, снято: N. [УТОЧНИТЬ]: N. Проверка: OK | ошибок N.
 
 ── СТОП ── PO: правьте словами или голосом, я обновлю документ.
-Дальше, после «принято»: /okr-stages <quarter>
+Дальше, после «принято»: /okr-teamplanner <quarter>
+(или сначала /okr-stages <quarter>, если в ПЛАН нужны риски и условия)
 ```

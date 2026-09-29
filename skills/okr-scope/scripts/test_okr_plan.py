@@ -432,5 +432,81 @@ class TeamPlanner(Case):
 
 
 
+class Robustness(Case):
+    """JSON пишет LLM: любой неверный тип — понятная ошибка, а не трейсбэк."""
+
+    def test_load_errors_are_readable(self):
+        bad = os.path.join(self.tmp.name, "bad.json")
+        for content, fragment in (("{bad", "не JSON — строка 1"), ("[]", "ожидается JSON-объект")):
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write(content)
+            with self.assertRaises(SystemExit) as cm:
+                okr_plan.lint(bad)
+            self.assertIn(fragment, str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            okr_plan.lint(os.path.join(self.tmp.name, "nope.json"))
+        self.assertIn("файл не найден", str(cm.exception))
+
+    def test_shape_errors_are_reported(self):
+        tp = fixture("teamplanner-2026Q4.json")
+        tp["teams"] = "Витрина"
+        tp["objectives"][0]["krs"][0]["steps"][0] = "SA"
+        tp["objectives"][0]["krs"][1]["teams"] = "front"
+        rep = okr_plan.lint(self.write(tp, "tp.json"))
+        self.assertIn("teams: ожидается список [...], получено строка", rep.errors)
+        self.assertIn("objectives[0].krs[0].steps[0]: ожидается объект {...}, получено строка", rep.errors)
+        self.assertIn('objectives[0].krs[1].teams: ожидается список строк ["…"], получено строка', rep.errors)
+        with self.assertRaises(SystemExit) as cm:
+            okr_plan.render(self.write(tp, "tp.json"), os.path.join(self.tmp.name, "tp.html"))
+        self.assertIn("структура не совпадает со схемой", str(cm.exception))
+
+    def test_seed_does_not_overwrite_edits(self):
+        scope = self.write(self.scope, "scope-2026Q4.json")
+        out = self.write({"kind": "teamplanner", "edited": True}, "teamplanner-2026Q4.json")
+        with self.assertRaises(SystemExit):
+            okr_plan.seed(scope, out)
+        with open(out, encoding="utf-8") as f:
+            self.assertTrue(json.load(f)["edited"])
+        okr_plan.seed(scope, out, force=True)
+        with open(out, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["kind"], "teamplanner")
+
+    def test_wrong_types_never_crash(self):
+        docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json")}
+
+        def paths(node, pre=()):
+            if pre:
+                yield pre
+            items = node.items() if isinstance(node, dict) else enumerate(node[:1]) if isinstance(node, list) else ()
+            for k, v in items:
+                yield from paths(v, pre + (k,))
+
+        for name, doc in docs.items():
+            for other, od in docs.items():
+                self.write(od, other)
+            for path in paths(doc):
+                for bad in ("x", 5, [], {}):
+                    d = copy.deepcopy(doc)
+                    cur = d
+                    for k in path[:-1]:
+                        cur = cur[k]
+                    cur[path[-1]] = bad
+                    fp = self.write(d, name)
+                    ops = [lambda: okr_plan.lint(fp, final=True),
+                           lambda: okr_plan.render(fp, os.path.join(self.tmp.name, "o.html"))]
+                    if name.startswith("teamplanner"):
+                        ops.append(lambda: okr_plan.export_csv(fp, os.path.join(self.tmp.name, "o.csv")))
+                    if name.startswith("scope"):
+                        ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
+                    for op in ops:
+                        try:
+                            op()
+                        except SystemExit:
+                            pass
+                        except Exception as e:  # pragma: no cover — сообщение для разбора
+                            self.fail(f"{name} {path} = {bad!r}: {type(e).__name__}: {e}")
+
+
+
 if __name__ == "__main__":
     unittest.main()

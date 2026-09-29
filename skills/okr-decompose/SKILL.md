@@ -4,7 +4,7 @@ description: '[deprecated] Устарело, используй /okr-stages. Dec
 ---
 
 > **[deprecated]** `/okr-decompose` устарела и больше не поддерживается. Планирование
-> квартала идёт по пайплайну `/okr-retro → /okr-scope → /okr-stages → /okr-teamplanner`.
+> квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
 > Замена: `/okr-stages <quarter>` — этапы, условия, риски и зависимости каждой инициативы.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-decompose`
