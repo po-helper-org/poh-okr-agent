@@ -1,88 +1,53 @@
-/* Страница TEAMPLANNER: KR раскрываются в список этапов, этапы правятся прямо на
-   странице. Цвета строк — как в листе TeamPlanner: сиреневый — внешний ресурс,
-   розовый — роли нет в команде, красное поле — исполнитель не выбран. */
-:root{
-  --tp-kr:#cfdcf0;
-  --tp-ext:#efe9f7;
-  --tp-norole:#f6d5d8;
-  --tp-unassigned:#f3b9bf;
-}
+/* Страница TEAMPLANNER: один экран — одна цель, KR раскрываются в подзадачи.
+   Подзадача — строка «тип · название · исполнитель». Подсветка скупая:
+   сиреневая черта — внешний ресурс, розовая — роли нет в команде,
+   красная рамка — исполнитель не выбран. */
+.tp-top{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:space-between; margin:0 0 1.2rem; }
+.tp-nav{ display:flex; flex-wrap:wrap; gap:.3rem; }
+.tp-nav button, .tp-act button{ font-family:"Courier New",monospace; font-size:.78rem; padding:.3rem .7rem;
+  border:1px solid var(--line-soft); background:var(--bg); cursor:pointer; }
+.tp-nav button.on{ border-color:var(--fg); background:var(--fg); color:var(--bg); }
+.tp-act{ display:flex; gap:.3rem; }
+.tp-act button.primary{ border-color:var(--fg); }
+.tp-dirty{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); margin:-.6rem 0 1rem; }
+.tp-dirty button{ font:inherit; border:0; background:none; text-decoration:underline; cursor:pointer; color:var(--muted); padding:0; }
 
-.lg{ display:inline-block; padding:0 .45rem; font-family:"Courier New",monospace; font-size:.72rem; border:1px solid var(--line-soft); }
-.lg-ext{ background:var(--tp-ext); }
-.lg-norole{ background:var(--tp-norole); }
-.lg-unassigned{ background:var(--tp-unassigned); }
+h2.obj{ font-size:1.2rem; margin:0 0 1rem; }
 
-.tp-bar{ display:flex; flex-wrap:wrap; gap:.5rem .8rem; align-items:center; margin:0 0 1rem;
-  font-family:"Courier New",monospace; font-size:.78rem; }
-.tp-bar label{ display:inline-flex; align-items:center; gap:.35rem; }
-.tp-bar select, .tp-bar button{ font:inherit; font-size:.78rem; padding:.25rem .5rem; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
-.tp-bar button.primary{ background:var(--fg); color:var(--bg); }
-.tp-bar .sp{ flex:1 1 auto; }
-.tp-dirty{ border:1px dashed var(--line); background:#fff7d6; padding:.5rem .8rem; margin:0 0 1rem; font-size:.88rem; }
-
-details.tp-load{ margin:0 0 1.2rem; border:1px solid var(--line-soft); padding:.5rem .8rem; }
-details.tp-load > summary{ cursor:pointer; font-family:"Courier New",monospace; font-size:.8rem; }
-details.tp-load table{ margin:.6rem 0 .4rem; width:auto; min-width:60%; }
-details.tp-load td.num{ text-align:right; font-family:"Courier New",monospace; }
-details.tp-load tr.warn td{ background:var(--tp-norole); }
-
-h3.tp-obj{ background:#dfe7f5; border-top:2px solid var(--line); margin:1.6rem 0 .6rem; padding:.45rem .6rem; font-size:.95rem; }
-
-details.kr{ border:1px solid var(--line-soft); margin:0 0 .7rem; background:var(--bg); }
-details.kr[hidden]{ display:none; }
-details.kr > summary{ list-style:none; cursor:pointer; background:var(--tp-kr); padding:.55rem .7rem; display:flex; flex-wrap:wrap; gap:.3rem .7rem; align-items:baseline; }
+details.kr{ border-top:1px solid var(--line-soft); }
+details.kr:last-of-type{ border-bottom:1px solid var(--line-soft); }
+details.kr > summary{ list-style:none; cursor:pointer; display:flex; gap:.7rem; align-items:baseline; padding:.75rem .2rem; }
 details.kr > summary::-webkit-details-marker{ display:none; }
-details.kr > summary::before{ content:"▸"; font-size:.8rem; }
+details.kr > summary::before{ content:"▸"; font-size:.75rem; color:var(--muted); }
 details.kr[open] > summary::before{ content:"▾"; }
-.kr-id{ font-family:"Courier New",monospace; font-weight:bold; white-space:nowrap; }
-.kr-title{ font-weight:bold; flex:1 1 18rem; min-width:0; }
-.kr-meta{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); display:flex; flex-wrap:wrap; gap:.2rem .7rem; align-items:center; }
-.kr-flag{ font-family:"Courier New",monospace; font-size:.7rem; background:var(--tp-unassigned); padding:0 .35rem; }
-.kr-flag.ok{ background:transparent; color:var(--muted); }
-.pbar{ display:inline-block; width:4.5rem; height:8px; border:1px solid var(--line-soft); background:var(--bg); vertical-align:middle; }
-.pbar i{ display:block; height:100%; background:#57bb8a; }
-.stb{ display:inline-block; padding:0 .35rem; border:1px solid var(--line-soft); background:var(--bg); }
-.stb[data-s="IN PROGRESS"]{ background:#fff1c2; }
-.stb[data-s="BLOCKED"]{ background:#f6c1c1; }
-.stb[data-s="DONE"]{ background:#d4eedd; }
-.kr-comment{ margin:.5rem .7rem .2rem; font-size:.88rem; color:var(--muted); cursor:pointer; }
-.kr-comment:hover{ color:var(--fg); }
-button.note-btn{ font:inherit; font-size:.8rem; border:1px solid var(--line-soft); background:var(--bg); cursor:pointer; padding:.05rem .4rem; }
-button.note-btn[data-has]{ border-color:var(--fg); font-weight:bold; }
+details.kr > summary:hover{ background:var(--mark); }
+.kr-id{ font-family:"Courier New",monospace; font-weight:bold; }
+.kr-title{ flex:1; min-width:0; }
+.kr-count{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); white-space:nowrap; }
+.kr-count b{ color:#a33; font-weight:normal; }
 
-table.tp{ table-layout:fixed; min-width:960px; margin:.4rem 0 .3rem; font-size:.82rem; }
-table.tp th, table.tp td{ padding:.25rem .3rem; vertical-align:middle; border-left:0; border-right:0; }
-table.tp col.c-n{ width:3.4rem; } table.tp col.c-role{ width:5.2rem; } table.tp col.c-ext{ width:8.5rem; }
-table.tp col.c-who{ width:11rem; } table.tp col.c-d{ width:8.4rem; } table.tp col.c-st{ width:8.2rem; }
-table.tp col.c-p{ width:3.6rem; } table.tp col.c-b{ width:2.2rem; }
-table.tp td.n{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); white-space:nowrap; }
-table.tp input, table.tp select{ width:100%; font:inherit; font-size:.8rem; padding:.2rem .25rem; border:1px solid var(--line-soft); background:transparent; }
-table.tp input:focus, table.tp select:focus{ outline:2px solid var(--link); outline-offset:-1px; background:var(--bg); }
-table.tp select.role{ font-family:"Courier New",monospace; font-weight:bold; }
-table.tp tr[data-ext] td{ background:var(--tp-ext); }
-table.tp tr[data-norole] td{ background:var(--tp-norole); }
-table.tp tr[data-unassigned] select.who{ background:var(--tp-unassigned); }
-table.tp .extname{ font-family:"Courier New",monospace; font-size:.74rem; }
-table.tp tr[hidden]{ display:none; }
-table.tp select.st[data-s="IN PROGRESS"]{ background:#fff1c2; }
-table.tp select.st[data-s="BLOCKED"]{ background:#f6c1c1; }
-table.tp select.st[data-s="DONE"]{ background:#d4eedd; }
-button.del{ font:inherit; border:0; background:none; cursor:pointer; color:var(--faint); font-size:1rem; }
+.steps{ padding:0 0 .2rem 1.3rem; }
+.step{ display:grid; grid-template-columns:6.5rem minmax(0,1fr) 12rem 1.8rem; gap:.4rem; align-items:center;
+  padding:.25rem 0 .25rem .5rem; border-left:3px solid transparent; }
+.step[data-ext]{ border-left-color:#b9a6dc; }
+.step[data-norole]{ border-left-color:#e8a3aa; }
+.step select, .step input{ font:inherit; font-size:.88rem; padding:.3rem .35rem; border:1px solid var(--line-soft); background:var(--bg); min-width:0; width:100%; }
+.step select.type{ font-family:"Courier New",monospace; font-weight:bold; font-size:.8rem; }
+.step[data-unassigned] select.who{ border-color:#c62828; }
+.step[data-norole] select.who{ color:#a33; }
+.step .who.ext{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); }
+button.del{ font:inherit; border:0; background:none; cursor:pointer; color:var(--faint); font-size:1.1rem; }
 button.del:hover{ color:#a33; }
-button.add{ font:inherit; font-family:"Courier New",monospace; font-size:.76rem; margin:.1rem .7rem .7rem; border:1px dashed var(--line); background:var(--bg); padding:.2rem .6rem; cursor:pointer; }
+button.add{ font-family:"Courier New",monospace; font-size:.76rem; margin:.3rem 0 .9rem 1.8rem; border:0; background:none;
+  color:var(--link); cursor:pointer; padding:0; }
 
-table.tp-static{ font-size:.82rem; }
-table.tp-static tr[data-ext] td{ background:var(--tp-ext); }
-table.tp-static tr[data-norole] td{ background:var(--tp-norole); }
-.muted{ color:var(--muted); font-size:.8rem; }
+/* Без JS: та же структура, только чтение. */
+ul.tp-static{ list-style:none; padding-left:1.3rem; font-size:.88rem; }
+ul.tp-static .t{ font-family:"Courier New",monospace; font-weight:bold; display:inline-block; min-width:5.5rem; }
 
-#sideForm label{ display:block; font-weight:bold; font-size:.9rem; margin:.9rem 0 .3rem; }
-#sideForm label small{ font-weight:normal; color:var(--muted); }
-#sideForm textarea, #sideForm select{ width:100%; font:inherit; font-size:.9rem; border:1px solid var(--line-soft); padding:.4rem .5rem; }
-#sideForm textarea{ min-height:5.5rem; resize:vertical; }
-#sideForm .ctx{ font-size:.85rem; color:var(--muted); margin:.2rem 0 0; }
-
-@media print{
-  .tp-bar, .tp-dirty, button.add, button.del, button.note-btn{ display:none; }
+@media (max-width:640px){
+  .step{ grid-template-columns:6rem minmax(0,1fr) 1.8rem; }
+  .step .who{ grid-column:2 / 3; }
+  .steps{ padding-left:.4rem; }
 }
+@media print{ .tp-act, .tp-dirty, button.add, button.del{ display:none; } }

@@ -918,7 +918,7 @@ def seed(scope_path, out):
                 continue
             notes = ini.get("notes") or {}
             ext_team = next((t for t in ini.get("teams") or [] if t in external), "")
-            steps = [{"role": text(st.get("role")), "title": text(st.get("title")),
+            steps = [{"role": text(st.get("role")), "title": text(st.get("title")) or text(ini.get("title")),
                       "ext": ext_team if st.get("ext") else "", "who": "", "start": "", "end": "",
                       "status": text(st.get("status")) or "TODO", "result": "", "action": "", "comment": ""}
                      for st in notes.get("stages") or []]
@@ -1035,34 +1035,18 @@ def tp_summary(doc):
 
 
 def tp_static(doc):
-    """Та же таблица без JS: читается и печатается, если скрипт не запустился."""
-    teams = tp_teams(doc)
+    """То же без JS: цели, KR и подзадачи списком — читается и печатается."""
     parts = []
     for obj in doc.get("objectives") or []:
-        parts.append(f'<h3 class="tp-obj">OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</h3>')
+        parts.append(f'<h2 class="obj">OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</h2>')
         for kr in obj.get("krs") or []:
-            start, end = kr_dates(kr)
-            pct = kr_pct(kr)
-            rows = []
-            for n, step in enumerate(kr.get("steps") or [], 1):
-                st = step_state(doc, kr, step)
-                flags = (" data-ext" if st["ext"] else "") + (" data-norole" if st["norole"] else "") \
-                    + (" data-unassigned" if st["unassigned"] else "")
-                rows.append(f'<tr{flags}><td class="n">{esc(kr.get("id"))}.{n}</td>'
-                            f'<td class="role">{esc(role_text(doc, step))}</td>'
-                            f'<td>{esc_unc(step.get("title"))}</td><td>{esc(who_text(doc, kr, step)) or "—"}</td>'
-                            f'<td class="d">{esc(step.get("start")) or "—"}</td><td class="d">{esc(step.get("end")) or "—"}</td>'
-                            f'<td>{esc(STATUS_RU.get(text(step.get("status")) or "TODO"))}</td></tr>')
-            team_names = ", ".join(text(teams.get(t, {}).get("name") or t) for t in kr.get("teams") or [])
-            parts.append(
-                f'<details class="kr" open><summary><b>KR {esc(kr.get("id"))}</b> {esc_unc(kr.get("title"))} '
-                f'{pbv_cell(kr.get("pbv"))} <span class="muted">{esc(team_names)} · {esc(kr.get("owner"))} · '
-                f'{esc(start) or "—"} — {esc(end) or "—"} · {esc(STATUS_RU[kr_status(kr)])} · '
-                f'{"—" if pct is None else str(pct) + " %"}</span></summary>'
-                + (f'<p class="muted">{esc_unc(kr.get("comment"))}</p>' if text(kr.get("comment")) else "")
-                + '<div class="table-wrap"><table class="tp-static"><thead><tr><th>№</th><th>Роль</th><th>Этап</th>'
-                  '<th>Исполнитель</th><th>Начало</th><th>Конец</th><th>Статус</th></tr></thead><tbody>'
-                + "".join(rows) + "</tbody></table></div></details>")
+            items = "".join(
+                f'<li><span class="t">{esc(role_text(doc, step))}</span> {esc_unc(step.get("title"))}'
+                f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}</li>'
+                for step in kr.get("steps") or [])
+            parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
+                         f'<span class="kr-title">{esc(kr.get("title"))}</span></summary>'
+                         f'<ul class="tp-static">{items}</ul></details>')
     return "\n".join(parts)
 
 
@@ -1070,33 +1054,19 @@ def render_teamplanner(doc, source):
     quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     title = f"TEAMPLANNER {quarter}" + (f" — {team}" if team else "")
     sm = tp_summary(doc)
-    quote = [
-        f"KR {sm['krs']} · этапов {sm['steps']} · без исполнителя {sm['unassigned']} · "
-        f"нет роли в команде {sm['norole']} · внешний ресурс {sm['ext']}.",
-        "Роли: PO — подготовка и согласования · ADR — архитектура · SA — системная аналитика · "
-        "BA — бизнес-аналитика · BE — бэкенд · FE — фронтенд · QA — тестирование · DOPS — инфраструктура · "
-        "RM — выкатка · EXT[роль] — внешний ресурс.",
-        '<span class="lg lg-ext">внешний ресурс</span> <span class="lg lg-norole">нет роли в команде</span> '
-        '<span class="lg lg-unassigned">нет исполнителя</span>',
-    ]
-    if text((doc.get("scope") or {}).get("file")):
-        quote.insert(1, f"Scope: {esc((doc.get('scope') or {}).get('file'))}.")
+    counts = f"подзадач {sm['steps']} · без исполнителя {sm['unassigned'] + sm['norole']}"
     data = json.dumps({"file": os.path.basename(source), "doc": doc, "roles": doc.get("roles") or TP_ROLES,
                        "statuses": STATUS_RU}, ensure_ascii=False).replace("<", "\\u003c")
     body = "\n".join([
-        '<div class="layout wide"><main>',
-        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, "ресурсы и этапы")}</p></div>',
-        f'<blockquote class="quote">{"<br>".join(quote)}</blockquote>',
-        '<div class="tp-bar" id="tpBar"></div>',
-        '<div class="tp-dirty" id="tpDirty" hidden></div>',
-        '<details class="tp-load" id="tpLoad"><summary>Нагрузка по людям и ролям</summary><div id="tpLoadBody"></div></details>',
+        '<div class="layout"><main>',
+        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, counts)}</p></div>',
+        '<div class="tp-top"><div class="tp-nav" id="tpNav"></div><div class="tp-act">'
+        '<button type="button" id="bTsv">Копировать в Sheets</button>'
+        '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
+        '<p class="tp-dirty" id="tpDirty" hidden>Есть правки в этом браузере — «Скачать JSON» и отдайте файл агенту. '
+        '<button type="button" id="bReset">Сбросить</button></p>',
         f'<div id="tp">{tp_static(doc)}</div>',
         '</main></div>',
-        '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
-        '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
-        '<h3 class="side-title" id="sideTitle"></h3><div id="sideForm"></div>'
-        '<p class="hintline">Правки сохраняются в этом браузере. Чтобы они попали в документ — '
-        '«Скачать JSON» и отдать файл агенту.</p></div>',
         f'<script type="application/json" id="page-data">{data}</script>',
         f'<script>{asset("teamplanner.js")}</script>',
     ])

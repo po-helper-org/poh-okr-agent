@@ -381,13 +381,12 @@ class TeamPlanner(Case):
         with open(out, encoding="utf-8") as f:
             page = f.read()
         self.assertIn("<title>TEAMPLANNER 2026Q4 — Витрина</title>", page)
-        self.assertIn("без исполнителя 1 · нет роли в команде 2 · внешний ресурс 1", page)
-        self.assertIn('<td class="role">EXT[BE]</td>', page)
-        self.assertIn("<td>внешний ресурс: Биллинг партнёра</td>", page)
-        self.assertEqual(page.count("<tr data-norole>"), 2)
+        self.assertIn("подзадач 17 · без исполнителя 3", page)
+        self.assertIn('<li><span class="t">EXT[BE]</span> Стенд партнёра для тестов — внешний ресурс: Биллинг партнёра</li>', page)
+        self.assertEqual(page.count("— нет роли в команде</li>"), 2)
         data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
         self.assertEqual(data["doc"], self.tp)
-        self.assertIn('id="tpBar"', page)
+        self.assertIn('id="tpNav"', page)
 
     def test_page_escapes(self):
         self.kr("1.1")["steps"][0]["title"] = "</script><script>alert(1)</script>"
