@@ -1,0 +1,27 @@
+/* Страница ПЛАН: колонки, ASIS/TOBE, новые и отменённые инициативы. */
+col.c-team{ width:7rem; }
+col.c-name{ width:15rem; }
+col.c-asis{ width:auto; }
+col.c-tobe{ width:auto; }
+col.c-prog{ width:11rem; }
+
+td.team{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); }
+/* ASIS — что есть сейчас, TOBE — к чему идём за квартал. Разный вес намеренно:
+   глаз ищет целевое состояние, текущее читается вторым. */
+td.asis{ color:var(--muted); font-size:.82rem; background:var(--mark); }
+td.tobe{ font-size:.84rem; }
+b.new{ color:#1a7a1a; }
+
+tr.row[data-cancelled] td{ color:var(--faint); }
+tr.row[data-cancelled] td.name .txt{ text-decoration:line-through; }
+span.cancel{ display:inline-block; margin-left:.4rem; font-family:"Courier New",monospace; font-size:.62rem;
+  letter-spacing:.04em; border:1px dashed var(--faint); padding:0 .3rem; }
+.drawer .ext{ color:var(--faint); font-size:.68rem; }
+
+details.brief{ margin:0 0 1.4rem; border:1px solid var(--line-soft); padding:.6rem .9rem; }
+details.brief > summary{ cursor:pointer; font-family:"Courier New",monospace; font-size:.8rem; }
+details.brief p{ margin:.6rem 0 0; font-size:.92rem; color:var(--muted); }
+
+.ask-block{ border:1px solid var(--line); background:var(--mark); padding:.6rem .9rem; margin:1.4rem 0; font-size:.9rem; }
+.ask-block h4{ margin:0 0 .4rem; font-size:.85rem; }
+.ask-block ol{ margin:0; padding-left:1.3rem; }

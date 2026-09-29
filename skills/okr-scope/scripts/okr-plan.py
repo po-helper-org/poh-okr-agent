@@ -19,10 +19,11 @@ OUTCOMES = {
     "done": ("✔", "закрыт"),
     "partial": ("◐", "частично"),
     "failed": ("✖", "не сделано"),
-    "dropped": ("⊘", "отменён"),
+    "dropped": ("⊘", "отменено"),
     "unknown": ("?", "не оценён"),
 }
-STEP_NAMES = {"done": "DONE", "progress": "IN PROGRESS", "todo": "TODO", "none": "нет статуса", "dropped": "снято"}
+ITEM_STATUSES = ["Активна", "Отменено"]
+STEP_STATUSES = ["TODO", "IN PROGRESS", "BLOCKED", "DONE"]
 NEXT_ACTIONS = ["continue", "close", "drop", "decide", "other"]
 ROLE_RE = re.compile(r"^[A-Z]{2,10}$")
 FACT_KR_ID_RE = re.compile(r"^\d+(\.[0-9A-Za-z]+)+$")
@@ -59,6 +60,10 @@ def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def cancelled(item):
+    return text(item.get("status")) == "Отменено"
+
+
 def pbv_of(item):
     pbv = item.get("pbv")
     return pbv if is_int(pbv) else 0
@@ -90,7 +95,7 @@ def load(path):
 
 def outcome(kr):
     """Исход KR выводится из данных, LLM его не пишет."""
-    if kr.get("dropped"):
+    if cancelled(kr):
         return "dropped"
     pct = kr.get("pct")
     if not is_int(pct):
@@ -109,7 +114,7 @@ def pbv_tier(pbv):
 
 
 def next_action(kr):
-    if kr.get("dropped"):
+    if cancelled(kr):
         return "drop"
     action = text((kr.get("next") or {}).get("action"))
     if action:
@@ -126,7 +131,7 @@ def next_text(kr, quarter):
     if action == "close":
         return "Закрыт — снять с контроля"
     if action == "drop":
-        reason = text(kr.get("drop_reason"))
+        reason = text(kr.get("cancel_reason"))
         return f"Отменён — {reason}" if reason else "Отменён — записать причину и дату решения [УТОЧНИТЬ]"
     if action == "decide":
         return "Решить: продолжаем, переносим или закрываем"
@@ -144,14 +149,17 @@ def link_text(kr, quarter):
 
 def fact_text(kr):
     state = outcome(kr)
-    head = "отменён" if state == "dropped" else "нет оценки" if state == "unknown" else f"{kr['pct']} %"
+    head = "отменено" if state == "dropped" else "нет оценки" if state == "unknown" else f"{kr['pct']} %"
     parts = (["внеплановый"] if kr.get("unplanned") else []) + ([text(kr.get("comment"))] if text(kr.get("comment")) else [])
     return head + (" — " + "; ".join(parts) if parts else "")
 
 
 def plan_count(plan):
-    live = [s for s in plan if s.get("status") != "dropped"]
-    return f"{sum(1 for s in live if s.get('status') == 'done')} / {len(live)}"
+    return f"{sum(1 for s in plan if s.get('status') == 'DONE')} / {len(plan)}"
+
+
+def status_slug(status):
+    return text(status).lower().replace(" ", "-")
 
 
 def half_up(value):
@@ -170,7 +178,6 @@ def retro_stats(doc):
     return {
         "total": len(krs),
         "counts": counts,
-        "unplanned": sum(1 for kr in krs if kr.get("unplanned")),
         "rated": len(rated),
         "weighted": half_up(sum(kr["pct"] * pbv_of(kr) for kr in rated) / weight) if weight else None,
         "simple": half_up(sum(kr["pct"] for kr in rated) / len(rated)) if rated else None,
@@ -203,9 +210,6 @@ def lint_retro(doc, rep):
             rep.error(f"OBJ {oid}: нет KR")
         for kr in obj.get("krs") or []:
             lint_fact_kr(kr, oid, seen, rep)
-    for row in doc.get("discrepancies") or []:
-        if not row.get("resolved"):
-            rep.gate(f"Расхождение не сверено: {text(row.get('what'))}")
 
 
 def lint_fact_kr(kr, oid, seen, rep):
@@ -224,14 +228,14 @@ def lint_fact_kr(kr, oid, seen, rep):
     pct = kr.get("pct")
     if pct is not None and (not is_int(pct) or not 0 <= pct <= 100):
         rep.error(f"{where}: pct — целое 0..100 или null, получено {pct!r}")
-    for key in ("unplanned", "dropped"):
-        if key in kr and not isinstance(kr[key], bool):
-            rep.error(f"{where}: {key} — true или false")
+    if "unplanned" in kr and not isinstance(kr["unplanned"], bool):
+        rep.error(f"{where}: unplanned — true или false")
+    check_item_status(kr, where, rep)
     state = outcome(kr)
-    if kr.get("dropped") and pct is not None:
+    if cancelled(kr) and pct is not None:
         rep.warn(f"{where}: KR отменён, процент {pct} не показывается")
     if state == "unknown":
-        rep.gate(f"{where}: нет процента готовности — укажи pct или dropped")
+        rep.gate(f"{where}: нет процента готовности — укажи pct или \"status\": \"Отменено\"")
     if unsure(kr.get("comment")):
         rep.gate(f"{where}: в комментарии к факту остался [УТОЧНИТЬ]")
     for key in ("plan", "deps"):
@@ -240,18 +244,18 @@ def lint_fact_kr(kr, oid, seen, rep):
                 rep.error(f"{where}, {key} {n}: роль — латиница заглавными (BE, SA, RELEASE), получено {step.get('role')!r}")
             if not text(step.get("step")):
                 rep.error(f"{where}, {key} {n}: нет текста шага")
-            if step.get("status") not in STEP_NAMES:
-                rep.error(f"{where}, {key} {n}: status — одно из {list(STEP_NAMES)}")
+            if step.get("status") not in STEP_STATUSES:
+                rep.error(f"{where}, {key} {n}: status — одно из {STEP_STATUSES}")
     statuses = {s.get("status") for s in kr.get("plan") or []}
-    if state == "done" and statuses & {"todo", "progress"}:
+    if state == "done" and statuses & {"TODO", "IN PROGRESS", "BLOCKED"}:
         rep.warn(f"{where}: закрыт на 100 %, но в плане есть незакрытые шаги")
-    if state == "failed" and "done" in statuses:
+    if state == "failed" and "DONE" in statuses:
         rep.warn(f"{where}: 0 %, но в плане есть сделанные шаги")
     nxt = kr.get("next") or {}
     action = text(nxt.get("action"))
     if action and action not in NEXT_ACTIONS:
         rep.error(f"{where}: next.action — одно из {NEXT_ACTIONS}")
-    if kr.get("dropped") and action not in ("", "drop"):
+    if cancelled(kr) and action not in ("", "drop"):
         rep.error(f"{where}: KR отменён, next.action может быть только drop")
     if not next_action(kr):
         rep.gate(f"{where}: не указано, что дальше (next.action)")
@@ -259,8 +263,15 @@ def lint_fact_kr(kr, oid, seen, rep):
         rep.gate(f"{where}: продолжение без номера KR следующего квартала (next.kr)")
     if next_action(kr) == "other" and not text(nxt.get("note")):
         rep.error(f"{where}: для next.action=other нужен next.note")
-    if next_action(kr) == "drop" and not text(kr.get("drop_reason")):
-        rep.gate(f"{where}: отменён без причины и даты решения (drop_reason)")
+
+
+def check_item_status(item, where, rep):
+    if "dropped" in item:
+        rep.error(f'{where}: поле dropped больше не используется — пиши "status": "Отменено"')
+    if "status" in item and item.get("status") not in ITEM_STATUSES:
+        rep.error(f"{where}: status — одно из {ITEM_STATUSES}")
+    if cancelled(item) and not text(item.get("cancel_reason")):
+        rep.gate(f"{where}: отменено без причины и даты решения (cancel_reason)")
 
 
 def check_pbv(item, where, rep, required):
@@ -327,8 +338,8 @@ def lint_scope(doc, rep, retro):
         initiatives = obj.get("initiatives") or []
         if not initiatives:
             rep.error(f"{where_obj}: нет инициатив")
-        elif len(initiatives) > 6:
-            rep.warn(f"{where_obj}: {len(initiatives)} инициатив, рекомендуется не больше 6")
+        elif len([i for i in initiatives if not cancelled(i)]) > 6:
+            rep.warn(f"{where_obj}: больше 6 активных инициатив")
         for ini in initiatives:
             kid = text(ini.get("id"))
             where = f"KR {kid or '?'}"
@@ -349,6 +360,9 @@ def lint_scope(doc, rep, retro):
             check_pbv(ini, where, rep, required=True)
             if ini.get("tag", "") not in TAGS:
                 rep.error(f"{where}: tag — один из {TAGS}")
+            check_item_status(ini, where, rep)
+            if cancelled(ini):
+                continue
             result = text(ini.get("result"))
             if not result:
                 rep.gate(f"{where}: нет образа результата")
@@ -359,9 +373,10 @@ def lint_scope(doc, rep, retro):
             if phase == "stages":
                 lint_notes(ini, where, roles, rep)
 
-    if len([i for i in all_initiatives if i.get("tag") != "ACTIVITY"]) > 20:
+    active = [i for i in all_initiatives if not cancelled(i)]
+    if len([i for i in active if i.get("tag") != "ACTIVITY"]) > 20:
         rep.warn("Всего больше 20 инициатив — у квартала нет фокуса")
-    critical = [text(i.get("id")) for i in all_initiatives if i.get("pbv") == 9]
+    critical = [text(i.get("id")) for i in active if i.get("pbv") == 9]
     if len(critical) > 2:
         rep.warn(f"PBV 9 у {len(critical)} инициатив ({', '.join(critical)}), рекомендуется не больше 2")
 
@@ -385,6 +400,8 @@ def lint_notes(ini, where, roles, rep):
             rep.error(f"{where}, этап {n}: роль {role!r} не из {roles}")
         if not text(stage.get("title")):
             rep.error(f"{where}, этап {n}: нет названия")
+        if "status" in stage and stage.get("status") not in STEP_STATUSES:
+            rep.error(f"{where}, этап {n}: status — одно из {STEP_STATUSES}")
     for key in ("conditions", "risks", "dependencies", "uncertainties"):
         if key in notes and not isinstance(notes[key], list):
             rep.error(f"{where}: notes.{key} — список")
@@ -421,87 +438,14 @@ def lint(path, final=False, retro_path=None):
     return rep
 
 
-# ---------------------------------------------------------------- HTML
+# ---------------------------------------------------------------- HTML: общий каркас
 
-CSS = """
-:root{--bg:#fbfaf8;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e4e2dd;--accent:#e30611;
---good:#1f8a4c;--part:#b7791f;--bad:#c53030;--off:#8a8a8f;--warn-bg:#fff4d6;--warn-ink:#8a5a00;--chip:#f1efea}
-@media (prefers-color-scheme:dark){:root{--bg:#161618;--card:#1f1f22;--ink:#ececef;--muted:#a1a1a8;
---line:#333338;--chip:#2a2a2e;--warn-bg:#3a2f12;--warn-ink:#f3c969}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);
-font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-main{max-width:1080px;margin:0 auto;padding:32px 16px 64px}
-header{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:24px}
-.kicker{color:var(--accent);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:12px}
-h1{margin:4px 0 8px;font-size:28px;line-height:1.2}h2{font-size:20px;margin:32px 0 8px}
-h3{font-size:16px;margin:0}.meta{color:var(--muted);font-size:13px}
-.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;
-border:1px solid currentColor;white-space:nowrap}
-.s-draft{color:var(--part)}.s-ok{color:var(--good)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.tile b{display:block;font-size:26px;line-height:1.1}.tile span{color:var(--muted);font-size:13px}
-.lead{font-size:17px;max-width:760px}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px}
-th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-tr:last-child td{border-bottom:0}.scroll{overflow-x:auto;border-radius:10px}
-.scroll table{min-width:640px}.num{white-space:nowrap;font-weight:600}
-.src{color:var(--muted);font-size:12px;margin-top:4px}
-.warn{background:var(--warn-bg);color:var(--warn-ink);border-radius:4px;padding:0 4px}
-.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 8px;font-size:12px;margin:0 4px 4px 0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
-.card-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-.card-head .id{font-weight:700;color:var(--accent)}
-.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px}
-.flow{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--chip);
-border-radius:6px;padding:8px 10px;white-space:pre-wrap}
-details{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
-summary{cursor:pointer;font-weight:600}
-ol.stages{padding-left:22px;margin:8px 0}ol.stages li{margin:4px 0}
-.role{display:inline-block;min-width:38px;text-align:center;font-weight:700;font-size:12px;
-border:1px solid var(--ink);border-radius:4px;padding:0 4px;margin-right:6px}
-.ext{color:var(--accent);font-weight:700;font-size:12px}
-.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 16px}
-ul{margin:4px 0;padding-left:20px}.why{color:var(--muted);max-width:760px}
-footer{margin-top:40px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:12px}
-@media print{body{background:#fff}details{display:block}.card,table{break-inside:avoid}}
-"""
-
-
-def esc(value, marker='<span class="warn">{}</span>'):
-    safe = html.escape(text(value)).replace("\n", "<br>")
-    return UNSURE_RE.sub(lambda m: marker.format(m.group(0)), safe)
+def esc(value):
+    return html.escape(text(value)).replace("\n", "<br>")
 
 
 def esc_unc(value):
-    return esc(value, '<mark class="unc">{}</mark>')
-
-
-def items(values):
-    values = [v for v in (values or []) if text(v)]
-    if not values:
-        return '<span class="meta">—</span>'
-    return "<ul>" + "".join(f"<li>{esc(v)}</li>" for v in values) + "</ul>"
-
-
-def status_badge(doc):
-    ok = doc.get("status") == "принято"
-    return f'<span class="badge {"s-ok" if ok else "s-draft"}">{"принято" if ok else "черновик"}</span>'
-
-
-def page(title, body):
-    body = body.replace("<table>", '<div class="scroll"><table>').replace("</table>", "</table></div>")
-    return (f'<!doctype html><html lang="ru"><head><meta charset="utf-8">'
-            f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{html.escape(title)}</title><style>{CSS}</style></head>'
-            f'<body><main>{body}</main></body></html>\n')
-
-
-def footer(doc, source):
-    return (f'<footer>Собрано из {html.escape(os.path.basename(source))}'
-            f'{" · обновлено " + esc(doc.get("updated")) if text(doc.get("updated")) else ""}. '
-            f'Правки вносятся в JSON, HTML пересобирается.</footer>')
+    return UNSURE_RE.sub(lambda m: f'<mark class="unc">{m.group(0)}</mark>', esc(value))
 
 
 def asset(name):
@@ -509,12 +453,87 @@ def asset(name):
         return f.read()
 
 
+def pbv_cell(pbv):
+    return f'<span class="pbvtag" data-tier="{pbv_tier(pbv)}">{pbv if is_int(pbv) else "—"}</span>'
+
+
+def card_steps(steps):
+    return [{"t": "step", "role": text(s.get("role")),
+             "v": ("[EXT] " if s.get("ext") else "") + text(s.get("step") or s.get("title")),
+             "s": text(s.get("status")) or "TODO"}
+            for s in steps or []]
+
+
+def card_list(title, values):
+    values = [text(v) for v in values or [] if text(v)]
+    return [{"t": "h", "v": title}] + [{"t": "li", "v": v} for v in values] if values else []
+
+
+def card_text(title, value):
+    return [{"t": "h", "v": title}, {"t": "p", "v": text(value)}] if text(value) else []
+
+
+def filter_drawer(label, title, items):
+    """items: (value, html-подпись, имя для вкладки, число)."""
+    buttons = "\n".join(
+        f'<button class="st-item" type="button" data-value="{html.escape(v)}" data-name="{html.escape(n)}"'
+        f'{" data-active" if not v else ""}>{caption}<span class="n">{count}</span></button>'
+        for v, caption, n, count in items)
+    return (f'<div class="rail"><button class="rail-tab" id="stTab" type="button">{label}: <span id="stNow">все</span></button></div>'
+            f'<div class="drawer" id="stDrawer"><div class="drawer-head"><h4>{title}</h4>'
+            f'<button class="drawer-close" type="button">×</button></div>{buttons}</div>')
+
+
+def page(title, source, css, parts, cards):
+    data = json.dumps({"file": os.path.basename(source), "cards": cards}, ensure_ascii=False).replace("<", "\\u003c")
+    body = "\n".join(parts + [
+        '<div class="promptbox"><button type="button" id="commentsBtn">Комментарии: 0</button>'
+        '<div class="panel" id="commentsPanel"><h4>Комментарии для ИИ-агента</h4><div id="commentsList"></div>'
+        '<textarea id="commentsPrompt" readonly></textarea><div class="row-btns">'
+        '<button type="button" class="primary" id="commentsCopy">Скопировать для агента</button>'
+        '<button type="button" id="commentsSave">Скачать файлом</button>'
+        '<button type="button" id="commentsClear">Очистить</button></div></div></div>',
+        '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
+        '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
+        '<h3 class="side-title" id="sideTitle"></h3><p class="factline" id="sideState"></p>'
+        '<div id="sideSegs"></div><div class="note" id="sideNote"></div>'
+        '<p class="hintline">Правый клик по любому пункту — комментарий для ИИ-агента: дописать риск, '
+        'поправить готовность или следующие действия. Сама страница ничего не меняет.</p></div>',
+        f'<script type="application/json" id="page-data">{data}</script>',
+        f'<script>{asset("page.js")}</script>',
+    ])
+    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n'
+            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
+            f'<style>\n{asset("page.css")}{asset(css)}</style>\n</head>\n<body>\n{body}\n</body>\n</html>\n')
+
+
+def meta_line(doc, *extra):
+    parts = list(extra) + [
+        f"PO: {esc(doc.get('po'))}" if text(doc.get("po")) else "",
+        "принято" if doc.get("status") == "принято" else "черновик",
+        f"обновлено {esc(doc.get('updated'))}" if text(doc.get("updated")) else "",
+    ]
+    return " · ".join(p for p in parts if p)
+
+
+def table(cols, head, band, rows):
+    colgroup = "".join(f'<col class="c-{c}">' for c in cols)
+    ths = "".join(f"<th>{h}</th>" for h in head)
+    return (f'<div class="table-wrap"><table class="pick"><colgroup>{colgroup}</colgroup>'
+            f'<thead><tr>{ths}</tr></thead><tbody><tr class="objrow"><td colspan="{len(cols)}">{band}</td></tr>'
+            f'{"".join(rows)}</tbody></table></div>')
+
+
+# ---------------------------------------------------------------- HTML: ФАКТ
+
 def fact_segs(plan):
     if not plan:
         return '<span class="segn">—</span>'
     segs = "".join(
-        f'<i class="seg s-{html.escape(text(s.get("status")))}" title="'
-        f'{html.escape(text(s.get("role")) + " · " + text(s.get("step")) + " · " + STEP_NAMES.get(s.get("status"), ""))}"></i>'
+        f'<i class="seg s-{html.escape(status_slug(s.get("status")))}" title="'
+        f'{html.escape(text(s.get("role")) + " · " + text(s.get("step")) + " · " + text(s.get("status")))}"></i>'
         for s in plan)
     return f'<span class="segs">{segs}</span><span class="segn">{plan_count(plan).replace(" / ", "&thinsp;/&thinsp;")}</span>'
 
@@ -533,22 +552,24 @@ def fact_card(obj, kr, quarter):
     mark, name = OUTCOMES[state]
     pbv = kr.get("pbv")
     pct = f" · {kr['pct']} %" if state in ("done", "partial", "failed") else ""
-    steps = lambda key: [{"role": text(s.get("role")), "step": text(s.get("step")), "status": text(s.get("status"))}
-                         for s in kr.get(key) or []]
-    plan = steps("plan")
+    plan = [{"role": text(s.get("role")), "step": text(s.get("step")), "status": text(s.get("status"))}
+            for s in kr.get("plan") or []]
+    link = link_text(kr, quarter)
+    blocks = (card_text("Образ результата", kr.get("goal"))
+              + ([{"t": "h", "v": "Процессный roadmap"}] + card_steps(kr.get("plan")) if plan else [])
+              + ([{"t": "h", "v": "Зависимости"}] + card_steps(kr.get("deps")) if kr.get("deps") else [])
+              + card_list("Риски", kr.get("risks"))
+              + card_text("Фактическая готовность", fact_text(kr))
+              + card_text("Следующие действия", next_text(kr, quarter))
+              + ([{"t": "p", "v": link}] if link else [])
+              + card_list("Исполнители", kr.get("who")))
     return {
+        "head": f"{text(kr.get('id'))} · OBJ {text(obj.get('id'))} — {text(obj.get('title'))}",
         "title": text(kr.get("title")),
-        "obj": f"OBJ {text(obj.get('id'))} — {text(obj.get('title'))}",
-        "stateLine": f"{mark} {name}{pct} · PBV {pbv if is_int(pbv) else '—'}",
-        "goal": text(kr.get("goal")),
-        "plan": plan,
-        "planCount": f"{plan_count(plan)} этапов" if plan else "",
-        "deps": steps("deps"),
-        "risks": [text(r) for r in kr.get("risks") or [] if text(r)],
-        "fact": fact_text(kr),
-        "next": next_text(kr, quarter),
-        "link": link_text(kr, quarter),
-        "who": [text(w) for w in kr.get("who") or [] if text(w)],
+        "line": f"{mark} {name}{pct} · PBV {pbv if is_int(pbv) else '—'}",
+        "segs": plan,
+        "segsCount": f"{plan_count(plan)} этапов" if plan else "",
+        "blocks": blocks,
     }
 
 
@@ -559,31 +580,22 @@ def render_retro(doc, source):
     counts = stats["counts"]
     title = f"ФАКТ {quarter}" + (f" — {team}" if team else "")
 
-    drawer = [f'<button class="st-item" type="button" data-state="" data-active>Все исходы<span class="n">{stats["total"]}</span></button>']
-    for state, (mark, name) in OUTCOMES.items():
-        if counts[state]:
-            drawer.append(f'<button class="st-item" type="button" data-state="{state}" data-name="{name}">'
-                          f'<span class="st st-{state}">{mark}</span> {name}<span class="n">{counts[state]}</span></button>')
+    items = [("", "Все исходы", "все", stats["total"])]
+    items += [(state, f'<span class="st st-{state}">{mark}</span> {name}', name, counts[state])
+              for state, (mark, name) in OUTCOMES.items() if counts[state]]
 
     basis = [esc_unc(b) for b in doc.get("basis") or [] if text(b)]
     if stats["weighted"] is not None:
         basis.append(f'Итог квартала: <strong>{stats["weighted"]} %</strong> — взвешенное по PBV среднее по '
                      f'{stats["rated"]} оценённым KR (простое среднее {stats["simple"]} %).')
-    basis.append('Шкала этапов плана: зелёный — сделано · жёлтый — в работе · белый — не начато · '
-                 'штриховка — статус не задан · пунктир — снято.')
+    basis.append('Шкала подзадач: зелёный — DONE · жёлтый — IN PROGRESS · красный — BLOCKED · белый — TODO.')
 
-    meta = [f"PO: {esc(doc.get('po'))}" if text(doc.get("po")) else "",
-            "принято" if doc.get("status") == "принято" else "черновик",
-            f"обновлено {esc(doc.get('updated'))}" if text(doc.get("updated")) else ""]
-    out = [
-        '<div class="rail"><button class="rail-tab" id="stTab" type="button">Исход: <span id="stNow">все</span></button></div>',
-        '<div class="drawer" id="stDrawer"><div class="drawer-head"><h4>Исход квартала</h4>'
-        '<button class="drawer-close" type="button">×</button></div>' + "\n".join(drawer) + '</div>',
+    parts = [
+        filter_drawer("Исход", "Исход квартала", items),
         '<div class="layout wide"><main>',
-        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{" · ".join(m for m in meta if m)}</p></div>',
+        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc)}</p></div>',
         f'<blockquote class="quote">{"<br>".join(basis)}</blockquote>',
     ]
-
     cards = {}
     for obj in doc.get("objectives") or []:
         band = f'<b>OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</b>'
@@ -593,152 +605,168 @@ def render_retro(doc, source):
         for kr in obj.get("krs") or []:
             kid = text(kr.get("id"))
             state = outcome(kr)
-            pbv = kr.get("pbv")
             cards[kid] = fact_card(obj, kr, next_q)
             rows.append(
-                f'<tr class="row" data-kr="{html.escape(kid)}" data-state="{state}">'
+                f'<tr class="row" data-kr="{html.escape(kid)}" data-tags="{state}">'
                 f'<td class="kr">{html.escape(kid)}</td>'
                 f'<td class="fly">{"<span>влёт</span>" if kr.get("unplanned") else ""}</td>'
-                f'<td class="pbv"><span class="pbvtag" data-tier="{pbv_tier(pbv)}">{pbv if is_int(pbv) else "—"}</span></td>'
+                f'<td class="pbv">{pbv_cell(kr.get("pbv"))}</td>'
                 f'<td class="name">{esc_unc(kr.get("title"))}</td>'
                 f'<td class="prog">{fact_segs(kr.get("plan") or [])}</td>'
                 f'<td class="pct st-{state}">{fact_pct(kr)}</td></tr>')
-        out.append(
-            f'<a id="obj-{html.escape(text(obj.get("id")))}"></a>'
-            '<div class="table-wrap"><table class="pick fact"><colgroup><col class="c-kr"><col class="c-fly">'
-            '<col class="c-pbv"><col class="c-name"><col class="c-prog"><col class="c-pct"></colgroup>'
-            '<thead><tr><th>KR</th><th></th><th>PBV</th><th>Название</th><th>Прогресс</th><th>%</th></tr></thead>'
-            f'<tbody><tr class="objrow"><td colspan="6">{band}</td></tr>{"".join(rows)}</tbody></table></div>')
-
-    total = stats["total"] or 1
-    summary = ['<tr><td>Исход</td><td>KR</td><td>Доля</td></tr>']
-    for state, (mark, name) in OUTCOMES.items():
-        if counts[state] or state != "unknown":
-            summary.append(f'<tr><td>{mark} {name}</td><td>{counts[state]}</td><td>{half_up(counts[state] * 100 / total)} %</td></tr>')
-    summary.append(f'<tr><td>внеплановых</td><td>{stats["unplanned"]}</td><td>—</td></tr>')
-    out.append(f'<h3>Сводка</h3><div class="table-wrap"><table class="mini head">{"".join(summary)}</table></div>')
-    if text(doc.get("summary_note")):
-        out.append(f'<p>{esc_unc(doc.get("summary_note"))}</p>')
-
-    lessons = [l for l in doc.get("lessons") or [] if text(l.get("title")) or text(l.get("text"))]
-    if lessons:
-        out.append('<h3>Что это говорит о правилах</h3>')
-        out.extend(f'<p>{n}. <strong>{esc_unc(l.get("title"))}</strong> {esc_unc(l.get("text"))}</p>'
-                   for n, l in enumerate(lessons, 1))
-
-    rows = doc.get("discrepancies") or []
-    if rows:
-        body = "".join(
-            f'<tr><td>{esc_unc(r.get("what"))}</td><td>{esc_unc(r.get("po"))}</td><td>{esc_unc(r.get("tracker"))}</td>'
-            f'<td>{"сверено" if r.get("resolved") else "<mark class=unc>[УТОЧНИТЬ]</mark>"}</td></tr>' for r in rows)
-        out.append('<h3>Расхождения — проверить</h3><div class="table-wrap"><table class="mini head">'
-                   f'<tr><td>Что</td><td>Со слов PO</td><td>В трекере</td><td>Статус</td></tr>{body}</table></div>')
-
-    rows = doc.get("baseline") or []
-    if rows:
-        body = "".join(f'<tr><td>{esc_unc(r.get("metric"))}</td><td>{esc_unc(r.get("value"))}</td></tr>' for r in rows)
-        out.append(f'<h3>Базовая линия</h3><div class="table-wrap"><table class="mini head"><tr><td>Метрика</td><td>{html.escape(quarter)}</td></tr>{body}</table></div>')
-
-    out.append('</main></div>')
-    out.append('<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
-               '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
-               '<h3 class="side-title" id="sideTitle"></h3><p class="factline" id="sideState"></p>'
-               '<div class="note" id="sideNote"></div></div>')
-    data = json.dumps(cards, ensure_ascii=False).replace("<", "\\u003c")
-    out.append(f'<script type="application/json" id="fact-data">{data}</script>')
-    out.append(f'<script>{asset("fact.js")}</script>')
-    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-            f'<title>{html.escape(title)}</title>\n'
-            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
-            f'<style>\n{asset("fact.css")}</style>\n</head>\n<body>\n' + "\n".join(out) + '\n</body>\n</html>\n')
+        parts.append(f'<a id="obj-{html.escape(text(obj.get("id")))}"></a>' + table(
+            ["kr", "fly", "pbv", "name", "prog", "pct"], ["KR", "", "PBV", "Название", "Прогресс", "%"], band, rows))
+    parts.append('</main></div>')
+    return page(title, source, "fact.css", parts, cards)
 
 
-def render_scope(doc, source):
+# ---------------------------------------------------------------- HTML: Scope
+
+def scope_card(obj, ini, teams, retro_quarter):
+    tag = text(ini.get("tag"))
+    notes = ini.get("notes") or {}
+    names = ", ".join(text(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
+    origin = (f"продолжение KR {text(ini.get('from_retro'))} из {retro_quarter or 'прошлого квартала'}"
+              if text(ini.get("from_retro")) else "новая")
+    line = [f"PBV {ini.get('pbv') if is_int(ini.get('pbv')) else '—'}", names, origin]
+    if cancelled(ini):
+        line.insert(0, "отменено")
+    flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
+             {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
+    stages = notes.get("stages") or []
+    return {
+        "head": f"{text(ini.get('id'))} · OBJ {text(obj.get('id'))} — {text(obj.get('title'))}",
+        "title": (f"[{tag}] " if tag else "") + text(ini.get("title")),
+        "line": " · ".join(x for x in line if x),
+        "segs": [],
+        "segsCount": "",
+        "blocks": (card_text("Отменено", ini.get("cancel_reason") or "[УТОЧНИТЬ: причина и дата решения]") if cancelled(ini) else [])
+                  + card_text("Образ результата", ini.get("result")) + flow
+                  + card_text("Описание", notes.get("description"))
+                  + ([{"t": "h", "v": "Этапы"}] + card_steps(stages) if stages else [])
+                  + card_list("Условия", notes.get("conditions"))
+                  + card_list("Риски", notes.get("risks"))
+                  + card_list("Зависимости", notes.get("dependencies"))
+                  + card_list("Неопределённости", notes.get("uncertainties"))
+                  + card_list("Открыто", ini.get("open")),
+    }
+
+
+def unsure_places(ini):
+    fields = [("образ результата", ini.get("result")), ("было/стало", [ini.get("before"), ini.get("after")])]
+    notes = ini.get("notes") or {}
+    fields += [("описание", notes.get("description")),
+               ("этапы", [s.get("title") for s in notes.get("stages") or []])]
+    return [name for name, value in fields if unsure(value)]
+
+
+def render_scope(doc, source, retro=None):
+    quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     teams = {text(t.get("id")): t for t in doc.get("teams") or []}
-    inits = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or []]
-    phase_label = "Scope + декомпозиция по этапам" if doc.get("phase") == "stages" else "Scope"
-    retro = doc.get("retro") or {}
-    retro_line = (f'Retro: {esc(retro.get("file"))}' if text(retro.get("file"))
-                  else f'Retro пропущен: {esc(doc.get("retro_skipped"))}')
-    out = [
-        f'<header><div class="kicker">OKR {phase_label} · {esc(doc.get("quarter"))}</div>'
-        f'<h1>План {esc(doc.get("quarter"))}{" — " + esc(doc.get("team")) if text(doc.get("team")) else ""}</h1>'
-        f'<div class="meta">PO: {esc(doc.get("po")) or "—"} · {status_badge(doc)} · {retro_line}</div></header>',
+    stages_phase = doc.get("phase") == "stages"
+    active = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or [] if not cancelled(i)]
+    all_inis = [i for o in doc.get("objectives") or [] for i in o.get("initiatives") or []]
+    title = f"ПЛАН {quarter}" + (f" — {team}" if team else "")
+    retro_quarter = text((retro or {}).get("quarter"))
+
+    items = [("", "Все команды", "все", len(active))]
+    items += [(tid, esc(t.get("name")) + (' <span class="ext">внешняя</span>' if t.get("external") else ""),
+               text(t.get("name")), sum(1 for i in active if tid in (i.get("teams") or [])))
+              for tid, t in teams.items()]
+
+    quote = [esc_unc(doc.get("summary"))] if text(doc.get("summary")) else []
+    strategic = [o for o in doc.get("objectives") or [] if not o.get("activity")]
+    quote.append(f"Целей {len(strategic)}"
+                 + (f" + {len(doc['objectives']) - len(strategic)} поддержка" if len(doc.get("objectives") or []) > len(strategic) else "")
+                 + f" · инициатив {len(active)} · с PBV ≥ 7: {sum(1 for i in active if pbv_of(i) >= 7)}"
+                 + f" · с PBV 9: {sum(1 for i in active if pbv_of(i) == 9)}"
+                 + f" · из прошлого квартала {sum(1 for i in active if text(i.get('from_retro')))}"
+                 + (f" · отменено {len(all_inis) - len(active)}" if len(all_inis) > len(active) else "") + ".")
+    if text((doc.get("retro") or {}).get("file")):
+        line = f"Retro: {esc((doc.get('retro') or {}).get('file'))}"
+        if retro is not None:
+            carried = carried_forward(retro)
+            linked = {text(i.get("from_retro")) for i in all_inis}
+            dropped = {text(d.get("id")) for d in doc.get("retro_dropped") or []}
+            line += (f" — продолжается {len(carried)} KR, в плане {len(set(carried) & linked)}, "
+                     f"не берём {len(set(carried) & dropped)}, не решено {len(set(carried) - linked - dropped)}")
+        quote.append(line + ".")
+    else:
+        quote.append(f"Retro пропущен: {esc_unc(doc.get('retro_skipped'))}.")
+    quote.append('PBV: <span class="pbvtag" data-tier="high">8–9</span> высокий · '
+                 '<span class="pbvtag" data-tier="mid">4–7</span> средний · '
+                 '<span class="pbvtag" data-tier="low">1–3</span> низкий. '
+                 '<b class="new">+</b> — новая инициатива, без продолжения из прошлого квартала.')
+
+    parts = [
+        filter_drawer("Команда", "Команды", items),
+        '<div class="layout wide"><main>',
+        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">'
+        f'{meta_line(doc, "декомпозиция по этапам" if stages_phase else "скоуп")}</p></div>',
+        f'<blockquote class="quote">{"<br>".join(quote)}</blockquote>',
     ]
-    if text(doc.get("summary")):
-        out.append(f'<p class="lead">{esc(doc.get("summary"))}</p>')
-    by_team = {tid: sum(1 for i in inits if tid in (i.get("teams") or [])) for tid in teams}
-    out.append('<div class="tiles">'
-               f'<div class="tile"><b>{len(doc.get("objectives") or [])}</b><span>целей</span></div>'
-               f'<div class="tile"><b>{len(inits)}</b><span>инициатив</span></div>'
-               f'<div class="tile"><b>{sum(1 for i in inits if pbv_of(i) >= 7)}</b><span>с PBV ≥ 7</span></div>'
-               f'<div class="tile"><b>{sum(1 for i in inits if text(i.get("from_retro")))}</b><span>из прошлого квартала</span></div>'
-               '</div>')
-    out.append('<div>' + "".join(
-        f'<span class="chip"><b>{esc(t.get("name"))}</b> · {by_team.get(tid, 0)}'
-        f'{" · внешняя" if t.get("external") else ""}</span>' for tid, t in teams.items()) + '</div>')
     if text(doc.get("po_brief")):
-        out.append(f'<details><summary>Исходный рассказ PO</summary><p>{esc(doc.get("po_brief"))}</p></details>')
+        parts.append(f'<details class="brief"><summary>Исходный рассказ PO</summary><p>{esc(doc.get("po_brief"))}</p></details>')
+
+    cols = ["kr", "team", "name", "asis", "tobe", "pbv"] + (["prog"] if stages_phase else [])
+    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV"] + (["Подзадачи"] if stages_phase else [])
+    cards, asks = {}, []
     for obj in doc.get("objectives") or []:
-        out.append(f'<h2>OBJ {esc(obj.get("id"))}. {esc(obj.get("title"))}</h2>')
+        band = f'<b>OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</b>'
         if text(obj.get("why")):
-            out.append(f'<p class="why">{esc(obj.get("why"))}</p>')
+            band += f' · {esc_unc(obj.get("why"))}'
+        rows = []
         for ini in obj.get("initiatives") or []:
-            out.append(render_initiative(ini, teams, doc.get("quarter")))
+            kid = text(ini.get("id"))
+            cards[kid] = scope_card(obj, ini, teams, retro_quarter)
+            tag = text(ini.get("tag"))
+            new = "" if text(ini.get("from_retro")) or obj.get("activity") else ' <b class="new">+</b>'
+            team_names = "<br>".join(esc(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
+            row = (f'<tr class="row" data-kr="{html.escape(kid)}" data-tags="{html.escape(" ".join(ini.get("teams") or []))}"'
+                   f'{" data-cancelled" if cancelled(ini) else ""}>'
+                   f'<td class="kr">{html.escape(kid)}{new}</td>'
+                   f'<td class="team">{team_names}</td>'
+                   f'<td class="name"><span class="txt">{"[" + esc(tag) + "] " if tag else ""}{esc_unc(ini.get("title"))}</span>'
+                   f'{"<span class=cancel>отменено</span>" if cancelled(ini) else ""}</td>'
+                   f'<td class="asis">{esc_unc(ini.get("before")) or "—"}</td>'
+                   f'<td class="tobe">{esc_unc(ini.get("result")) or "—"}</td>'
+                   f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>')
+            if stages_phase:
+                subtasks = [{"role": s.get("role"), "step": ("[EXT] " if s.get("ext") else "") + text(s.get("title")),
+                             "status": text(s.get("status")) or "TODO"}
+                            for s in (ini.get("notes") or {}).get("stages") or []]
+                row += f'<td class="prog">{fact_segs(subtasks)}</td>'
+            rows.append(row + "</tr>")
+            if not cancelled(ini):
+                asks += [f"KR {esc(kid)}: {esc_unc(q)}" for q in ini.get("open") or [] if text(q)]
+                places = unsure_places(ini)
+                if places:
+                    asks.append(f"KR {esc(kid)}: <mark class=\"unc\">[УТОЧНИТЬ]</mark> — {', '.join(places)}")
+        parts.append(f'<a id="obj-{html.escape(text(obj.get("id")))}"></a>' + table(cols, head, band, rows))
+
     dropped = doc.get("retro_dropped") or []
     if dropped:
-        out.append('<h2>Не берём из прошлого квартала</h2><table><thead><tr><th>KR</th><th>Почему</th></tr></thead><tbody>')
-        out.extend(f'<tr><td class="num">{esc(d.get("id"))}</td><td>{esc(d.get("reason"))}</td></tr>' for d in dropped)
-        out.append('</tbody></table>')
-    out.append(f'<h2>Открытые вопросы</h2>{items(doc.get("open_questions"))}')
-    out.append(footer(doc, source))
-    return page(f'OKR Scope {text(doc.get("quarter"))}', "".join(out))
-
-
-def render_initiative(ini, teams, quarter):
-    tag = text(ini.get("tag"))
-    chips = "".join(f'<span class="chip">{esc(teams.get(t, {}).get("name") or t)}</span>' for t in ini.get("teams") or [])
-    parts = [
-        f'<section class="card"><div class="card-head"><span class="id">{esc(ini.get("id"))}</span>'
-        f'<h3>{"[" + esc(tag) + "] " if tag else ""}{esc(ini.get("title"))}</h3>'
-        f'<span class="badge">PBV {esc(ini.get("pbv")) or "?"}</span></div>'
-        f'<div style="margin-top:6px">{chips}'
-        f'{"<span class=meta>продолжение " + esc(ini.get("from_retro")) + " прошлого квартала</span>" if text(ini.get("from_retro")) else ""}</div>',
-        f'<div class="label">Образ результата</div><div>{esc(ini.get("result")) or "—"}</div>',
-    ]
-    if text(ini.get("before")):
-        parts.append(f'<div class="label">Было → стало</div>'
-                     f'<div class="flow">БЫЛО:  {esc(ini.get("before"))}<br>СТАЛО: {esc(ini.get("after"))}</div>')
-    if ini.get("open"):
-        parts.append(f'<div class="label">Открыто</div>{items(ini.get("open"))}')
-    notes = ini.get("notes") or {}
-    if notes:
-        stages = "".join(
-            f'<li><span class="role">{esc(s.get("role"))}</span>{esc(s.get("title"))}'
-            f'{" <span class=ext>[EXT]</span>" if s.get("ext") else ""}'
-            f'{"<div class=src>" + esc(s.get("note")) + "</div>" if text(s.get("note")) else ""}</li>'
-            for s in notes.get("stages") or [])
-        parts.append(
-            f'<details open><summary>Заметки: декомпозиция по этапам</summary>'
-            f'<p>{esc(notes.get("description"))}</p>'
-            f'{"<ol class=stages>" + stages + "</ol>" if stages else ""}'
-            f'<div class="grid4"><div><div class="label">Условия</div>{items(notes.get("conditions"))}</div>'
-            f'<div><div class="label">Риски</div>{items(notes.get("risks"))}</div>'
-            f'<div><div class="label">Зависимости</div>{items(notes.get("dependencies"))}</div>'
-            f'<div><div class="label">Неопределённости</div>{items(notes.get("uncertainties"))}</div></div>'
-            f'</details>')
-    parts.append('</section>')
-    return "".join(parts)
+        body = "".join(f'<tr><td>{esc(d.get("id"))}</td><td>{esc_unc(d.get("reason"))}</td></tr>' for d in dropped)
+        parts.append('<h3>Не берём из прошлого квартала</h3><div class="table-wrap"><table class="mini head">'
+                     f'<tr><td>KR</td><td>Почему</td></tr>{body}</table></div>')
+    asks = [esc_unc(q) for q in doc.get("open_questions") or [] if text(q)] + asks
+    if asks:
+        parts.append('<div class="ask-block"><h4>Открытые вопросы</h4><ol>'
+                     + "".join(f"<li>{q}</li>" for q in asks) + "</ol></div>")
+    parts.append('</main></div>')
+    return page(title, source, "scope.css", parts, cards)
 
 
 def render(path, out):
     doc = load(path)
-    renderer = {"retro": render_retro, "scope": render_scope}.get(doc.get("kind"))
-    if renderer is None:
+    if doc.get("kind") == "retro":
+        page_html = render_retro(doc, path)
+    elif doc.get("kind") == "scope":
+        page_html = render_scope(doc, path, resolve_retro(doc, path, None))
+    else:
         raise SystemExit("kind: ожидается 'retro' или 'scope'")
     with open(out, "w", encoding="utf-8") as f:
-        f.write(renderer(doc, path))
+        f.write(page_html)
 
 
 # ---------------------------------------------------------------- TeamPlanner
@@ -756,6 +784,8 @@ def teamplanner(path, out):
     for obj in doc.get("objectives") or []:
         program = f'OBJ {text(obj.get("id"))}. {text(obj.get("title"))}'
         for ini in obj.get("initiatives") or []:
+            if cancelled(ini):
+                continue
             notes = ini.get("notes") or {}
             head = {
                 "Программа (OBJ)": program,

@@ -57,7 +57,7 @@ class RetroLint(Case):
     def test_stats_weight_by_pbv_and_round_half_up(self):
         st = okr_plan.retro_stats(self.retro)
         self.assertEqual(st["counts"], {"done": 2, "partial": 2, "failed": 1, "dropped": 1, "unknown": 0})
-        self.assertEqual((st["rated"], st["weighted"], st["simple"], st["unplanned"]), (4, 76, 63, 1))
+        self.assertEqual((st["rated"], st["weighted"], st["simple"]), (4, 76, 63))
 
     def test_next_texts(self):
         q = "2026Q4"
@@ -66,7 +66,7 @@ class RetroLint(Case):
         self.assertEqual(okr_plan.next_text(self.kr("2.3"), q), "Отменён — снят решением PO 12.08, приоритет ушёл на биллинг")
         self.assertEqual(okr_plan.next_text(self.kr("2.2"), q), "Решить: продолжаем, переносим или закрываем")
         self.assertEqual(okr_plan.fact_text(self.kr("1.3")), "100 % — внеплановый; запрос бухгалтерии в августе")
-        self.assertEqual(okr_plan.fact_text(self.kr("2.3")), "отменён")
+        self.assertEqual(okr_plan.fact_text(self.kr("2.3")), "отменено")
 
     def test_unknown_pct_blocks_acceptance(self):
         self.kr("1.1")["pct"] = None
@@ -84,13 +84,20 @@ class RetroLint(Case):
         self.kr("2.3")["next"] = {"action": "continue", "kr": "2.1"}
         self.assertError(self.lint(), "только drop")
 
-    def test_drop_needs_reason(self):
-        self.kr("2.3")["drop_reason"] = ""
-        self.assertError(self.lint(), "drop_reason")
+    def test_cancel_needs_reason(self):
+        self.kr("2.3")["cancel_reason"] = ""
+        self.assertError(self.lint(), "cancel_reason")
+
+    def test_status_is_explicit_word(self):
+        self.kr("2.3")["status"] = "отменён"
+        self.assertError(self.lint(), "status — одно из")
+        self.kr("2.3")["status"] = "Отменено"
+        self.kr("2.2")["dropped"] = True
+        self.assertError(self.lint(), "dropped больше не используется")
 
     def test_step_role_and_status(self):
         self.kr("1.1")["plan"][0]["role"] = "аналитик"
-        self.kr("1.1")["plan"][1]["status"] = "готово"
+        self.kr("1.1")["plan"][1]["status"] = "done"
         rep = self.lint()
         self.assertError(rep, "роль")
         self.assertError(rep, "status")
@@ -100,10 +107,6 @@ class RetroLint(Case):
         self.kr("1.1")["comment"] = "[УТОЧНИТЬ у PO]"
         self.assertEqual(self.lint().errors, [])
         self.assertError(self.lint(final=True), "[УТОЧНИТЬ]")
-
-    def test_unresolved_discrepancy_blocks_acceptance(self):
-        self.retro["discrepancies"][0]["resolved"] = False
-        self.assertError(self.lint(), "Расхождение")
 
     def test_kr_id_must_follow_objective(self):
         self.kr("2.1")["id"] = "1.9"
@@ -178,6 +181,17 @@ class StagesLint(Case):
         self.scope["objectives"][1]["initiatives"][0]["notes"]["uncertainties"] = []
         self.assertError(self.lint(scope=self.scope), "неопределённости")
 
+    def test_stage_status_values(self):
+        self.scope["objectives"][0]["initiatives"][1]["notes"]["stages"][0]["status"] = "готово"
+        self.assertError(self.lint(scope=self.scope), "этап 1: status")
+
+    def test_cancelled_initiative_needs_reason_only(self):
+        ini = self.scope["objectives"][1]["initiatives"][1]
+        ini["cancel_reason"] = ""
+        ini["result"] = ""
+        rep = self.lint(scope=self.scope)
+        self.assertEqual([e for e in rep.errors if "2.2" in e], ["KR 2.2: отменено без причины и даты решения (cancel_reason)"])
+
     def test_scope_phase_skips_stage_checks(self):
         self.scope["phase"] = "scope"
         self.scope["objectives"][0]["initiatives"][1]["notes"] = {}
@@ -200,15 +214,32 @@ class Render(Case):
     def test_fact_page_is_computed_from_data(self):
         page = self.render(self.retro, "retro-2026Q3")
         self.assertIn("<title>ФАКТ 2026Q3 — Витрина</title>", page)
-        self.assertIn('data-state="done" data-name="закрыт"><span class="st st-done">✔</span> закрыт<span class="n">2</span>', page)
+        self.assertIn('data-value="done" data-name="закрыт"><span class="st st-done">✔</span> закрыт<span class="n">2</span>', page)
+        self.assertIn('data-value="dropped" data-name="отменено">', page)
         self.assertIn('<td class="pct st-dropped">ОТМ</td>', page)
         self.assertIn('<td class="fly"><span>влёт</span></td>', page)
         self.assertIn('<span class="pbvtag" data-tier="none">—</span>', page)
         self.assertIn("Итог квартала: <strong>76 %</strong>", page)
+        self.assertIn('<i class="seg s-blocked"', page)
         self.assertIn('<span class="segn">2&thinsp;/&thinsp;5</span>', page)
+
+    def test_fact_page_has_no_bottom_analysis(self):
+        page = self.render(self.retro, "retro-2026Q3")
+        for gone in ("Сводка", "Что это говорит о правилах", "Расхождения", "Базовая линия"):
+            self.assertNotIn(gone, page)
+
+    def test_fact_card_keeps_sections_for_comments(self):
+        page = self.render(self.retro, "retro-2026Q3")
+        data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
+        self.assertEqual(data["file"], "retro-2026Q3.json")
+        heads = [b["v"] for b in data["cards"]["1.2"]["blocks"] if b["t"] == "h"]
+        self.assertEqual(heads, ["Образ результата", "Процессный roadmap", "Зависимости", "Риски",
+                                 "Фактическая готовность", "Следующие действия", "Исполнители"])
+        self.assertIn('id="commentsBtn"', page)
 
     def test_render_is_deterministic(self):
         self.assertEqual(self.render(self.retro, "a"), self.render(self.retro, "a"))
+        self.assertEqual(self.render(self.scope, "b"), self.render(self.scope, "b"))
 
     def test_fact_page_escapes_everything(self):
         evil = "</script><script>alert(1)</script>"
@@ -216,15 +247,27 @@ class Render(Case):
         self.retro["objectives"][0]["krs"][0]["goal"] = evil
         page = self.render(self.retro, "retro-2026Q3")
         self.assertNotIn("<script>alert", page)
-        data = page.split('<script type="application/json" id="fact-data">')[1].split("</script>")[0]
-        self.assertEqual(json.loads(data)["1.1"]["goal"], evil)
+        data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
+        self.assertIn(evil, [b["v"] for b in data["cards"]["1.1"]["blocks"]])
+
+    def test_scope_page(self):
+        self.write(self.retro, "retro-2026Q3.json")
+        page = self.render(self.scope, "scope-2026Q4")
+        self.assertIn("<title>ПЛАН 2026Q4 — Витрина</title>", page)
+        self.assertIn("продолжается 2 KR, в плане 2, не берём 0, не решено 0", page)
+        self.assertIn('data-kr="2.2" data-tags="back" data-cancelled', page)
+        self.assertIn("инициатив 4 ·", page)
+        self.assertIn('data-value="partner" data-name="Биллинг партнёра">', page)
+        self.assertIn('title="BE · [EXT] Стенд партнёра для тестов · TODO"', page)
+        self.assertIn('<span class="segn">1&thinsp;/&thinsp;4</span>', page)
 
     def test_escapes_and_marks_unsure(self):
         self.scope["objectives"][0]["initiatives"][0]["title"] = "<script>alert(1)</script>"
         self.scope["objectives"][0]["initiatives"][1]["result"] = "Срок [УТОЧНИТЬ у маркетинга]"
         page = self.render(self.scope, "scope-2026Q4")
-        self.assertNotIn("<script>", page)
-        self.assertIn('<span class="warn">[УТОЧНИТЬ у маркетинга]</span>', page)
+        self.assertNotIn("<script>alert", page)
+        self.assertIn('<mark class="unc">[УТОЧНИТЬ у маркетинга]</mark>', page)
+        self.assertIn("KR 1.2: <mark class=\"unc\">[УТОЧНИТЬ]</mark> — образ результата", page)
 
 
 class TeamPlanner(Case):
@@ -245,6 +288,10 @@ class TeamPlanner(Case):
         self.assertEqual(rows[1]["Риски"], "")
         self.assertEqual(rows[-1]["Этап"], "")
         self.assertEqual(rows[0]["Программа (OBJ)"], "OBJ 1. Продавать подписку без ручных операций")
+
+    def test_cancelled_initiative_is_not_exported(self):
+        rows = self.export(self.scope)
+        self.assertNotIn("2.2", {r["KR"] for r in rows})
 
     def test_requires_accepted_stages(self):
         self.scope["status"] = "черновик"
