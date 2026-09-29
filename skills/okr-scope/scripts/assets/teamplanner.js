@@ -9,7 +9,14 @@
   var DATA = JSON.parse(document.getElementById("page-data").textContent);
   var ROLES = DATA.roles, ST = DATA.statuses;
   var KEY = "okr-tp:" + DATA.file;
-  var BASE = (DATA.doc.updated || "") + "|" + JSON.stringify(DATA.doc).length;
+  /* Черновик браузера привязан к содержимому файла (хэш всего JSON): агент поправил
+     файл и пересобрал страницу — старый черновик к новой версии не применяется. */
+  function hash(str){
+    var h = 2166136261;
+    for(var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(16);
+  }
+  var BASE = hash(JSON.stringify(DATA.doc));
   var COLUMNS = ["Название", "Комментарий", "Роль", "Исполнитель", "Начало", "Конец",
                  "Статус", "Прогресс, %", "Образ результата", "Образ действия"];
 
@@ -19,12 +26,18 @@
       return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c];
     });
   }
+  /* Правки к прошлой версии файла не применяются и не теряются молча: уходят в
+     отдельный ключ и ждут, пока их скачают или отбросят. */
+  var OLD = KEY + ":old", stale = null;
   function stored(){
+    var current = null;
     try {
       var s = JSON.parse(localStorage.getItem(KEY) || "null");
-      if(s && s.base === BASE) return s.doc;
+      if(s && s.base === BASE) current = s.doc;
+      else if(s && s.doc){ localStorage.setItem(OLD, JSON.stringify(s.doc)); localStorage.removeItem(KEY); }
+      stale = JSON.parse(localStorage.getItem(OLD) || "null");
     } catch(e){}
-    return null;
+    return current;
   }
   var doc = stored(), dirty = !!doc;
   if(!doc) doc = clone(DATA.doc);
@@ -133,9 +146,11 @@
   /* Тип: своя роль или EXT[роль] — та же работа силами смежной команды. */
   function typeSelect(kr, s, k){
     var own = ROLES.map(function(r){ return option(r, r, s.ext ? "" : s.role); }).join("");
-    var ext = ROLES.map(function(r){ return option("EXT:" + r, "EXT[" + r + "]", s.ext ? "EXT:" + s.role : ""); }).join("");
+    /* EXT — только если в документе есть смежная команда (external): иначе этапу не на кого уйти. */
+    var hasExt = (doc.teams || []).some(function(t){ return t.external; }) || s.ext;
+    var ext = hasExt ? ROLES.map(function(r){ return option("EXT:" + r, "EXT[" + r + "]", s.ext ? "EXT:" + s.role : ""); }).join("") : "";
     return '<select class="type" data-k="' + k + 'type" aria-label="Тип">' + own
-      + '<optgroup label="Внешний ресурс">' + ext + "</optgroup></select>";
+      + (ext ? '<optgroup label="Внешний ресурс">' + ext + "</optgroup>" : "") + "</select>";
   }
   /* Исполнитель — поле с подсказками «[ТИП] ФИО» из всего состава: сначала люди с
      типом подзадачи, дальше по порядку типов и по имени. Человек из двух команд —
@@ -202,7 +217,7 @@
     roster = [];
     (doc.teams || []).forEach(function(t){
       if(t.external) return;
-      (t.people || []).forEach(function(p){ roster.push({team: t.name || "", role: p.role || "", name: p.name || ""}); });
+      (t.people || []).forEach(function(p){ roster.push({id: t.id, team: t.name || "", role: p.role || "", name: p.name || ""}); });
     });
   }
   initRoster();
@@ -216,22 +231,28 @@
     }); });
     var own = (doc.teams || []).filter(function(t){ return !t.external; });
     own.forEach(function(t){ t.people = []; });
+    var ext = (doc.teams || []).filter(function(t){ return t.external; });
     roster.forEach(function(r){
       var name = r.name.trim(), team = r.team.trim();
-      if(!name || !team) return;
-      var t = own.filter(function(x){ return x.name === team; })[0];
+      if(!name) return;
+      /* Строка помнит свою команду: название не меняли — та же команда, даже если
+         оно пустое или повторяется у другой. Поменяли — ищем по названию или заводим. */
+      var mine = own.filter(function(x){ return x.id === r.id; })[0];
+      var t = mine && (mine.name || "") === team ? mine : team ? own.filter(function(x){ return x.name === team; })[0] : null;
       if(!t){
-        var n = 1, ids = (doc.teams || []).map(function(x){ return x.id; });
+        if(!team) return;
+        var n = 1, ids = own.concat(ext).map(function(x){ return x.id; });
         while(ids.indexOf("team-" + n) >= 0) n++;
         t = {id: "team-" + n, name: team, people: []};
         own.push(t);
       }
+      r.id = t.id;
       t.people.push({name: name, role: r.role});
     });
     own = own.filter(function(t){
       return t.people.length || used[t.id] || original.some(function(o){ return o.id === t.id; });
     });
-    doc.teams = own.concat((doc.teams || []).filter(function(t){ return t.external; }));
+    doc.teams = own.concat(ext);
   }
   var peopleBox = document.getElementById("tpPeople");
   /* Подсказки названий команд. Строки состава при этом не перерисовываются —
@@ -262,7 +283,7 @@
   peopleBox.addEventListener("click", function(e){
     if(e.target.id === "tpAddPerson"){
       var last = roster[roster.length - 1];
-      roster.push({team: last ? last.team : "", role: ROLES[0], name: ""});
+      roster.push({id: last ? last.id : "", team: last ? last.team : "", role: ROLES[0], name: ""});
       renderPeople();
       var inputs = peopleBox.querySelectorAll('input[data-p$="|name"]');
       inputs[inputs.length - 1].focus();
@@ -289,6 +310,7 @@
     tp.innerHTML = o ? (o.krs || []).map(krBlock).join("") : "";
     if(key){ var el = tp.querySelector('[data-k="' + key + '"]'); if(el) el.focus(); }
     document.getElementById("tpDirty").hidden = !dirty;
+    document.getElementById("tpStale").hidden = !stale;
   }
   function findKr(id){
     var hit = null;
@@ -425,10 +447,7 @@
     var out = clone(doc);
     out.updated = new Date().toISOString().slice(0, 10);
     if(out.status === "принято") out.status = "черновик";
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2) + "\n"], {type: "application/json"}));
-    a.download = DATA.file;
-    document.body.appendChild(a); a.click(); a.remove();
+    download(out, DATA.file);
   };
   document.getElementById("bTsv").onclick = function(){
     var b = this;
@@ -443,6 +462,20 @@
     }
     if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
     else fallback();
+  };
+  function download(obj, name){
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2) + "\n"], {type: "application/json"}));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  document.getElementById("bStaleGet").onclick = function(){
+    if(stale) download(stale, DATA.file.replace(/\.json$/, "") + ".old-edits.json");
+  };
+  document.getElementById("bStaleDrop").onclick = function(){
+    if(!confirm("Отбросить правки к прошлой версии файла?")) return;
+    try { localStorage.removeItem(OLD); } catch(e){}
+    stale = null; render();
   };
   document.getElementById("bReset").onclick = function(){
     if(!confirm("Сбросить правки из браузера и вернуть данные файла?")) return;

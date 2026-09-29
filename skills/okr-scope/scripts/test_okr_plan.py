@@ -471,6 +471,46 @@ class Robustness(Case):
         with open(out, encoding="utf-8") as f:
             self.assertEqual(json.load(f)["kind"], "teamplanner")
 
+    def test_seed_refuses_scope_that_fails_final_lint(self):
+        del self.scope["objectives"][0]["initiatives"][0]["in_quarter"]
+        with self.assertRaises(SystemExit) as cm:
+            okr_plan.seed(self.write(self.scope, "scope-2026Q4.json"), os.path.join(self.tmp.name, "tp.json"))
+        self.assertIn("не решено, берём ли в квартал", str(cm.exception))
+
+    def test_seed_keeps_scope_roles(self):
+        self.scope["roles"] = ["PO", "SA", "BE", "FE", "ADR", "DS"]
+        self.scope["objectives"][0]["initiatives"][0]["notes"]["stages"][0]["role"] = "DS"
+        out = os.path.join(self.tmp.name, "teamplanner-2026Q4.json")
+        okr_plan.seed(self.write(self.scope, "scope-2026Q4.json"), out)
+        with open(out, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["roles"][-1], "DS")
+        self.assertFalse([e for e in okr_plan.lint(out).errors if "роль" in e])
+
+    def test_ext_stage_needs_external_team(self):
+        self.scope["teams"] = [t for t in self.scope["teams"] if not t.get("external")]
+        for o in self.scope["objectives"]:
+            for i in o["initiatives"]:
+                i["teams"] = [t for t in i["teams"] if t != "partner"]
+        self.write(self.retro, "retro-2026Q3.json")
+        rep = okr_plan.lint(self.write(self.scope, "scope-2026Q4.json"))
+        self.assertTrue(any("ext — этап смежной команды, но в teams нет" in e for e in rep.errors))
+
+    def test_linked_documents_never_crash_and_say_why(self):
+        broken = copy.deepcopy(self.retro)
+        broken["objectives"][0]["krs"] = "1.1"
+        retro = self.write(broken, "retro-2026Q3.json")
+        scope = self.write(self.scope, "scope-2026Q4.json")
+        for rep in (okr_plan.lint(scope), okr_plan.lint(scope, retro_path=retro)):
+            self.assertTrue(any("не проходит проверку структуры" in m for m in rep.errors + rep.warnings))
+        with open(os.path.join(self.tmp.name, "scope-2026Q4.json"), "w", encoding="utf-8") as f:
+            f.write('{"kind": "scope",}')
+        tp = okr_plan.lint(self.write(fixture("teamplanner-2026Q4.json"), "teamplanner-2026Q4.json"))
+        self.assertEqual(tp.errors, [])
+        self.assertTrue(any(w.startswith("scope: файл scope-2026Q4.json не читается") for w in tp.warnings))
+        self.write(self.retro, "scope-2026Q4.json")
+        tp = okr_plan.lint(os.path.join(self.tmp.name, "teamplanner-2026Q4.json"))
+        self.assertTrue(any("не scope (kind='retro')" in w for w in tp.warnings))
+
     def test_wrong_types_never_crash(self):
         docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json")}
 

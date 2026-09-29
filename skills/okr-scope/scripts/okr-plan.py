@@ -395,20 +395,33 @@ def check_pbv(item, where, rep, required):
         rep.error(f"{where}: PBV — целое 1..9, получено {pbv!r}")
 
 
+def load_linked(path, kind):
+    """Связанный документ (Retro для Scope, Scope для TeamPlanner): (doc, None) или
+    (None, почему не годится) — без трейсбэка и без остановки проверки."""
+    if not os.path.exists(path):
+        return None, "не найден"
+    try:
+        doc = load(path)
+    except SystemExit as e:
+        return None, f"не читается — {str(e).split(': ', 1)[-1]}"
+    if doc.get("kind") != kind:
+        return None, f"не {kind} (kind={doc.get('kind')!r})"
+    if shape_errors(doc):
+        return None, "не проходит проверку структуры — сначала lint этого файла"
+    return doc, None
+
+
 def resolve_retro(doc, doc_path, retro_path):
+    """(retro, проблема). Явный --retro и retro.file рядом со Scope проверяются одинаково."""
     if retro_path:
-        return load(retro_path)
+        return load_linked(retro_path, "retro")
     ref = text((doc.get("retro") or {}).get("file"))
     if not ref:
-        return None
-    candidate = os.path.join(os.path.dirname(os.path.abspath(doc_path)), ref)
-    if not os.path.exists(candidate):
-        return None
-    retro = load(candidate)
-    return None if shape_errors(retro) or retro.get("kind") != "retro" else retro
+        return None, None
+    return load_linked(os.path.join(os.path.dirname(os.path.abspath(doc_path)), ref), "retro")
 
 
-def lint_scope(doc, rep, retro):
+def lint_scope(doc, rep, retro, retro_problem=None):
     if not QUARTER_RE.match(text(doc.get("quarter"))):
         rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
     if not text(doc.get("team")):
@@ -426,8 +439,8 @@ def lint_scope(doc, rep, retro):
     retro_ref = doc.get("retro") or {}
     if not text(retro_ref.get("file")) and not text(doc.get("retro_skipped")):
         rep.error("retro: укажи retro.file или причину в retro_skipped")
-    if text(retro_ref.get("file")) and retro is None:
-        rep.gate(f"retro: файл {retro_ref.get('file')} не найден рядом со scope")
+    if retro_problem:
+        rep.gate(f"retro: файл {text(retro_ref.get('file')) or 'из --retro'} {retro_problem}")
 
     objectives = doc.get("objectives") or []
     if not objectives:
@@ -492,7 +505,7 @@ def lint_scope(doc, rep, retro):
             if bool(text(ini.get("before"))) != bool(text(ini.get("after"))):
                 rep.error(f"{where}: БЫЛО и СТАЛО заполняются парой")
             if phase == "stages" and in_quarter is not False:
-                lint_notes(ini, where, roles, rep)
+                lint_notes(ini, where, roles, rep, any(t.get("external") for t in teams))
 
     active = [i for i in all_initiatives if taken(i)]
     if len([i for i in active if i.get("tag") != "ACTIVITY"]) > 20:
@@ -504,7 +517,7 @@ def lint_scope(doc, rep, retro):
     lint_retro_link(doc, all_initiatives, retro, rep)
 
 
-def lint_notes(ini, where, roles, rep):
+def lint_notes(ini, where, roles, rep, has_external=True):
     notes = ini.get("notes") or {}
     tag = ini.get("tag", "")
     if tag == "ACTIVITY":
@@ -523,6 +536,8 @@ def lint_notes(ini, where, roles, rep):
             rep.error(f"{where}, этап {n}: нет названия")
         if "status" in stage and stage.get("status") not in STEP_STATUSES:
             rep.error(f"{where}, этап {n}: status — одно из {STEP_STATUSES}")
+        if stage.get("ext") and not has_external:
+            rep.error(f"{where}, этап {n}: ext — этап смежной команды, но в teams нет команды с external: true")
     for key in ("conditions", "risks", "dependencies", "uncertainties"):
         if key in notes and not isinstance(notes[key], list):
             rep.error(f"{where}: notes.{key} — список")
@@ -557,7 +572,7 @@ def lint(path, final=False, retro_path=None):
     if kind == "retro":
         lint_retro(doc, rep)
     elif kind == "scope":
-        lint_scope(doc, rep, resolve_retro(doc, path, retro_path))
+        lint_scope(doc, rep, *resolve_retro(doc, path, retro_path))
     elif kind == "teamplanner":
         lint_teamplanner(doc, rep, path)
     else:
@@ -912,7 +927,7 @@ def render(path, out):
     if doc.get("kind") == "retro":
         page_html = render_retro(doc, path)
     elif doc.get("kind") == "scope":
-        page_html = render_scope(doc, path, resolve_retro(doc, path, None))
+        page_html = render_scope(doc, path, resolve_retro(doc, path, None)[0])
     elif doc.get("kind") == "teamplanner":
         page_html = render_teamplanner(doc, path)
     else:
@@ -1061,7 +1076,7 @@ def who_text(doc, kr, step):
     return "нет роли в команде" if st["norole"] else ""
 
 
-def role_text(doc, step):
+def role_text(step):
     ext = text(step.get("ext"))
     if not ext:
         return text(step.get("role"))
@@ -1087,6 +1102,11 @@ def seed(scope_path, out, force=False):
     scope = load_checked(scope_path, "scope")
     if scope.get("status") != "принято":
         raise SystemExit("Заготовка TeamPlanner собирается только из принятого Scope (kind=scope, status=принято)")
+    # Связь с Retro заготовке не нужна; всё остальное из lint --final — нужно.
+    errors = [e for e in lint(scope_path, final=True).errors if not e.startswith("retro: файл")]
+    if errors:
+        raise SystemExit("Scope не проходит lint --final — заготовка по нему потеряла бы KR или этапы:\n  "
+                         + "\n  ".join(errors))
     teams = [dict({k: v for k, v in t.items() if k in ("id", "name", "external")}, people=[])
              for t in scope.get("teams") or []]
     external = [text(t.get("id")) for t in scope.get("teams") or [] if t.get("external")]
@@ -1112,7 +1132,9 @@ def seed(scope_path, out, force=False):
             objectives.append({"id": text(obj.get("id")), "title": text(obj.get("title")), "krs": krs})
     doc = {"kind": "teamplanner", "quarter": scope.get("quarter"), "team": scope.get("team"),
            "po": scope.get("po"), "status": "черновик", "updated": scope.get("updated"),
-           "scope": {"file": os.path.basename(scope_path)}, "roles": TP_ROLES,
+           "scope": {"file": os.path.basename(scope_path)},
+           # Роли Scope, которых нет в полном цикле, сохраняются: этапы из /okr-stages с ними валидны.
+           "roles": TP_ROLES + [r for r in scope.get("roles") or [] if r not in TP_ROLES],
            "teams": teams, "objectives": objectives}
     with open(out, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
@@ -1196,15 +1218,12 @@ def lint_teamplanner(doc, rep, path):
 
     scope_file = text((doc.get("scope") or {}).get("file"))
     if scope_file:
-        candidate = os.path.join(os.path.dirname(os.path.abspath(path)), scope_file)
-        if not os.path.exists(candidate):
-            rep.gate(f"scope: файл {scope_file} не найден рядом с TeamPlanner")
-        elif shape_errors(load(candidate)):
-            rep.error(f"scope: {scope_file} не проходит проверку структуры — сначала lint Scope")
+        scope, problem = load_linked(os.path.join(os.path.dirname(os.path.abspath(path)), scope_file), "scope")
+        if problem:
+            rep.gate(f"scope: файл {scope_file} {problem}")
         else:
-            scope = load(candidate)
             planned = {text(i.get("id")) for o in scope.get("objectives") or []
-                       for i in o.get("initiatives") or [] if taken(i) and i.get("in_quarter") is True}
+                       for i in o.get("initiatives") or [] if not cancelled(i) and i.get("in_quarter") is True}
             for kid in sorted(planned - seen):
                 rep.gate(f"KR {kid} идёт в квартал по Scope, но его нет в TeamPlanner")
             for kid in sorted(seen - planned):
@@ -1220,7 +1239,7 @@ def tp_static(doc):
         parts.append(f'<h2 class="obj">OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</h2>')
         for kr in obj.get("krs") or []:
             items = "".join(
-                f'<li><span class="t">{esc(role_text(doc, step))}</span> {esc_unc(step.get("title"))}'
+                f'<li><span class="t">{esc(role_text(step))}</span> {esc_unc(step.get("title"))}'
                 f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}</li>'
                 for step in kr.get("steps") or [])
             note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
@@ -1250,6 +1269,9 @@ def render_teamplanner(doc, source):
         '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
         '<p class="tp-dirty" id="tpDirty" hidden>Есть правки в этом браузере — «Скачать JSON» и отдайте файл агенту. '
         '<button type="button" id="bReset">Сбросить</button></p>',
+        '<p class="tp-dirty" id="tpStale" hidden>В этом браузере есть правки к прошлой версии файла — к этой они не '
+        'применены. <button type="button" id="bStaleGet">Скачать их</button> · '
+        '<button type="button" id="bStaleDrop">Отбросить</button></p>',
         f'<div id="tp">{tp_static(doc)}</div>',
         '</main></div>',
         '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
@@ -1294,8 +1316,8 @@ def tp_rows(doc):
                          "Исполнитель": text(kr.get("owner")), "Начало": start, "Конец": end,
                          "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct})
             for step in kr.get("steps") or []:
-                rows.append({"Название": f"{text(step.get('title'))} ({role_text(doc, step)})",
-                             "Комментарий": text(step.get("comment")), "Роль": role_text(doc, step),
+                rows.append({"Название": f"{text(step.get('title'))} ({role_text(step)})",
+                             "Комментарий": text(step.get("comment")), "Роль": role_text(step),
                              "Исполнитель": who_text(doc, kr, step),
                              "Начало": text(step.get("start")), "Конец": text(step.get("end")),
                              "Статус": STATUS_RU.get(text(step.get("status")) or "TODO", ""),
@@ -1305,10 +1327,12 @@ def tp_rows(doc):
 
 
 def export_csv(path, out):
-    doc = load_checked(path, "teamplanner")
     rep = lint(path)
     if rep.errors:
         raise SystemExit("TeamPlanner не проходит проверку: " + "; ".join(rep.errors))
+    doc = load(path)
+    if doc.get("kind") != "teamplanner":
+        raise SystemExit(f"{path}: csv собирается из TeamPlanner (kind=teamplanner)")
     rows = tp_rows(doc)
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TEAMPLANNER_COLUMNS, delimiter=";", restval="")
