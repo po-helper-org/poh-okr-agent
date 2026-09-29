@@ -8,6 +8,13 @@
   border:1px solid var(--line-soft); background:var(--bg); cursor:pointer; }
 .tp-act{ display:flex; gap:.3rem; }
 #tpObjs .st-item{ line-height:1.4; }
+/* Панель шире, чем на ФАКТ и ПЛАН: в ней ещё и состав команды. */
+:root{ --drawer-w:min(460px, 92vw); }
+.drawer h4.tp-sec{ margin:1.6rem 0 .6rem; }
+.person{ display:grid; grid-template-columns:minmax(0,1fr) 4.6rem minmax(0,1.3fr) 1.4rem; gap:.3rem; align-items:center; margin:0 0 .3rem; }
+.person input, .person select{ font:inherit; font-size:.8rem; padding:.25rem .3rem; border:1px solid var(--line-soft); background:var(--bg); min-width:0; width:100%; }
+.person select{ font-weight:bold; }
+.drawer button.add{ margin:.3rem 0 0; }
 .tp-act button.primary{ border-color:var(--fg); }
 .tp-dirty{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); margin:-.6rem 0 1rem; }
 .tp-dirty button{ font:inherit; border:0; background:none; text-decoration:underline; cursor:pointer; color:var(--muted); padding:0; }

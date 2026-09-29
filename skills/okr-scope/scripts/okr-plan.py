@@ -1060,7 +1060,8 @@ def render_teamplanner(doc, source):
     body = "\n".join([
         '<div class="rail"><button class="rail-tab" id="tpTab" type="button">Цели</button></div>'
         '<div class="drawer" id="tpDrawer"><div class="drawer-head"><h4>Цели</h4>'
-        '<button class="drawer-close" id="tpDrawerClose" type="button">×</button></div><div id="tpObjs"></div></div>',
+        '<button class="drawer-close" id="tpDrawerClose" type="button">×</button></div><div id="tpObjs"></div>'
+        '<h4 class="tp-sec">Команда</h4><div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
         '<div class="layout wide"><main>',
         f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, counts)}</p></div>',
         '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'

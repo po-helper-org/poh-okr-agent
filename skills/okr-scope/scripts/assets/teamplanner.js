@@ -1,5 +1,6 @@
 /* Редактор TEAMPLANNER. Один экран — одна цель (OBJ), цели переключаются в
-   левой выезжающей панели, KR раскрываются в список подзадач. У подзадачи правятся тип, название и исполнитель; подзадачи можно
+   левой выезжающей панели, KR раскрываются в список подзадач. В той же панели —
+   состав команды (команда · тип · ФИО): из него выбирают исполнителей. У подзадачи правятся тип, название и исполнитель; подзадачи можно
    добавить и удалить. Правки живут в localStorage этого браузера, пока их не
    выгрузят кнопкой «Скачать JSON». Правила «нет роли в команде» и строки для
    таблицы считаются так же, как в okr-plan.py — меняешь там, меняй и здесь. */
@@ -139,6 +140,82 @@
   var cur = 0, opened = {};
   var m = location.hash.match(/obj=([^&]+)/);
   if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
+  /* ---------- состав команды: строки «команда · тип · ФИО» ---------- */
+  var roster;
+  function initRoster(){
+    roster = [];
+    (doc.teams || []).forEach(function(t){
+      if(t.external) return;
+      (t.people || []).forEach(function(p){ roster.push({team: t.name || "", role: p.role || "", name: p.name || ""}); });
+    });
+  }
+  initRoster();
+  /* Строки состава → doc.teams. Команда ищется по названию; новое название — новая
+     команда. Пустые новые команды без KR убираются, внешние команды не трогаются. */
+  function syncTeams(){
+    var original = DATA.doc.teams || [], used = {};
+    (doc.objectives || []).forEach(function(o){ (o.krs || []).forEach(function(k){
+      (k.teams || []).forEach(function(t){ used[t] = 1; });
+      (k.steps || []).forEach(function(s){ if(s.ext) used[s.ext] = 1; });
+    }); });
+    var own = (doc.teams || []).filter(function(t){ return !t.external; });
+    own.forEach(function(t){ t.people = []; });
+    roster.forEach(function(r){
+      var name = r.name.trim(), team = r.team.trim();
+      if(!name || !team) return;
+      var t = own.filter(function(x){ return x.name === team; })[0];
+      if(!t){
+        var n = 1, ids = (doc.teams || []).map(function(x){ return x.id; });
+        while(ids.indexOf("team-" + n) >= 0) n++;
+        t = {id: "team-" + n, name: team, people: []};
+        own.push(t);
+      }
+      t.people.push({name: name, role: r.role});
+    });
+    own = own.filter(function(t){
+      return t.people.length || used[t.id] || original.some(function(o){ return o.id === t.id; });
+    });
+    doc.teams = own.concat((doc.teams || []).filter(function(t){ return t.external; }));
+  }
+  var peopleBox = document.getElementById("tpPeople");
+  /* Подсказки названий команд. Строки состава при этом не перерисовываются —
+     иначе пропадёт поле, в котором человек сейчас печатает. */
+  function renderTeamNames(){
+    var names = {};
+    (doc.teams || []).forEach(function(t){ if(!t.external && t.name) names[t.name] = 1; });
+    document.getElementById("tpTeamNames").innerHTML = Object.keys(names).map(function(n){ return option(n, n, ""); }).join("");
+  }
+  function renderPeople(){
+    renderTeamNames();
+    peopleBox.innerHTML = roster.map(function(r, i){
+      var roles = ROLES.map(function(x){ return option(x, x, r.role); }).join("")
+        + (r.role && ROLES.indexOf(r.role) < 0 ? option(r.role, r.role, r.role) : "");
+      return '<div class="person"><input data-p="' + i + '|team" value="' + esc(r.team) + '" placeholder="Команда" list="tpTeamNames" aria-label="Команда">'
+        + '<select data-p="' + i + '|role" aria-label="Тип">' + roles + "</select>"
+        + '<input data-p="' + i + '|name" value="' + esc(r.name) + '" placeholder="ФИО" aria-label="ФИО">'
+        + '<button type="button" class="del" data-pdel="' + i + '" aria-label="Удалить участника">×</button></div>';
+    }).join("") + '<button type="button" class="add" id="tpAddPerson">+ участник</button>';
+  }
+  peopleBox.addEventListener("change", function(e){
+    var k = e.target.getAttribute("data-p");
+    if(!k) return;
+    var p = k.split("|");
+    roster[+p[0]][p[1]] = e.target.value;
+    syncTeams(); save(); render(); renderTeamNames();
+  });
+  peopleBox.addEventListener("click", function(e){
+    if(e.target.id === "tpAddPerson"){
+      var last = roster[roster.length - 1];
+      roster.push({team: last ? last.team : "", role: ROLES[0], name: ""});
+      renderPeople();
+      var inputs = peopleBox.querySelectorAll('input[data-p$="|name"]');
+      inputs[inputs.length - 1].focus();
+    } else if(e.target.hasAttribute("data-pdel")){
+      roster.splice(+e.target.getAttribute("data-pdel"), 1);
+      syncTeams(); save(); renderPeople(); render();
+    }
+  });
+
   var tp = document.getElementById("tp"), list = document.getElementById("tpObjs");
   var drawer = document.getElementById("tpDrawer"), tab = document.getElementById("tpTab");
 
@@ -169,6 +246,7 @@
   document.getElementById("tpDrawerClose").onclick = function(){ setDrawer(false); };
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") setDrawer(false); });
   document.addEventListener("click", function(e){
+    if(!e.target.isConnected) return;
     if(drawer.classList.contains("open") && !drawer.contains(e.target) && e.target !== tab) setDrawer(false);
   });
   list.addEventListener("click", function(e){
@@ -246,8 +324,9 @@
   document.getElementById("bReset").onclick = function(){
     if(!confirm("Сбросить правки из браузера и вернуть данные файла?")) return;
     try { localStorage.removeItem(KEY); } catch(e){}
-    doc = clone(DATA.doc); objs = doc.objectives || []; dirty = false; render();
+    doc = clone(DATA.doc); objs = doc.objectives || []; dirty = false; initRoster(); renderPeople(); render();
   };
 
+  renderPeople();
   render();
 })();
