@@ -1,0 +1,185 @@
+/* Страница ФАКТ квартала. Айдентика страниц PO: та же таблица стилей, что у
+   страницы ревью БФТ и страницы отбора квартала, в объёме, который нужен этой
+   странице. Вёрстку не правят в HTML: она собирается okr-plan.py из JSON. */
+
+:root{
+  --bg:#ffffff;
+  --fg:#000000;
+  --muted:#555555;
+  --faint:#888888;
+  --line:#000000;
+  --line-soft:#cccccc;
+  --mark:#f2f2f2;
+  --link:#0000ee;
+  --visited:#551a8b;
+  --drawer-w:min(340px, 86vw);
+}
+*{ box-sizing:border-box; }
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:15px/1.55 Georgia, "Times New Roman", serif;
+}
+code, pre, .mono{ font-family:"Courier New", Consolas, monospace; }
+a{ color:var(--link); }
+a:visited{ color:var(--visited); }
+
+.layout{ max-width:860px; margin:0 auto; padding:2rem 1.5rem 6rem; }
+main{ min-width:0; max-width:760px; margin:0 auto; }
+/* Слева отступ шире: вкладка «Исход» стоит у кромки и не должна закрывать заголовок. */
+.layout.wide{ max-width:100%; padding-left:2.8rem; padding-right:1.5rem; }
+.layout.wide main{ max-width:100%; }
+
+h1{ font-size:1.65rem; line-height:1.25; margin:0 0 .5rem; }
+h3{ font-size:1.02rem; margin:1.4rem 0 .6rem; }
+p{ margin:0 0 .9rem; }
+ol, ul{ margin:0 0 .9rem; padding-left:1.4rem; }
+li{ margin-bottom:.35rem; }
+
+blockquote.quote{
+  border:1px solid var(--line); padding:.7rem .9rem; margin:1rem 0 1.6rem;
+  font-size:.92rem; background:var(--mark);
+}
+mark.unc{ background:var(--mark); border:1px solid var(--line-soft); padding:.02em .35em; font-family:"Courier New",monospace; font-size:.85em; }
+
+table{ border-collapse:collapse; width:100%; margin:0 0 .8rem; font-size:.86rem; }
+th, td{ border:1px solid var(--line-soft); padding:.5rem .6rem; text-align:left; vertical-align:top; }
+th{ background:var(--mark); font-family:"Courier New", monospace; font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; }
+.table-wrap{ overflow-x:auto; }
+
+::-webkit-scrollbar{ height:8px; width:8px; }
+::-webkit-scrollbar-thumb{ background:var(--line-soft); border-radius:4px; }
+
+/* Левая рейка и выезжающая панель фильтра по исходу. */
+.rail{
+  position:fixed; left:0; top:1rem; z-index:57;
+  display:flex; flex-direction:column; gap:6px; align-items:flex-start;
+  transition:left .12s ease;
+}
+body.drawer-open .rail{ left:var(--drawer-w); }
+@media (prefers-reduced-motion:reduce){ .rail{ transition:none; } }
+.rail-tab{
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  border:none; cursor:pointer; color:#fff; background:var(--fg);
+  font-family:"Courier New",monospace; font-size:.72rem; letter-spacing:.03em;
+  padding:.8rem .4rem;
+}
+.rail-tab:focus-visible{ outline:2px solid var(--link); outline-offset:2px; }
+
+.drawer{
+  display:none; position:fixed; left:0; top:0; bottom:0; width:var(--drawer-w); z-index:56;
+  background:var(--bg); border-right:1px solid var(--fg); box-shadow:3px 0 0 var(--line-soft);
+  padding:1rem; overflow-y:auto; font-family:"Courier New",monospace; font-size:.78rem;
+}
+.drawer.open{ display:block; }
+.drawer-head{ display:flex; align-items:center; justify-content:space-between; margin:0 0 .8rem; }
+.drawer h4{ margin:0; text-transform:uppercase; font-size:.8rem; letter-spacing:.04em; }
+.drawer-close{
+  background:none; border:1px solid var(--line-soft); color:var(--fg); cursor:pointer;
+  font-family:inherit; font-size:.9rem; line-height:1; padding:.1rem .5rem; border-radius:3px;
+}
+.drawer-close:hover{ border-color:var(--fg); }
+.st-item{ display:block; width:100%; text-align:left; font:inherit; font-size:.86rem;
+  background:none; border:0; border-bottom:1px solid var(--line-soft); padding:.5rem .2rem; cursor:pointer; }
+.st-item[data-active]{ font-weight:bold; }
+.st-item .n{ float:right; font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); }
+
+/* Шапка. */
+.head{ display:flex; align-items:baseline; gap:.8rem; flex-wrap:wrap; margin:0 0 1.4rem; }
+.head h1{ margin:0; }
+.head .meta{ font-family:"Courier New",monospace; font-size:.75rem; color:var(--muted); margin:0; }
+
+/* Таблица факта: строка — KR, клик открывает карточку. */
+table.pick{ table-layout:fixed; }
+table.pick td{ vertical-align:middle; }
+col.c-kr{ width:3.4rem; }
+col.c-fly{ width:3.4rem; }
+col.c-pbv{ width:4.2rem; }
+col.c-name{ width:auto; }
+col.c-prog{ width:13rem; }
+col.c-pct{ width:4.2rem; }
+tr.row{ cursor:pointer; }
+tr.row:hover td{ background:var(--mark); }
+tr.row[hidden]{ display:none; }
+td.kr{ font-family:"Courier New",monospace; font-weight:bold; white-space:nowrap; }
+tr.objrow td{ background:#dfe7f5; border-top:2px solid var(--line); font-size:.86rem; padding:.5rem .6rem; }
+table.fact th, table.fact td{ border-left:0; border-right:0; }
+
+td.fly{ text-align:center; }
+td.fly span{ font-family:"Courier New",monospace; font-size:.62rem; letter-spacing:.04em;
+  background:#ffe0b2; color:#7a4100; padding:.1rem .3rem; }
+
+/* Вес PBV: четыре ступени, приоритеты отделяются взглядом. Красный и зелёный
+   заняты смыслами «не задано» и «закрыт», поэтому оттенки приглушённые. */
+.pbvtag{ display:inline-block; padding:.05rem .35rem; border-radius:3px; font-weight:bold;
+  font-family:"Courier New",monospace; font-size:.78rem; }
+.pbvtag[data-tier="high"]{ background:#f3e3e0; color:#7c2d18; }
+.pbvtag[data-tier="mid"]{ background:#f7efd9; color:#7a5c12; }
+.pbvtag[data-tier="low"]{ background:#e7eef7; color:#2f4c73; }
+.pbvtag[data-tier="zero"]{ background:var(--mark); color:var(--faint); }
+.pbvtag[data-tier="none"]{ border:1px dashed #a33; color:#a33; font-weight:normal; }
+
+/* Исход KR. */
+.st{ display:inline-block; width:1.35em; text-align:center; font-weight:700; }
+.st-done{ color:#0a7a3d; } .st-partial{ color:#b07000; }
+.st-failed{ color:#c00000; } .st-dropped{ color:#777; } .st-unknown{ color:#777; }
+td.pct{ text-align:right; font-family:"Courier New",monospace; font-size:.8rem; font-weight:bold; }
+td.pct.st-done{ color:#0a7a3d; } td.pct.st-partial{ color:#8a6100; }
+td.pct.st-failed{ color:#c00000; } td.pct.st-dropped, td.pct.st-unknown{ color:var(--faint); }
+td.pct.st-dropped{ font-size:.72rem; letter-spacing:.04em; }
+
+/* Шкала этапов плана: деление на шаг. Длинный план прокручивается внутри
+   ячейки, а не наползает на процент. */
+td.prog{ white-space:nowrap; }
+.segs{ display:inline-flex; gap:2px; vertical-align:middle; }
+td.prog .segs{ max-width:9rem; overflow-x:auto; scrollbar-width:thin; padding-bottom:2px; }
+td.prog .segs::-webkit-scrollbar{ height:4px; }
+td.prog .segs::-webkit-scrollbar-thumb{ background:var(--line-soft); }
+.seg{ display:block; flex:0 0 auto; width:.72rem; height:12px; border:1px solid var(--line-soft); }
+.seg.s-done{ background:#57bb8a; border-color:#3f9e70; }
+.seg.s-progress{ background:#ffd666; border-color:#d9a900; }
+.seg.s-todo{ background:var(--bg); }
+.seg.s-none{ background:repeating-linear-gradient(45deg, var(--mark) 0 3px, var(--bg) 3px 6px); }
+.seg.s-dropped{ background:var(--mark); border-style:dashed; }
+.segn{ font-family:"Courier New",monospace; font-size:.7rem; color:var(--muted);
+  margin-left:.5rem; vertical-align:middle; }
+.segn:first-child{ margin-left:0; color:var(--faint); }
+
+/* Сводка и таблицы разбора. */
+table.mini{ width:auto; margin:0 0 .2rem; }
+table.mini td{ border:1px solid var(--line-soft); padding:.35rem .6rem; font-size:.84rem; }
+table.mini.head tr:first-child td{ background:var(--mark); font-size:.72rem; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--muted); }
+
+/* Карточка KR справа: только чтение. */
+.scrim{ position:fixed; inset:0; background:rgba(0,0,0,.22); z-index:43; display:none; }
+body[data-side] .scrim{ display:block; }
+.side{
+  position:fixed; right:0; top:0; bottom:0; width:min(520px,94vw); z-index:46;
+  background:var(--bg); border-left:1px solid var(--fg); box-shadow:-3px 0 0 var(--line-soft);
+  padding:1.1rem 1.3rem 4.5rem; overflow-y:auto; display:none;
+}
+.side.open{ display:block; }
+.side-head{ display:flex; justify-content:space-between; align-items:center; margin:0 0 .3rem; }
+.side-head .kr-id{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--faint);
+  text-transform:uppercase; letter-spacing:.05em; }
+.side-title{ margin:.1rem 0 .5rem; font-size:1.25rem; line-height:1.3; }
+.side .factline{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); margin:0 0 1rem; }
+.side .segs{ flex-wrap:wrap; margin-top:.4rem; max-width:100%; }
+.side .seg{ width:.8rem; }
+.note{ font-size:.95rem; line-height:1.6; }
+.note .b{ margin:0 0 .35rem; }
+.note .b[data-t="h"]{ font-size:1.02rem; font-weight:bold; margin:1.1rem 0 .4rem; }
+.note .b[data-t="li"]{ padding-left:1.1rem; position:relative; }
+.note .b[data-t="li"]::before{ content:"•"; position:absolute; left:.3rem; color:var(--muted); }
+.side .step{ display:flex; gap:.5rem; align-items:baseline; margin:0 0 .3rem; font-size:.86rem; }
+.side .role{ font-family:"Courier New",monospace; font-size:.7rem; color:var(--muted);
+  border:1px solid var(--line-soft); padding:.05rem .3rem; min-width:3.6rem; text-align:center; }
+.side .step .txt{ flex:1; }
+.side .step[data-s="dropped"] .txt{ text-decoration:line-through; color:var(--faint); }
+.side .badge{ font-family:"Courier New",monospace; font-size:.62rem; letter-spacing:.04em;
+  padding:.1rem .35rem; white-space:nowrap; }
+.side .badge[data-s="done"]{ background:#d8f0e1; color:#0a7a3d; }
+.side .badge[data-s="progress"]{ background:#fdeec2; color:#8a6100; }
+.side .badge[data-s="todo"]{ background:var(--mark); color:var(--muted); }
+.side .badge[data-s="none"]{ border:1px dashed var(--line-soft); color:var(--faint); }
+.side .badge[data-s="dropped"]{ background:var(--mark); color:var(--faint); }

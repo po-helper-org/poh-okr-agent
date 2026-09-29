@@ -42,30 +42,76 @@ class Case(unittest.TestCase):
 
 
 class RetroLint(Case):
+    def kr(self, kid):
+        return next(kr for o in self.retro["objectives"] for kr in o["krs"] if kr["id"] == kid)
+
     def test_valid(self):
         self.assertEqual(self.lint().errors, [])
 
-    def test_carry_forward_needs_note(self):
-        self.retro["objectives"][0]["krs"][1]["carry_note"] = ""
-        self.assertError(self.lint(), "carry_note")
+    def test_outcome_is_derived_from_pct(self):
+        got = {kr["id"]: okr_plan.outcome(kr) for o in self.retro["objectives"] for kr in o["krs"]}
+        self.assertEqual(got, {"1.1": "done", "1.2": "partial", "1.3": "done",
+                               "2.1": "partial", "2.2": "failed", "2.3": "dropped"})
+        self.assertEqual(okr_plan.outcome({"pct": None}), "unknown")
 
-    def test_unknown_result(self):
-        self.retro["objectives"][0]["krs"][0]["result"] = "Почти"
-        self.assertError(self.lint(), "result")
+    def test_stats_weight_by_pbv_and_round_half_up(self):
+        st = okr_plan.retro_stats(self.retro)
+        self.assertEqual(st["counts"], {"done": 2, "partial": 2, "failed": 1, "dropped": 1, "unknown": 0})
+        self.assertEqual((st["rated"], st["weighted"], st["simple"], st["unplanned"]), (4, 76, 63, 1))
 
-    def test_unsure_fact_blocks_acceptance_only(self):
+    def test_next_texts(self):
+        q = "2026Q4"
+        self.assertEqual(okr_plan.next_text(self.kr("1.2"), q), "Продолжается в 2026Q4 — KR 1.1")
+        self.assertEqual(okr_plan.next_text(self.kr("1.1"), q), "Закрыт — снять с контроля")
+        self.assertEqual(okr_plan.next_text(self.kr("2.3"), q), "Отменён — снят решением PO 12.08, приоритет ушёл на биллинг")
+        self.assertEqual(okr_plan.next_text(self.kr("2.2"), q), "Решить: продолжаем, переносим или закрываем")
+        self.assertEqual(okr_plan.fact_text(self.kr("1.3")), "100 % — внеплановый; запрос бухгалтерии в августе")
+        self.assertEqual(okr_plan.fact_text(self.kr("2.3")), "отменён")
+
+    def test_unknown_pct_blocks_acceptance(self):
+        self.kr("1.1")["pct"] = None
+        self.assertError(self.lint(), "нет процента")
+
+    def test_continue_needs_next_quarter_kr(self):
+        del self.kr("1.2")["next"]["kr"]
+        self.assertError(self.lint(), "next.kr")
+
+    def test_partial_needs_next(self):
+        del self.kr("2.1")["next"]
+        self.assertError(self.lint(), "что дальше")
+
+    def test_dropped_allows_only_drop(self):
+        self.kr("2.3")["next"] = {"action": "continue", "kr": "2.1"}
+        self.assertError(self.lint(), "только drop")
+
+    def test_drop_needs_reason(self):
+        self.kr("2.3")["drop_reason"] = ""
+        self.assertError(self.lint(), "drop_reason")
+
+    def test_step_role_and_status(self):
+        self.kr("1.1")["plan"][0]["role"] = "аналитик"
+        self.kr("1.1")["plan"][1]["status"] = "готово"
+        rep = self.lint()
+        self.assertError(rep, "роль")
+        self.assertError(rep, "status")
+
+    def test_unsure_comment_blocks_acceptance_only(self):
         self.retro["status"] = "черновик"
-        self.retro["objectives"][0]["krs"][0]["fact"] = "[УТОЧНИТЬ у PO]"
+        self.kr("1.1")["comment"] = "[УТОЧНИТЬ у PO]"
         self.assertEqual(self.lint().errors, [])
         self.assertError(self.lint(final=True), "[УТОЧНИТЬ]")
 
-    def test_accepted_status_applies_final_rules(self):
-        self.retro["objectives"][0]["krs"][0]["source"] = ""
-        self.assertError(self.lint(), "источника")
+    def test_unresolved_discrepancy_blocks_acceptance(self):
+        self.retro["discrepancies"][0]["resolved"] = False
+        self.assertError(self.lint(), "Расхождение")
 
     def test_kr_id_must_follow_objective(self):
-        self.retro["objectives"][1]["krs"][0]["id"] = "1.9"
-        self.assertError(self.lint(), "id должен иметь вид 2.N")
+        self.kr("2.1")["id"] = "1.9"
+        self.assertError(self.lint(), "id должен начинаться с 2.")
+
+    def test_pbv_allows_zero_and_null_only_in_range(self):
+        self.kr("1.1")["pbv"] = 10
+        self.assertError(self.lint(), "PBV")
 
 
 class ScopeLint(Case):
@@ -139,24 +185,44 @@ class StagesLint(Case):
 
 
 class Render(Case):
-    def test_retro_and_scope_render(self):
-        for doc, name in ((self.retro, "retro-2026Q3"), (self.scope, "scope-2026Q4")):
-            path = self.write(doc, f"{name}.json")
-            out = os.path.join(self.tmp.name, f"{name}.html")
-            okr_plan.render(path, out)
-            with open(out, encoding="utf-8") as f:
-                page = f.read()
-            self.assertTrue(page.startswith("<!doctype html>"))
-            self.assertIn("2026", page)
+    def render(self, doc, name):
+        path = self.write(doc, f"{name}.json")
+        out = os.path.join(self.tmp.name, f"{name}.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            return f.read()
+
+    def test_scope_render(self):
+        page = self.render(self.scope, "scope-2026Q4")
+        self.assertTrue(page.startswith("<!doctype html>"))
+        self.assertIn("2026Q4", page)
+
+    def test_fact_page_is_computed_from_data(self):
+        page = self.render(self.retro, "retro-2026Q3")
+        self.assertIn("<title>ФАКТ 2026Q3 — Витрина</title>", page)
+        self.assertIn('data-state="done" data-name="закрыт"><span class="st st-done">✔</span> закрыт<span class="n">2</span>', page)
+        self.assertIn('<td class="pct st-dropped">ОТМ</td>', page)
+        self.assertIn('<td class="fly"><span>влёт</span></td>', page)
+        self.assertIn('<span class="pbvtag" data-tier="none">—</span>', page)
+        self.assertIn("Итог квартала: <strong>76 %</strong>", page)
+        self.assertIn('<span class="segn">2&thinsp;/&thinsp;5</span>', page)
+
+    def test_render_is_deterministic(self):
+        self.assertEqual(self.render(self.retro, "a"), self.render(self.retro, "a"))
+
+    def test_fact_page_escapes_everything(self):
+        evil = "</script><script>alert(1)</script>"
+        self.retro["objectives"][0]["krs"][0]["title"] = evil
+        self.retro["objectives"][0]["krs"][0]["goal"] = evil
+        page = self.render(self.retro, "retro-2026Q3")
+        self.assertNotIn("<script>alert", page)
+        data = page.split('<script type="application/json" id="fact-data">')[1].split("</script>")[0]
+        self.assertEqual(json.loads(data)["1.1"]["goal"], evil)
 
     def test_escapes_and_marks_unsure(self):
         self.scope["objectives"][0]["initiatives"][0]["title"] = "<script>alert(1)</script>"
         self.scope["objectives"][0]["initiatives"][1]["result"] = "Срок [УТОЧНИТЬ у маркетинга]"
-        path = self.write(self.scope, "scope-2026Q4.json")
-        out = os.path.join(self.tmp.name, "scope.html")
-        okr_plan.render(path, out)
-        with open(out, encoding="utf-8") as f:
-            page = f.read()
+        page = self.render(self.scope, "scope-2026Q4")
         self.assertNotIn("<script>", page)
         self.assertIn('<span class="warn">[УТОЧНИТЬ у маркетинга]</span>', page)
 
