@@ -1058,9 +1058,12 @@ def render_teamplanner(doc, source):
     data = json.dumps({"file": os.path.basename(source), "doc": doc, "roles": doc.get("roles") or TP_ROLES,
                        "statuses": STATUS_RU}, ensure_ascii=False).replace("<", "\\u003c")
     body = "\n".join([
-        '<div class="layout"><main>',
+        '<div class="rail"><button class="rail-tab" id="tpTab" type="button">Цели</button></div>'
+        '<div class="drawer" id="tpDrawer"><div class="drawer-head"><h4>Цели</h4>'
+        '<button class="drawer-close" id="tpDrawerClose" type="button">×</button></div><div id="tpObjs"></div></div>',
+        '<div class="layout wide"><main>',
         f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{meta_line(doc, counts)}</p></div>',
-        '<div class="tp-top"><div class="tp-nav" id="tpNav"></div><div class="tp-act">'
+        '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'
         '<button type="button" id="bTsv">Копировать в Sheets</button>'
         '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
         '<p class="tp-dirty" id="tpDirty" hidden>Есть правки в этом браузере — «Скачать JSON» и отдайте файл агенту. '

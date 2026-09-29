@@ -1,5 +1,5 @@
-/* Редактор TEAMPLANNER. Один экран — одна цель (OBJ), KR раскрываются в список
-   подзадач. У подзадачи правятся тип, название и исполнитель; подзадачи можно
+/* Редактор TEAMPLANNER. Один экран — одна цель (OBJ), цели переключаются в
+   левой выезжающей панели, KR раскрываются в список подзадач. У подзадачи правятся тип, название и исполнитель; подзадачи можно
    добавить и удалить. Правки живут в localStorage этого браузера, пока их не
    выгрузят кнопкой «Скачать JSON». Правила «нет роли в команде» и строки для
    таблицы считаются так же, как в okr-plan.py — меняешь там, меняй и здесь. */
@@ -139,15 +139,19 @@
   var cur = 0, opened = {};
   var m = location.hash.match(/obj=([^&]+)/);
   if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
-  var nav = document.getElementById("tpNav"), tp = document.getElementById("tp");
+  var tp = document.getElementById("tp"), list = document.getElementById("tpObjs");
+  var drawer = document.getElementById("tpDrawer"), tab = document.getElementById("tpTab");
 
   function render(){
     var active = document.activeElement, key = active && active.getAttribute && active.getAttribute("data-k");
-    nav.innerHTML = objs.map(function(o, i){
-      return '<button type="button" data-obj="' + i + '"' + (i === cur ? ' class="on"' : "") + ">OBJ " + esc(o.id) + "</button>";
+    list.innerHTML = objs.map(function(o, i){
+      return '<button type="button" class="st-item" data-obj="' + i + '"' + (i === cur ? " data-active" : "") + ">"
+        + "OBJ " + esc(o.id) + " — " + esc(o.title) + '<span class="n">' + (o.krs || []).length + " KR</span></button>";
     }).join("");
     var o = objs[cur];
-    tp.innerHTML = o ? '<h2 class="obj">' + esc(o.title) + "</h2>" + (o.krs || []).map(krBlock).join("") : "";
+    tab.textContent = o ? "OBJ " + o.id + " из " + objs.length : "Цели";
+    document.getElementById("tpObj").textContent = o ? "OBJ " + o.id + " — " + o.title : "";
+    tp.innerHTML = o ? (o.krs || []).map(krBlock).join("") : "";
     if(key){ var el = tp.querySelector('[data-k="' + key + '"]'); if(el) el.focus(); }
     document.getElementById("tpDirty").hidden = !dirty;
   }
@@ -157,12 +161,24 @@
     return hit;
   }
 
-  nav.addEventListener("click", function(e){
+  function setDrawer(open){
+    drawer.classList.toggle("open", open);
+    document.body.classList.toggle("drawer-open", open);
+  }
+  tab.onclick = function(){ setDrawer(!drawer.classList.contains("open")); };
+  document.getElementById("tpDrawerClose").onclick = function(){ setDrawer(false); };
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") setDrawer(false); });
+  document.addEventListener("click", function(e){
+    if(drawer.classList.contains("open") && !drawer.contains(e.target) && e.target !== tab) setDrawer(false);
+  });
+  list.addEventListener("click", function(e){
     var b = e.target.closest("[data-obj]");
     if(!b) return;
     cur = +b.getAttribute("data-obj");
     history.replaceState(null, "", "#obj=" + encodeURIComponent(objs[cur].id));
+    setDrawer(false);
     render();
+    window.scrollTo(0, 0);
   });
   tp.addEventListener("change", function(e){
     var k = e.target.getAttribute("data-k");

@@ -386,7 +386,7 @@ class TeamPlanner(Case):
         self.assertEqual(page.count("— нет роли в команде</li>"), 2)
         data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
         self.assertEqual(data["doc"], self.tp)
-        self.assertIn('id="tpNav"', page)
+        self.assertIn('id="tpDrawer"', page)
 
     def test_page_escapes(self):
         self.kr("1.1")["steps"][0]["title"] = "</script><script>alert(1)</script>"

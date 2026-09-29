@@ -1,18 +1,18 @@
-/* Страница TEAMPLANNER: один экран — одна цель, KR раскрываются в подзадачи.
+/* Страница TEAMPLANNER: во всю ширину экрана, одна цель на экран (цели — в левой
+   выезжающей панели, как фильтр на ФАКТ и ПЛАН), KR раскрываются в подзадачи.
    Подзадача — строка «тип · название · исполнитель». Подсветка скупая:
    сиреневая черта — внешний ресурс, розовая — роли нет в команде,
    красная рамка — исполнитель не выбран. */
-.tp-top{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:space-between; margin:0 0 1.2rem; }
-.tp-nav{ display:flex; flex-wrap:wrap; gap:.3rem; }
-.tp-nav button, .tp-act button{ font-family:"Courier New",monospace; font-size:.78rem; padding:.3rem .7rem;
+.tp-top{ display:flex; flex-wrap:wrap; gap:.5rem 1rem; align-items:baseline; justify-content:space-between; margin:0 0 1rem; }
+.tp-act button{ font-family:"Courier New",monospace; font-size:.78rem; padding:.3rem .7rem;
   border:1px solid var(--line-soft); background:var(--bg); cursor:pointer; }
-.tp-nav button.on{ border-color:var(--fg); background:var(--fg); color:var(--bg); }
 .tp-act{ display:flex; gap:.3rem; }
+#tpObjs .st-item{ line-height:1.4; }
 .tp-act button.primary{ border-color:var(--fg); }
 .tp-dirty{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); margin:-.6rem 0 1rem; }
 .tp-dirty button{ font:inherit; border:0; background:none; text-decoration:underline; cursor:pointer; color:var(--muted); padding:0; }
 
-h2.obj{ font-size:1.2rem; margin:0 0 1rem; }
+h2.obj{ font-size:1.2rem; margin:0; }
 
 details.kr{ border-top:1px solid var(--line-soft); }
 details.kr:last-of-type{ border-bottom:1px solid var(--line-soft); }
@@ -27,7 +27,7 @@ details.kr > summary:hover{ background:var(--mark); }
 .kr-count b{ color:#a33; font-weight:normal; }
 
 .steps{ padding:0 0 .2rem 1.3rem; }
-.step{ display:grid; grid-template-columns:6.5rem minmax(0,1fr) 12rem 1.8rem; gap:.4rem; align-items:center;
+.step{ display:grid; grid-template-columns:7rem minmax(0,1fr) minmax(12rem,22%) 1.8rem; gap:.4rem; align-items:center;
   padding:.25rem 0 .25rem .5rem; border-left:3px solid transparent; }
 .step[data-ext]{ border-left-color:#b9a6dc; }
 .step[data-norole]{ border-left-color:#e8a3aa; }
