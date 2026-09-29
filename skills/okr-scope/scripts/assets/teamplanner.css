@@ -57,8 +57,10 @@ button.more[data-has]{ border-color:var(--fg); font-weight:bold; }
 .step[data-norole]{ border-left-color:#e8a3aa; }
 .step select, .step input{ font:inherit; font-size:.88rem; padding:.3rem .35rem; border:1px solid var(--line-soft); background:var(--bg); min-width:0; width:100%; }
 .step select.type{ font-family:"Courier New",monospace; font-weight:bold; font-size:.8rem; }
-.step[data-unassigned] select.who{ border-color:#c62828; }
-.step[data-norole] select.who{ color:#a33; }
+.step .who-box{ display:block; min-width:0; }
+.step[data-unassigned] input.who{ border-color:#c62828; }
+.step[data-norole] input.who::placeholder{ color:#a33; }
+.step input.who.miss{ border-color:#c62828; background:#fbe3e5; }
 .step .who.ext{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); }
 button.del{ font:inherit; border:0; background:none; cursor:pointer; color:var(--faint); font-size:1.1rem; }
 button.del:hover{ color:#a33; }
@@ -71,7 +73,7 @@ ul.tp-static .t{ font-family:"Courier New",monospace; font-weight:bold; display:
 
 @media (max-width:640px){
   .step{ grid-template-columns:6rem minmax(0,1fr) 1.8rem; }
-  .step .who{ grid-column:2 / 3; }
+  .step .who-box, .step .who.ext{ grid-column:2 / 3; }
   .steps{ padding-left:.4rem; }
 }
 @media print{ .tp-act, .tp-dirty, button.add, button.del{ display:none; } }

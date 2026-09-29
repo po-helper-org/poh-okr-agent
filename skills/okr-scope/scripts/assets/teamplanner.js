@@ -137,27 +137,43 @@
     return '<select class="type" data-k="' + k + 'type" aria-label="Тип">' + own
       + '<optgroup label="Внешний ресурс">' + ext + "</optgroup></select>";
   }
-  /* Исполнитель — плоский список «[ТИП] ФИО» из всего состава: сначала люди с типом
-     подзадачи, дальше по порядку типов и по имени. Человек из двух команд — один раз. */
-  function whoSelect(kr, s, k){
+  /* Исполнитель — поле с подсказками «[ТИП] ФИО» из всего состава: сначала люди с
+     типом подзадачи, дальше по порядку типов и по имени. Человек из двух команд —
+     один раз. Можно начать печатать часть имени или типа. */
+  function candidates(kr, s){
     var seen = {}, list = people(null).filter(function(p){
       if(!p.name || seen[p.name]) return false;
       seen[p.name] = 1;
       return true;
     });
     function rank(p){ var i = ROLES.indexOf(p.role); return (p.role === s.role ? -1 : i < 0 ? ROLES.length : i); }
-    list.sort(function(a, b){ return rank(a) - rank(b) || a.name.localeCompare(b.name, "ru"); });
-    var html = option("", state(kr, s).norole ? "нет роли в команде" : "исполнитель", s.who || "")
-      + list.map(function(p){ return option(p.name, "[" + (p.role || "?") + "] " + p.name, s.who || ""); }).join("");
-    if(s.who && !seen[s.who]) html += option(s.who, s.who + " (нет в составе)", s.who);
-    return '<select class="who" data-k="' + k + 'who" aria-label="Исполнитель">' + html + "</select>";
+    return list.sort(function(a, b){ return rank(a) - rank(b) || a.name.localeCompare(b.name, "ru"); });
+  }
+  function label(p){ return "[" + (p.role || "?") + "] " + p.name; }
+  function whoInput(kr, s, k){
+    var list = candidates(kr, s), me = list.filter(function(p){ return p.name === s.who; })[0];
+    var value = s.who ? (me ? label(me) : s.who + " (нет в составе)") : "";
+    var id = "dl-" + k.replace(/[^\w]/g, "-");
+    return '<input class="who" data-k="' + k + 'who" list="' + id + '" value="' + esc(value) + '" placeholder="'
+      + (state(kr, s).norole ? "нет роли в команде" : "исполнитель") + '" autocomplete="off" aria-label="Исполнитель">'
+      + '<datalist id="' + id + '">' + list.map(function(p){ return '<option value="' + esc(label(p)) + '">'; }).join("") + "</datalist>";
+  }
+  /* Текст из поля → имя: точное «[ТИП] ФИО» или ФИО, иначе единственное совпадение
+     по части строки. Не нашли или нашли несколько — null. */
+  function resolveWho(kr, s, text){
+    var q = text.trim().toLowerCase(), list = candidates(kr, s);
+    if(!q) return "";
+    var exact = list.filter(function(p){ return label(p).toLowerCase() === q || p.name.toLowerCase() === q; });
+    if(exact.length) return exact[0].name;
+    var part = list.filter(function(p){ return label(p).toLowerCase().indexOf(q) >= 0; });
+    return part.length === 1 ? part[0].name : null;
   }
   function stepRow(kr, s, i){
     var st = state(kr, s), k = kr.id + "|" + i + "|";
     var flag = st.ext ? " data-ext" : st.norole ? " data-norole" : st.unassigned ? " data-unassigned" : "";
     return '<div class="step"' + flag + ">" + typeSelect(kr, s, k)
       + '<input class="title" data-k="' + k + 'title" value="' + esc(s.title) + '" aria-label="Название">'
-      + (st.ext ? '<span class="who ext">' + esc(whoText(kr, s)) + "</span>" : whoSelect(kr, s, k))
+      + (st.ext ? '<span class="who ext">' + esc(whoText(kr, s)) + "</span>" : '<span class="who-box">' + whoInput(kr, s, k) + "</span>")
       + '<button type="button" class="del" data-act="del" data-kr="' + esc(kr.id) + '" data-i="' + i + '" aria-label="Удалить подзадачу">×</button></div>';
   }
   function krBlock(kr){
@@ -316,11 +332,26 @@
       } else { s.role = v; s.ext = ""; }
     } else if(p[2] === "title"){
       s.title = v.trim() || kr.title;
+    } else if(p[2] === "who"){
+      var who = resolveWho(kr, s, v);
+      if(who === null){
+        var el = e.target;
+        el.classList.add("miss");
+        setTimeout(function(){ render(); }, 900);
+        return;
+      }
+      s.who = who;
     } else {
       s[p[2]] = v;
     }
     save();
     setTimeout(render, 0);
+  });
+  tp.addEventListener("focusin", function(e){
+    if(e.target.classList && e.target.classList.contains("who") && e.target.select) e.target.select();
+  });
+  tp.addEventListener("keydown", function(e){
+    if(e.key === "Enter" && e.target.classList && e.target.classList.contains("who")) e.target.blur();
   });
   tp.addEventListener("click", function(e){
     var b = e.target.closest("[data-act]");
