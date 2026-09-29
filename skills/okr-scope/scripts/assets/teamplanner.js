@@ -137,18 +137,19 @@
     return '<select class="type" data-k="' + k + 'type" aria-label="Тип">' + own
       + '<optgroup label="Внешний ресурс">' + ext + "</optgroup></select>";
   }
+  /* Исполнитель — плоский список «[ТИП] ФИО» из всего состава: сначала люди с типом
+     подзадачи, дальше по порядку типов и по имени. Человек из двух команд — один раз. */
   function whoSelect(kr, s, k){
-    var here = people(kr.teams || []), seen = {};
-    function group(label, list){
-      var opts = list.filter(function(p){ if(seen[p.name]) return false; seen[p.name] = 1; return true; })
-        .map(function(p){ return option(p.name, p.name, s.who || ""); }).join("");
-      return opts ? '<optgroup label="' + esc(label) + '">' + opts + "</optgroup>" : "";
-    }
+    var seen = {}, list = people(null).filter(function(p){
+      if(!p.name || seen[p.name]) return false;
+      seen[p.name] = 1;
+      return true;
+    });
+    function rank(p){ var i = ROLES.indexOf(p.role); return (p.role === s.role ? -1 : i < 0 ? ROLES.length : i); }
+    list.sort(function(a, b){ return rank(a) - rank(b) || a.name.localeCompare(b.name, "ru"); });
     var html = option("", state(kr, s).norole ? "нет роли в команде" : "исполнитель", s.who || "")
-      + group(s.role, here.filter(function(p){ return p.role === s.role; }))
-      + group("Команда", here)
-      + group("Другие команды", people(null));
-    if(s.who && !seen[s.who]) html += option(s.who, s.who, s.who);
+      + list.map(function(p){ return option(p.name, "[" + (p.role || "?") + "] " + p.name, s.who || ""); }).join("");
+    if(s.who && !seen[s.who]) html += option(s.who, s.who + " (нет в составе)", s.who);
     return '<select class="who" data-k="' + k + 'who" aria-label="Исполнитель">' + html + "</select>";
   }
   function stepRow(kr, s, i){
