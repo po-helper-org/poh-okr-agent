@@ -101,7 +101,7 @@ SHAPES = {
         "retro": {"file": V}, "retro_skipped": T, "po_brief": T, "roles": L,
         "teams": [{"id": V, "name": V, "external": V}],
         "objectives": [{"id": V, "title": V, "why": T, "activity": V, "initiatives": [{
-            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "tag": V, "status": V, "cancel_reason": T,
+            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "bft": V, "tag": V, "status": V, "cancel_reason": T,
             "from_retro": V, "result": T, "before": T, "after": T, "open": L,
             "notes": {"description": T, "stages": [STEP], "conditions": L, "risks": L, "dependencies": L,
                       "uncertainties": L}}]}],
@@ -451,6 +451,7 @@ def lint_scope(doc, rep, retro, retro_problem=None):
 
     seen = set()
     all_initiatives = []
+    unknown_bft = []
     for obj in objectives:
         oid = text(obj.get("id"))
         where_obj = f"OBJ {oid or '?'}"
@@ -491,10 +492,15 @@ def lint_scope(doc, rep, retro, retro_problem=None):
             in_quarter = ini.get("in_quarter")
             if in_quarter is not None and not isinstance(in_quarter, bool):
                 rep.error(f"{where}: in_quarter — true или false, получено {in_quarter!r}")
+            bft = ini.get("bft")
+            if bft is not None and not isinstance(bft, bool):
+                rep.error(f"{where}: bft — true или false, получено {bft!r}")
             if cancelled(ini):
                 if in_quarter is True:
                     rep.error(f"{where}: отменённая инициатива не может идти в квартал (in_quarter: true)")
                 continue
+            if in_quarter is not False and bft is None:
+                unknown_bft.append(kid)
             if in_quarter is None:
                 rep.gate(f"{where}: не решено, берём ли в квартал (in_quarter)")
             result = text(ini.get("result"))
@@ -507,6 +513,9 @@ def lint_scope(doc, rep, retro, retro_problem=None):
             if phase == "stages" and in_quarter is not False:
                 lint_notes(ini, where, roles, rep, any(t.get("external") for t in teams))
 
+    if unknown_bft:
+        rep.gate(f"БФТ: не выяснено, есть ли бизнес-функциональные требования (bft), у {len(unknown_bft)} инициатив: "
+                 + ", ".join(unknown_bft))
     active = [i for i in all_initiatives if taken(i)]
     if len([i for i in active if i.get("tag") != "ACTIVITY"]) > 20:
         rep.warn("Всего больше 20 инициатив — у квартала нет фокуса")
@@ -515,6 +524,11 @@ def lint_scope(doc, rep, retro, retro_problem=None):
         rep.warn(f"PBV 9 у {len(critical)} инициатив ({', '.join(critical)}), рекомендуется не больше 2")
 
     lint_retro_link(doc, all_initiatives, retro, rep)
+
+
+def is_bft_stage(stage):
+    title = text(stage.get("title")).lower()
+    return "бфт" in title or "бизнес-функциональн" in title
 
 
 def lint_notes(ini, where, roles, rep, has_external=True):
@@ -528,6 +542,8 @@ def lint_notes(ini, where, roles, rep, has_external=True):
     need = 3 if pbv_of(ini) >= 7 else 1
     if len(stages) < need:
         rep.gate(f"{where}: этапов {len(stages)}, нужно не меньше {need}")
+    if ini.get("bft") is False and stages and not is_bft_stage(stages[0]):
+        rep.gate(f"{where}: БФТ нет — первым этапом должно быть описание бизнес-функциональных требований")
     for n, stage in enumerate(stages, 1):
         role = text(stage.get("role"))
         if role not in roles:
@@ -608,6 +624,17 @@ def in_quarter_cell(ini):
     value = ini.get("in_quarter")
     mark, label = {True: ("yes", "✓ да"), False: ("no", "нет")}.get(value, ("undecided", "?"))
     return f'<span class="inq" data-v="{mark}">{label}</span>'
+
+
+BFT_TEXT = {True: "БФТ есть", False: "БФТ нет — сначала описать", None: "БФТ: не выяснено"}
+
+
+def bft_cell(ini):
+    if cancelled(ini):
+        return "—"
+    value = ini.get("bft")
+    mark, label = {True: ("yes", "✓ есть"), False: ("no", "нет")}.get(value, ("unknown", "?"))
+    return f'<span class="bft" data-v="{mark}">{label}</span>'
 
 
 def card_steps(steps):
@@ -786,6 +813,7 @@ def scope_card(obj, ini, teams, retro_quarter):
         line.insert(0, "отменено")
     else:
         line.insert(0, IN_QUARTER_TEXT.get(ini.get("in_quarter"), IN_QUARTER_TEXT[None]))
+        line.append(BFT_TEXT.get(ini.get("bft"), BFT_TEXT[None]))
     flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
              {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
     stages = notes.get("stages") or []
@@ -838,6 +866,8 @@ def render_scope(doc, source, retro=None):
                  + (f" + {len(doc['objectives']) - len(strategic)} поддержка" if len(doc.get("objectives") or []) > len(strategic) else "")
                  + f" · инициатив {len(active)}, в квартал {yes}"
                  + (f", не решено {undecided}" if undecided else "")
+                 + f" · БФТ: есть {sum(1 for i in chosen if i.get('bft') is True)}, нет {sum(1 for i in chosen if i.get('bft') is False)}"
+                 + (f", не выяснено {sum(1 for i in chosen if i.get('bft') is None)}" if any(i.get("bft") is None for i in chosen) else "")
                  + f" · с PBV ≥ 7: {sum(1 for i in chosen if pbv_of(i) >= 7)}"
                  + f" · с PBV 9: {sum(1 for i in chosen if pbv_of(i) == 9)}"
                  + f" · из прошлого квартала {sum(1 for i in chosen if text(i.get('from_retro')))}"
@@ -869,8 +899,8 @@ def render_scope(doc, source, retro=None):
     if text(doc.get("po_brief")):
         parts.append(f'<details class="brief"><summary>Исходный рассказ PO</summary><p>{esc(doc.get("po_brief"))}</p></details>')
 
-    cols = ["kr", "team", "name", "asis", "tobe", "pbv", "inq"] + (["prog"] if stages_phase else [])
-    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV", "В квартал"] + (["Подзадачи"] if stages_phase else [])
+    cols = ["kr", "team", "name", "asis", "tobe", "pbv", "inq", "bft"] + (["prog"] if stages_phase else [])
+    head = ["KR", "Команды", "Название", "ASIS", "TOBE", "PBV", "В квартал", "БФТ"] + (["Подзадачи"] if stages_phase else [])
     cards, asks = {}, []
     for obj in doc.get("objectives") or []:
         band = f'<b>OBJ {esc(obj.get("id"))} — {esc(obj.get("title"))}</b>'
@@ -893,7 +923,8 @@ def render_scope(doc, source, retro=None):
                    f'<td class="asis">{esc_unc(ini.get("before")) or "—"}</td>'
                    f'<td class="tobe">{esc_unc(ini.get("result")) or "—"}</td>'
                    f'<td class="pbv">{pbv_cell(ini.get("pbv"))}</td>'
-                   f'<td class="inq">{in_quarter_cell(ini)}</td>')
+                   f'<td class="inq">{in_quarter_cell(ini)}</td>'
+                   f'<td class="bft">{bft_cell(ini)}</td>')
             if stages_phase:
                 subtasks = [{"role": s.get("role"), "step": ("[EXT] " if s.get("ext") else "") + text(s.get("title")),
                              "status": text(s.get("status")) or "TODO"}

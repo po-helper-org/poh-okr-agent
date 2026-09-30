@@ -207,6 +207,37 @@ class StagesLint(Case):
         self.assertEqual(rep.errors, [])
         self.assertTrue(any("не решено, берём ли в квартал" in w for w in rep.warnings))
 
+    def test_bft_is_bool(self):
+        self.ini("1.1")["bft"] = "есть"
+        self.assertError(self.lint(scope=self.scope), "KR 1.1: bft — true или false")
+
+    def test_unknown_bft_blocks_acceptance_only(self):
+        del self.ini("1.1")["bft"]
+        self.assertError(self.lint(scope=self.scope), "БФТ: не выяснено")
+        self.assertTrue(any("1.1" in e for e in self.lint(scope=self.scope).errors if "БФТ" in e))
+        self.scope["status"] = "черновик"
+        rep = self.lint(scope=self.scope)
+        self.assertEqual(rep.errors, [])
+        self.assertTrue(any("БФТ: не выяснено" in w for w in rep.warnings))
+
+    def test_no_bft_needs_bft_as_first_stage(self):
+        self.ini("1.1")["bft"] = False
+        self.assertError(self.lint(scope=self.scope), "БФТ нет — первым этапом должно быть описание")
+        self.ini("1.1")["notes"]["stages"].insert(0, {"role": "PO", "title": "Описать бизнес-функциональные требования (БФТ)"})
+        self.assertEqual([e for e in self.lint(scope=self.scope).errors if "первым этапом" in e], [])
+
+    def test_bft_column_is_rendered(self):
+        self.ini("1.1")["bft"] = False
+        del self.ini("1.2")["bft"]
+        self.write(self.scope, "scope-2026Q4.json")
+        out = os.path.join(self.tmp.name, "scope.html")
+        okr_plan.render(os.path.join(self.tmp.name, "scope-2026Q4.json"), out)
+        page = open(out, encoding="utf-8").read()
+        self.assertIn("<th>БФТ</th>", page)
+        self.assertIn('<span class="bft" data-v="no">нет</span>', page)
+        self.assertIn('<span class="bft" data-v="unknown">?</span>', page)
+        self.assertIn('<span class="bft" data-v="yes">✓ есть</span>', page)
+
     def test_cancelled_cannot_go_to_quarter(self):
         self.ini("2.2")["in_quarter"] = True
         self.assertError(self.lint(scope=self.scope), "KR 2.2: отменённая инициатива не может идти в квартал")

@@ -28,6 +28,7 @@ details.brief p{ margin:.6rem 0 0; font-size:.92rem; color:var(--muted); }
 
 /* «Берём в квартал»: не взятая остаётся в скоупе кандидатом — приглушена, но не зачёркнута. */
 col.c-inq{ width:6.5rem; }
+col.c-bft{ width:5rem; }
 td.inq{ font-family:"Courier New",monospace; font-size:.74rem; white-space:nowrap; }
 span.inq[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
 span.inq[data-v="no"]{ color:var(--faint); }
@@ -37,11 +38,12 @@ tr.row[data-out] td{ color:var(--faint); }
 /* Телефон: строка ПЛАН — карточка «KR · вес · берём? / название / к чему идём / команды / этапы».
    ASIS в ленте не показан — он в карточке KR. */
 @media (max-width:720px){
-  table.pick tr.row{ grid-template-columns:auto 1fr auto auto;
-    grid-template-areas:"kr . pbv inq" "name name name name" "tobe tobe tobe tobe" "team team team team" "prog prog prog prog"; }
+  table.pick tr.row{ grid-template-columns:auto 1fr auto auto auto;
+    grid-template-areas:"kr . pbv inq bft" "name name name name name" "tobe tobe tobe tobe tobe" "team team team team team" "prog prog prog prog prog"; }
   table.pick tr.row td.kr{ grid-area:kr; font-size:.95rem; }
   table.pick tr.row td.pbv{ grid-area:pbv; }
   table.pick tr.row td.inq{ grid-area:inq; }
+  table.pick tr.row td.bft{ grid-area:bft; }
   table.pick tr.row td.name{ grid-area:name; }
   table.pick tr.row td.tobe{ grid-area:tobe; font-size:.88rem; color:var(--fg); }
   table.pick tr.row td.tobe::before{ content:"К концу квартала"; display:block; font-family:"Courier New",monospace;
@@ -51,5 +53,12 @@ tr.row[data-out] td{ color:var(--faint); }
   table.pick tr.row td.team br{ display:none; }
   td.team .tm ~ .tm::before{ content:" · "; }
   table.pick tr.row td.prog{ grid-area:prog; }
-  td.inq{ font-size:.72rem; }
+  td.inq, td.bft{ font-size:.72rem; }
+  td.bft::before{ content:"БФТ "; color:var(--faint); font-weight:400; }
 }
+
+/* Наличие бизнес-функциональных требований (БФТ): есть · нет, нужно написать · не выяснено. */
+td.bft{ font-family:"Courier New",monospace; font-size:.74rem; white-space:nowrap; }
+span.bft[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
+span.bft[data-v="no"]{ color:#a11; font-weight:700; }
+span.bft[data-v="unknown"]{ background:var(--mark); border:1px dashed var(--line); padding:0 .35rem; }
