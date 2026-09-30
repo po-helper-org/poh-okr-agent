@@ -217,3 +217,70 @@ body[data-side] .promptbox{ right:calc(min(520px,94vw) + 1rem); }
   border:1px solid var(--fg); background:var(--fg); color:var(--bg); padding:.25rem .6rem; cursor:pointer;
   box-shadow:3px 3px 0 var(--line-soft); }
 .sel-btn[hidden]{ display:none; }
+
+/* Телефон и узкий экран. Таблица превращается в ленту карточек: строка — KR,
+   тап открывает карточку на весь экран. Кнопки — снизу, под большой палец. */
+@media (max-width:720px){
+  body{ font-size:16px; -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent; }
+  .layout, .layout.wide{ padding:1rem .85rem 5.5rem; }
+  h1{ font-size:1.35rem; }
+  .head{ margin-bottom:1rem; gap:.3rem .8rem; }
+  blockquote.quote{ font-size:.82rem; line-height:1.45; padding:.6rem .75rem; margin:.8rem 0 1.1rem; }
+  details.brief{ padding:.55rem .75rem; }
+
+  /* Рейка — кнопка внизу слева, у открытой панели прячется (у панели есть «×»). */
+  .rail{ top:auto; bottom:.8rem; left:.8rem; flex-direction:row; }
+  body.drawer-open .rail{ left:.8rem; display:none; }
+  .rail-tab{ writing-mode:horizontal-tb; transform:none; border-radius:999px; padding:.65rem 1rem;
+    font-size:.8rem; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .drawer{ width:min(88vw, 400px); }
+  .drawer-close{ min-width:44px; min-height:44px; font-size:1.3rem; }
+  .st-item{ padding:.8rem .2rem; font-size:.95rem; }
+
+  /* Комментарии — кнопка внизу справа, панель растёт вверх. */
+  .promptbox{ top:auto; bottom:.8rem; right:.8rem; flex-direction:column-reverse; }
+  body[data-side] .promptbox{ right:.8rem; display:none; }
+  body[data-side] .rail, body.drawer-open .promptbox{ display:none; }
+  .promptbox > button{ border-radius:999px; padding:.65rem 1rem; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .panel{ width:calc(100vw - 1.6rem); max-height:65vh; }
+  .panel textarea{ font-size:16px; }
+  .panel .row-btns button{ padding:.6rem; font-size:.8rem; }
+
+  /* Таблица → карточки. Разметку колонок каждая страница задаёт у себя. */
+  .table-wrap{ overflow:visible; }
+  table.pick, table.pick tbody{ display:block; }
+  table.pick colgroup, table.pick thead{ display:none; }
+  table.pick tr.objrow{ display:block; }
+  table.pick tr.objrow{ padding:.7rem; background:#dfe7f5; border-top:2px solid var(--line); }
+  table.pick tr.objrow td{ display:block; padding:0; border:0; background:none; font-size:.9rem; line-height:1.45; }
+  table.pick tr.objrow:not([data-open]) td{ display:-webkit-box; -webkit-box-orient:vertical;
+    -webkit-line-clamp:4; overflow:hidden; }
+  table.pick tr.objrow{ cursor:pointer; }
+  table.pick tr.row{ display:grid; gap:.3rem .7rem; padding:.8rem .7rem; border-bottom:1px solid var(--line-soft);
+    align-items:center; }
+  table.pick tr.row:active{ background:var(--mark); }
+  table.pick tr.row td{ display:block; border:0; padding:0; background:none; min-width:0; }
+  table.pick tr.row td.name{ font-size:1.02rem; line-height:1.35; }
+  td.prog .segs{ max-width:100%; }
+  .seg{ width:.9rem; height:14px; }
+
+  /* Карточка KR — на весь экран. */
+  .side{ width:100vw; border-left:0; box-shadow:none; padding:0 1rem 4rem; }
+  .side-head{ position:sticky; top:0; z-index:2; background:var(--bg); margin:0 0 .6rem;
+    padding:.5rem 0; border-bottom:1px solid var(--line-soft); align-items:center; }
+  .side-head .kr-id{ min-width:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .side-title{ font-size:1.15rem; }
+  .side .step{ flex-wrap:wrap; }
+  .hintline{ font-size:.7rem; }
+
+  /* Комментарий — нижняя шторка, а не всплывающее окошко у курсора. */
+  .popover{ position:fixed !important; left:.5rem !important; right:.5rem !important; bottom:.5rem !important;
+    top:auto !important; width:auto; max-height:80vh; overflow-y:auto; padding:.8rem; font-size:.85rem; z-index:70; }
+  .popover textarea{ font-size:16px; min-height:96px; }
+  .popover button{ padding:.6rem 1rem; font-size:.82rem; }
+  .sel-btn{ position:fixed !important; left:50% !important; top:auto !important; bottom:4.5rem;
+    transform:translateX(-50%); font-size:.82rem; padding:.6rem 1rem; z-index:71; }
+
+  /* Строки-подсказки про мышь на телефоне не нужны. */
+  .mouse-only{ display:none; }
+}

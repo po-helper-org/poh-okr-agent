@@ -212,6 +212,28 @@
     e.preventDefault();
     showPopover(t, e.pageX, e.pageY);
   });
+  /* Телефон: долгое нажатие вместо правого клика (iOS не шлёт contextmenu). */
+  var pressTimer = null, pressed = false, pressAt = 0;
+  function pressCancel(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } }
+  document.addEventListener("touchstart", function(e){
+    pressCancel();
+    if(pop && pop.contains(e.target)) return;
+    var touch = e.touches[0], target = e.target;
+    pressTimer = setTimeout(function(){
+      pressTimer = null;
+      if(pop) return;
+      var t = targetOf({target: target});
+      if(!t) return;
+      pressed = true;
+      pressAt = Date.now();
+      showPopover(t, touch.pageX, touch.pageY);
+    }, 600);
+  }, {passive: true});
+  ["touchmove", "touchend", "touchcancel"].forEach(function(n){ document.addEventListener(n, pressCancel, {passive: true}); });
+  /* После долгого нажатия тап не должен открывать карточку строки. */
+  document.addEventListener("click", function(e){
+    if(pressed){ pressed = false; e.stopPropagation(); e.preventDefault(); }
+  }, true);
   /* Кнопка у выделения — для тех, кому правый клик неудобен. */
   var selBtn = el("button", "sel-btn", "Комментировать выделенное");
   selBtn.type = "button";
@@ -219,7 +241,7 @@
   document.body.appendChild(selBtn);
   var selPicked = null;
   document.addEventListener("mousedown", function(e){
-    if(pop && !pop.contains(e.target)) hidePopover();
+    if(pop && !pop.contains(e.target) && Date.now() - pressAt > 800) hidePopover();
     if(e.target !== selBtn) selBtn.hidden = true;
   });
   side.addEventListener("mouseup", function(e){
@@ -230,6 +252,15 @@
       selBtn.style.left = Math.max(8, Math.min(e.pageX, window.scrollX + document.documentElement.clientWidth - selBtn.offsetWidth - 8)) + "px";
       selBtn.style.top = (e.pageY + 12) + "px";
     }, 0);
+  });
+  var selTimer = null;
+  document.addEventListener("selectionchange", function(){
+    if(!window.matchMedia("(pointer:coarse)").matches) return;
+    clearTimeout(selTimer);
+    selTimer = setTimeout(function(){
+      selPicked = selectionTarget();
+      selBtn.hidden = !selPicked || !!pop;
+    }, 300);
   });
   selBtn.addEventListener("mousedown", function(e){ e.preventDefault(); });
   selBtn.addEventListener("click", function(){
@@ -305,6 +336,12 @@
     if(!comments.length || !window.confirm("Удалить все комментарии на этой странице?")) return;
     comments = [];
     persist();
+  });
+  /* Телефон: описание цели сжато до нескольких строк, тап раскрывает. */
+  document.querySelectorAll("tr.objrow").forEach(function(r){
+    r.addEventListener("click", function(){
+      if(r.hasAttribute("data-open")) r.removeAttribute("data-open"); else r.setAttribute("data-open", "");
+    });
   });
   renderComments();
 })();

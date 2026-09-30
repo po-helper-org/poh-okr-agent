@@ -650,7 +650,7 @@ def page(title, source, css, parts, cards):
         '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
         '<h3 class="side-title" id="sideTitle"></h3><p class="factline" id="sideState"></p>'
         '<div id="sideSegs"></div><div class="note" id="sideNote"></div>'
-        '<p class="hintline">Правый клик по пункту или выделенной мышью зоне — комментарий для ИИ-агента: '
+        '<p class="hintline">Правый клик (на телефоне — долгое нажатие) по пункту или выделенной зоне — комментарий для ИИ-агента: '
         'дописать риск, поправить готовность или следующие действия. Сама страница ничего не меняет.</p></div>',
         f'<script type="application/json" id="page-data">{data}</script>',
         f'<script>{asset("page.js")}</script>',
@@ -882,7 +882,7 @@ def render_scope(doc, source, retro=None):
             cards[kid] = scope_card(obj, ini, teams, retro_quarter)
             tag = text(ini.get("tag"))
             new = "" if text(ini.get("from_retro")) or obj.get("activity") else ' <b class="new">+</b>'
-            team_names = "<br>".join(esc(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
+            team_names = "<br>".join(f'<span class="tm">{esc(teams.get(t, {}).get("name") or t)}</span>' for t in ini.get("teams") or [])
             row = (f'<tr class="row" data-kr="{html.escape(kid)}" data-tags="{html.escape(" ".join(ini.get("teams") or []))}"'
                    f'{" data-cancelled" if cancelled(ini) else ""}'
                    f'{" data-out" if not cancelled(ini) and not taken(ini) else ""}>'

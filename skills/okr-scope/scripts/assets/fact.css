@@ -17,3 +17,16 @@ td.pct.st-done{ color:#0a7a3d; } td.pct.st-partial{ color:#8a6100; }
 td.pct.st-failed{ color:#c00000; } td.pct.st-dropped, td.pct.st-unknown{ color:var(--faint); }
 td.pct.st-dropped{ font-size:.72rem; letter-spacing:.04em; }
 
+
+/* Телефон: строка ФАКТ — карточка «KR · влёт · вес · % / название / этапы». */
+@media (max-width:720px){
+  table.pick tr.row{ grid-template-columns:auto auto auto 1fr auto;
+    grid-template-areas:"kr fly pbv . pct" "name name name name name" "prog prog prog prog prog"; }
+  table.pick tr.row td.kr{ grid-area:kr; }
+  table.pick tr.row td.fly{ grid-area:fly; }
+  table.pick tr.row td.fly:empty{ display:none; }
+  table.pick tr.row td.pbv{ grid-area:pbv; }
+  table.pick tr.row td.pct{ grid-area:pct; font-size:.95rem; }
+  table.pick tr.row td.name{ grid-area:name; }
+  table.pick tr.row td.prog{ grid-area:prog; }
+}

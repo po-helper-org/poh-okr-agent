@@ -33,3 +33,23 @@ span.inq[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
 span.inq[data-v="no"]{ color:var(--faint); }
 span.inq[data-v="undecided"]{ background:var(--mark); border:1px dashed var(--line); padding:0 .35rem; }
 tr.row[data-out] td{ color:var(--faint); }
+
+/* Телефон: строка ПЛАН — карточка «KR · вес · берём? / название / к чему идём / команды / этапы».
+   ASIS в ленте не показан — он в карточке KR. */
+@media (max-width:720px){
+  table.pick tr.row{ grid-template-columns:auto 1fr auto auto;
+    grid-template-areas:"kr . pbv inq" "name name name name" "tobe tobe tobe tobe" "team team team team" "prog prog prog prog"; }
+  table.pick tr.row td.kr{ grid-area:kr; font-size:.95rem; }
+  table.pick tr.row td.pbv{ grid-area:pbv; }
+  table.pick tr.row td.inq{ grid-area:inq; }
+  table.pick tr.row td.name{ grid-area:name; }
+  table.pick tr.row td.tobe{ grid-area:tobe; font-size:.88rem; color:var(--fg); }
+  table.pick tr.row td.tobe::before{ content:"К концу квартала"; display:block; font-family:"Courier New",monospace;
+    font-size:.62rem; letter-spacing:.05em; text-transform:uppercase; color:var(--faint); margin-bottom:.1rem; }
+  table.pick tr.row td.asis{ display:none; }
+  table.pick tr.row td.team{ grid-area:team; }
+  table.pick tr.row td.team br{ display:none; }
+  td.team .tm ~ .tm::before{ content:" · "; }
+  table.pick tr.row td.prog{ grid-area:prog; }
+  td.inq{ font-size:.72rem; }
+}

@@ -77,3 +77,20 @@ ul.tp-static .t{ font-family:"Courier New",monospace; font-weight:bold; display:
   .steps{ padding-left:.4rem; }
 }
 @media print{ .tp-act, .tp-dirty, button.add, button.del{ display:none; } }
+
+/* Телефон: заголовок KR переносится (номер и название — сверху, счётчик и «Детальнее» — ниже),
+   поля 16 px — иначе iOS увеличивает страницу при вводе. */
+@media (max-width:720px){
+  details.kr > summary{ flex-wrap:wrap; row-gap:.4rem; }
+  .kr-title{ flex:1 1 calc(100% - 5rem); }
+  .kr-count, button.more{ margin-left:1.6rem; }
+  button.more{ padding:.4rem .7rem; font-size:.78rem; }
+  .step select, .step input, .person input, .person select{ font-size:16px; padding:.5rem .4rem; }
+  .step select.type{ font-size:.85rem; }
+  button.del{ min-width:2rem; min-height:2rem; }
+  button.add{ padding:.5rem 0; font-size:.85rem; }
+  .tp-act button{ padding:.55rem .8rem; }
+  .person{ grid-template-columns:minmax(0,1fr) 4.6rem minmax(0,1fr) 1.6rem; }
+  .rt{ font-size:16px; min-height:50vh; }
+  .rt-bar button{ padding:.4rem .6rem; }
+}
