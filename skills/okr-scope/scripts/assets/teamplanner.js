@@ -195,7 +195,9 @@
     var n = (kr.steps || []).length;
     var open = (kr.steps || []).filter(function(s){ var st = state(kr, s); return st.unassigned || st.norole; }).length;
     return '<details class="kr" data-kr="' + esc(kr.id) + '"' + (opened[kr.id] ? " open" : "") + ">"
-      + '<summary><span class="kr-id">' + esc(kr.id) + '</span><span class="kr-title">' + esc(kr.title) + "</span>"
+      + '<summary><span class="kr-id">' + esc(kr.id) + '</span><span class="kr-title">'
+      + (["Change", "Run", "Disrupt"].indexOf(kr.category) >= 0 ? '<span class="crd" data-v="' + kr.category.toLowerCase() + '">' + kr.category + "</span> " : "")
+      + esc(kr.title) + "</span>"
       + '<span class="kr-count">' + n + (open ? ' · <b>без исполнителя ' + open + "</b>" : "") + "</span>"
       + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
       + esc(kr.id) + '">Детальнее</button></summary>'

@@ -65,7 +65,7 @@ HTML и CSV руками не правь.
     {"id": "partner", "name": "Биллинг партнёра", "external": true, "people": []}
   ],
   "objectives": [{"id": "1", "title": "Продавать подписку без ручных операций", "krs": [{
-    "id": "1.1", "title": "Биллинг партнёра минуя ручную сверку", "pbv": 8, "tag": "",
+    "id": "1.1", "title": "Биллинг партнёра минуя ручную сверку", "pbv": 8, "tag": "", "category": "Change",
     "teams": ["back", "partner"], "owner": "Иванова Анна",
     "result": "Сверка с партнёром идёт автоматически", "comment": "Блокер: стенд партнёра",
     "steps": [
@@ -105,7 +105,7 @@ HTML и CSV руками не правь.
    ```bash
    python3 okr-plan.py seed .okr/<quarter>/plan/scope-<quarter>.json .okr/<quarter>/plan/teamplanner-<quarter>.json
    ```
-   Переносятся KR, их команды, `result`, риски и зависимости (в `comment`), этапы
+   Переносятся KR, их команды, тип (`category`), `result`, риски и зависимости (в `comment`), этапы
    `/okr-stages`, если были, и роли Scope. Этап смежной команды из `/okr-stages`
    уходит на её команду. Scope с ошибками `lint --final` (например, не решено
    `in_quarter`) `seed` не примет и перечислит, что чинить: иначе KR потерялись бы.

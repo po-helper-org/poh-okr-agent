@@ -219,6 +219,16 @@ class StagesLint(Case):
         self.ini("2.1")["in_quarter"] = False
         self.assertEqual([e for e in self.lint(scope=self.scope).errors if "Retro" in e], [])
 
+    def test_category_values(self):
+        self.ini("1.1")["category"] = "Grow"
+        self.assertError(self.lint(scope=self.scope), "KR 1.1: category — Change, Run, Disrupt или пусто")
+
+    def test_category_is_empty_by_default_even_when_accepted(self):
+        self.assertNotIn("category", self.ini("1.3"))
+        self.ini("1.1")["category"] = None
+        self.ini("1.2")["category"] = ""
+        self.assertEqual(self.lint(scope=self.scope, final=True).errors, [])
+
     def test_scope_phase_skips_stage_checks(self):
         self.scope["phase"] = "scope"
         self.scope["objectives"][0]["initiatives"][1]["notes"] = {}
@@ -284,6 +294,9 @@ class Render(Case):
         self.assertIn("продолжается 2 KR, в плане 2, не берём 0, не решено 0", page)
         self.assertIn('data-kr="2.2" data-tags="back" data-cancelled', page)
         self.assertIn("инициатив 5, в квартал 4 ·", page)
+        self.assertIn("Тип: Change 1 · Run 2 · Disrupt 1.", page)
+        self.assertIn('<td class="name"><span class="crd" data-v="disrupt">Disrupt</span> <span class="txt">Семейная', page)
+        self.assertIn('<td class="name"><span class="txt">Промокоды на подписку</span>', page)
         self.assertIn('data-kr="1.3" data-tags="front back" data-out', page)
         self.assertIn('<span class="inq" data-v="yes">✓ да</span>', page)
         self.assertIn('data-value="partner" data-name="Биллинг партнёра">', page)
@@ -326,6 +339,7 @@ class TeamPlanner(Case):
         ext = [s for s in doc["objectives"][0]["krs"][0]["steps"] if s["ext"]]
         self.assertEqual([(s["role"], s["ext"]) for s in ext], [("BE", "partner")])
         self.assertEqual(doc["status"], "черновик")
+        self.assertEqual([k["category"] for o in doc["objectives"] for k in o["krs"]], ["Change", "Disrupt", "Run", "Run"])
 
     def test_seed_requires_accepted_scope(self):
         self.scope["status"] = "черновик"
@@ -352,6 +366,16 @@ class TeamPlanner(Case):
         rep = self.lint_tp(final=True)
         self.assertIn("KR 1.2, этап 6: нет исполнителя", rep.errors)
         self.assertTrue(any("этап 7: нет исполнителя, и роли DOPS нет" in e for e in rep.errors))
+
+    def test_category_checked_and_shown(self):
+        self.kr("1.1")["category"] = "run"
+        self.assertError(self.lint_tp(), "KR 1.1: category — Change, Run, Disrupt или пусто")
+        self.kr("1.1")["category"] = "Run"
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            self.assertIn('<span class="kr-title"><span class="crd" data-v="run">Run</span> Биллинг', f.read())
 
     def test_step_values(self):
         step = self.kr("2.1")["steps"][0]

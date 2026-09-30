@@ -31,6 +31,9 @@ ROLE_RE = re.compile(r"^[A-Z]{2,10}$")
 FACT_KR_ID_RE = re.compile(r"^\d+(\.[0-9A-Za-z]+)+$")
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 TAGS = ["", "RESEARCH", "POC", "BUG", "ACTIVITY"]
+# Тип инициативы: Run — поддержать работающее, Change — развить существующее,
+# Disrupt — создать новое. Пусто — тип не задан (по умолчанию).
+CATEGORIES = ["", "Change", "Run", "Disrupt"]
 STATUSES = ["черновик", "принято"]
 PHASES = ["scope", "stages"]
 DEFAULT_ROLES = ["PO", "SA", "BE", "FE", "ADR"]
@@ -101,7 +104,8 @@ SHAPES = {
         "retro": {"file": V}, "retro_skipped": T, "po_brief": T, "roles": L,
         "teams": [{"id": V, "name": V, "external": V}],
         "objectives": [{"id": V, "title": V, "why": T, "activity": V, "initiatives": [{
-            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "tag": V, "status": V, "cancel_reason": T,
+            "id": V, "title": V, "teams": L, "pbv": V, "in_quarter": V, "tag": V, "category": V, "status": V,
+            "cancel_reason": T,
             "from_retro": V, "result": T, "before": T, "after": T, "open": L,
             "notes": {"description": T, "stages": [STEP], "conditions": L, "risks": L, "dependencies": L,
                       "uncertainties": L}}]}],
@@ -111,7 +115,8 @@ SHAPES = {
         "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "scope": {"file": V}, "roles": L,
         "teams": [{"id": V, "name": V, "external": V, "people": [{"name": V, "role": V}]}],
         "objectives": [{"id": V, "title": V, "krs": [{
-            "id": V, "title": V, "pbv": V, "tag": V, "teams": L, "owner": V, "result": T, "comment": T, "details": V,
+            "id": V, "title": V, "pbv": V, "tag": V, "category": V, "teams": L, "owner": V, "result": T, "comment": T,
+            "details": V,
             "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
                        "progress": V, "result": T, "action": T, "comment": T}]}]}],
     },
@@ -385,6 +390,20 @@ def check_item_status(item, where, rep):
         rep.gate(f"{where}: отменено без причины и даты решения (cancel_reason)")
 
 
+def category_of(item):
+    return text(item.get("category"))
+
+
+def check_category(item, where, rep):
+    if category_of(item) not in CATEGORIES:
+        rep.error(f"{where}: category — Change, Run, Disrupt или пусто, получено {item.get('category')!r}")
+
+
+def category_badge(item):
+    cat = category_of(item)
+    return f'<span class="crd" data-v="{cat.lower()}">{cat}</span> ' if cat in CATEGORIES[1:] else ""
+
+
 def check_pbv(item, where, rep, required):
     pbv = item.get("pbv")
     if pbv is None:
@@ -485,6 +504,7 @@ def lint_scope(doc, rep, retro, retro_problem=None):
                 if tid not in team_ids:
                     rep.error(f"{where}: команда {tid!r} не описана в teams")
             check_pbv(ini, where, rep, required=True)
+            check_category(ini, where, rep)
             if ini.get("tag", "") not in TAGS:
                 rep.error(f"{where}: tag — один из {TAGS}")
             check_item_status(ini, where, rep)
@@ -781,7 +801,7 @@ def scope_card(obj, ini, teams, retro_quarter):
     names = ", ".join(text(teams.get(t, {}).get("name") or t) for t in ini.get("teams") or [])
     origin = (f"продолжение KR {text(ini.get('from_retro'))} из {retro_quarter or 'прошлого квартала'}"
               if text(ini.get("from_retro")) else "новая")
-    line = [f"PBV {ini.get('pbv') if is_int(ini.get('pbv')) else '—'}", names, origin]
+    line = [category_of(ini), f"PBV {ini.get('pbv') if is_int(ini.get('pbv')) else '—'}", names, origin]
     if cancelled(ini):
         line.insert(0, "отменено")
     else:
@@ -842,6 +862,9 @@ def render_scope(doc, source, retro=None):
                  + f" · с PBV 9: {sum(1 for i in chosen if pbv_of(i) == 9)}"
                  + f" · из прошлого квартала {sum(1 for i in chosen if text(i.get('from_retro')))}"
                  + (f" · отменено {len(all_inis) - len(active)}" if len(all_inis) > len(active) else "") + ".")
+    by_cat = [sum(1 for i in chosen if category_of(i) == c) for c in CATEGORIES]
+    quote.append("Тип: " + " · ".join(f"{c} {n}" for c, n in zip(CATEGORIES[1:], by_cat[1:]))
+                 + (f" · без типа {by_cat[0]}" if by_cat[0] else "") + ".")
     if text((doc.get("retro") or {}).get("file")):
         line = f"Retro: {esc((doc.get('retro') or {}).get('file'))}"
         if retro is not None:
@@ -888,7 +911,7 @@ def render_scope(doc, source, retro=None):
                    f'{" data-out" if not cancelled(ini) and not taken(ini) else ""}>'
                    f'<td class="kr">{html.escape(kid)}{new}</td>'
                    f'<td class="team">{team_names}</td>'
-                   f'<td class="name"><span class="txt">{"[" + esc(tag) + "] " if tag else ""}{esc_unc(ini.get("title"))}</span>'
+                   f'<td class="name">{category_badge(ini)}<span class="txt">{"[" + esc(tag) + "] " if tag else ""}{esc_unc(ini.get("title"))}</span>'
                    f'{"<span class=cancel>отменено</span>" if cancelled(ini) else ""}</td>'
                    f'<td class="asis">{esc_unc(ini.get("before")) or "—"}</td>'
                    f'<td class="tobe">{esc_unc(ini.get("result")) or "—"}</td>'
@@ -1126,7 +1149,7 @@ def seed(scope_path, out, force=False):
             context = [f"Риск: {text(r)}" for r in notes.get("risks") or []]
             context += [f"Зависимость: {text(d)}" for d in notes.get("dependencies") or []]
             krs.append({"id": text(ini.get("id")), "title": text(ini.get("title")), "pbv": ini.get("pbv"),
-                        "tag": text(ini.get("tag")), "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
+                        "tag": text(ini.get("tag")), "category": category_of(ini), "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
                         "result": text(ini.get("result")), "comment": "; ".join(context), "steps": steps})
         if krs:
             objectives.append({"id": text(obj.get("id")), "title": text(obj.get("title")), "krs": krs})
@@ -1174,6 +1197,7 @@ def lint_teamplanner(doc, rep, path):
         for tid in kr.get("teams") or []:
             if tid not in teams:
                 rep.error(f"{where}: команда {tid!r} не описана в teams")
+        check_category(kr, where, rep)
         if kr.get("details") is not None:
             if not isinstance(kr.get("details"), str):
                 rep.error(f"{where}: details — строка с HTML заметки")
@@ -1244,7 +1268,7 @@ def tp_static(doc):
                 for step in kr.get("steps") or [])
             note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
             parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
-                         f'<span class="kr-title">{esc(kr.get("title"))}</span></summary>'
+                         f'<span class="kr-title">{category_badge(kr)}{esc(kr.get("title"))}</span></summary>'
                          f'{note}<ul class="tp-static">{items}</ul></details>')
     return "\n".join(parts)
 

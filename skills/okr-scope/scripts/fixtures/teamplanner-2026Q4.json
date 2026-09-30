@@ -89,6 +89,7 @@
           "title": "Биллинг партнёра минуя ручную сверку",
           "pbv": 8,
           "tag": "",
+          "category": "Change",
           "teams": [
             "back",
             "partner"
@@ -177,6 +178,7 @@
           "title": "Семейная подписка на витрине",
           "pbv": 9,
           "tag": "",
+          "category": "Disrupt",
           "teams": [
             "front",
             "back"
@@ -294,6 +296,7 @@
           "title": "Поиск на новой платформе",
           "pbv": 6,
           "tag": "RESEARCH",
+          "category": "Run",
           "teams": [
             "back"
           ],
@@ -338,6 +341,7 @@
           "title": "Инциденты и баги витрины",
           "pbv": 5,
           "tag": "ACTIVITY",
+          "category": "Run",
           "teams": [
             "front",
             "back"
