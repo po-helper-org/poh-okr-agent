@@ -220,6 +220,13 @@ class StagesLint(Case):
         self.assertEqual(rep.errors, [])
         self.assertTrue(any("БФТ: не выяснено" in w for w in rep.warnings))
 
+    def test_bug_and_activity_do_not_need_bft(self):
+        del self.ini("1.1")["bft"]
+        self.ini("1.1")["tag"] = "BUG"
+        self.assertEqual([e for e in self.lint(scope=self.scope).errors if "БФТ" in e], [])
+        del self.ini("3.1")["bft"]
+        self.assertEqual([e for e in self.lint(scope=self.scope).errors if "БФТ" in e], [])
+
     def test_no_bft_needs_bft_as_first_stage(self):
         self.ini("1.1")["bft"] = False
         self.assertError(self.lint(scope=self.scope), "БФТ нет — первым этапом должно быть описание")

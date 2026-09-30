@@ -9,7 +9,7 @@ td.team{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--mute
 /* ASIS — что есть сейчас, TOBE — к чему идём за квартал. Разный вес намеренно:
    глаз ищет целевое состояние, текущее читается вторым. */
 td.asis{ color:var(--muted); font-size:.82rem; background:var(--mark); }
-td.tobe{ font-size:.84rem; }
+td.tobe{ font-size:.84rem; white-space:pre-line; }
 b.new{ color:#1a7a1a; }
 
 tr.row[data-cancelled] td{ color:var(--faint); }
@@ -62,3 +62,4 @@ td.bft{ font-family:"Courier New",monospace; font-size:.74rem; white-space:nowra
 span.bft[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
 span.bft[data-v="no"]{ color:#a11; font-weight:700; }
 span.bft[data-v="unknown"]{ background:var(--mark); border:1px dashed var(--line); padding:0 .35rem; }
+span.bft[data-v="na"]{ color:var(--faint); }

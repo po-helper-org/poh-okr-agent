@@ -31,6 +31,7 @@ ROLE_RE = re.compile(r"^[A-Z]{2,10}$")
 FACT_KR_ID_RE = re.compile(r"^\d+(\.[0-9A-Za-z]+)+$")
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 TAGS = ["", "RESEARCH", "POC", "BUG", "ACTIVITY"]
+NO_BFT_TAGS = ("BUG", "ACTIVITY")  # исправления и регулярная работа: БФТ не нужны
 STATUSES = ["черновик", "принято"]
 PHASES = ["scope", "stages"]
 DEFAULT_ROLES = ["PO", "SA", "BE", "FE", "ADR"]
@@ -499,7 +500,7 @@ def lint_scope(doc, rep, retro, retro_problem=None):
                 if in_quarter is True:
                     rep.error(f"{where}: отменённая инициатива не может идти в квартал (in_quarter: true)")
                 continue
-            if in_quarter is not False and bft is None:
+            if in_quarter is not False and bft is None and ini.get("tag") not in NO_BFT_TAGS:
                 unknown_bft.append(kid)
             if in_quarter is None:
                 rep.gate(f"{where}: не решено, берём ли в квартал (in_quarter)")
@@ -633,6 +634,8 @@ def bft_cell(ini):
     if cancelled(ini):
         return "—"
     value = ini.get("bft")
+    if value is None and ini.get("tag") in NO_BFT_TAGS:
+        return '<span class="bft" data-v="na">—</span>'
     mark, label = {True: ("yes", "✓ есть"), False: ("no", "нет")}.get(value, ("unknown", "?"))
     return f'<span class="bft" data-v="{mark}">{label}</span>'
 
@@ -813,7 +816,8 @@ def scope_card(obj, ini, teams, retro_quarter):
         line.insert(0, "отменено")
     else:
         line.insert(0, IN_QUARTER_TEXT.get(ini.get("in_quarter"), IN_QUARTER_TEXT[None]))
-        line.append(BFT_TEXT.get(ini.get("bft"), BFT_TEXT[None]))
+        if not (ini.get("bft") is None and ini.get("tag") in NO_BFT_TAGS):
+            line.append(BFT_TEXT.get(ini.get("bft"), BFT_TEXT[None]))
     flow = ([{"t": "h", "v": "Было → стало"}, {"t": "p", "v": "БЫЛО: " + text(ini.get("before"))},
              {"t": "p", "v": "СТАЛО: " + text(ini.get("after"))}] if text(ini.get("before")) else [])
     stages = notes.get("stages") or []
@@ -867,7 +871,7 @@ def render_scope(doc, source, retro=None):
                  + f" · инициатив {len(active)}, в квартал {yes}"
                  + (f", не решено {undecided}" if undecided else "")
                  + f" · БФТ: есть {sum(1 for i in chosen if i.get('bft') is True)}, нет {sum(1 for i in chosen if i.get('bft') is False)}"
-                 + (f", не выяснено {sum(1 for i in chosen if i.get('bft') is None)}" if any(i.get("bft") is None for i in chosen) else "")
+                 + (f", не выяснено {sum(1 for i in chosen if i.get('bft') is None and i.get('tag') not in NO_BFT_TAGS)}" if any(i.get("bft") is None and i.get("tag") not in NO_BFT_TAGS for i in chosen) else "")
                  + f" · с PBV ≥ 7: {sum(1 for i in chosen if pbv_of(i) >= 7)}"
                  + f" · с PBV 9: {sum(1 for i in chosen if pbv_of(i) == 9)}"
                  + f" · из прошлого квартала {sum(1 for i in chosen if text(i.get('from_retro')))}"
