@@ -456,6 +456,102 @@ class TeamPlanner(Case):
 
 
 
+class Jira(Case):
+    def setUp(self):
+        super().setUp()
+        self.jira = fixture("jira-2026Q4.json")
+        self.tp = fixture("teamplanner-2026Q4.json")
+
+    def put(self, jira=None, status=None):
+        self.write(self.scope, "scope-2026Q4.json")
+        doc = copy.deepcopy(jira or self.jira)
+        if status:
+            doc["status"] = status
+        return self.write(doc, "jira-2026Q4.json")
+
+    def test_fixture_is_valid(self):
+        self.assertEqual(okr_plan.lint(self.put()).errors, [])
+
+    def test_seed_maps_initiatives_to_epics(self):
+        scope = self.write(self.scope, "scope-2026Q4.json")
+        tp = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "seed.json")
+        self.assertEqual(okr_plan.jira_seed(scope, out, tp), 4)
+        with open(out, encoding="utf-8") as f:
+            doc = json.load(f)
+        self.assertEqual([(e["from"], e["type"]) for e in doc["epics"]],
+                         [(["1.1"], "enabler"), (["1.2"], "enabler"), (["2.1"], "enabler"), (["3.1"], "epic")])
+        self.assertEqual(doc["epics"][0]["stories"][2]["tag"], "EXT-BE")
+        self.assertEqual(doc["status"], "черновик")
+        with self.assertRaises(SystemExit):
+            okr_plan.jira_seed(scope, out, tp)
+
+    def test_lint_rules(self):
+        e = self.jira["epics"]
+        e[0]["type"] = "feature"
+        e[1]["from"] = ["1.1"]
+        e[2]["key"] = "vit 1"
+        e[3]["stories"][0]["title"] = ""
+        self.jira["epics"].append({"from": ["2.2"], "type": "enabler", "title": "Рекомендации", "stories": [{"title": "x"}]})
+        rep = okr_plan.lint(self.put())
+        for fragment in ("Эпик 1: type", "Эпик 2: KR 1.1 уже перенесён в эпик 1", "Эпик 3: key — ключ JIRA",
+                         "Эпик 4, история 1: нет названия", "Эпик 5: KR 2.2 отменён в Scope"):
+            self.assertError(rep, fragment)
+
+    def test_every_planned_kr_and_undecided_ones(self):
+        del self.jira["epics"][2]
+        self.scope["objectives"][0]["initiatives"][0].pop("in_quarter")
+        rep = okr_plan.lint(self.put(status="подтверждено"))
+        self.assertIn("KR 2.1 идёт в квартал по Scope, но не попал ни в один эпик", rep.errors)
+        self.assertIn("Эпик 1: KR 1.1 — в квартал не решено; решите до переноса", rep.errors)
+
+    def test_preview(self):
+        text = okr_plan.jira_preview(self.jira, self.put())
+        self.assertTrue(text.startswith("JIRA 2026Q4 — Витрина · проект VIT · черновик — ждёт подтверждения"))
+        self.assertIn("ЭПИК-ENABLER 1. Биллинг партнёра минуя ручную сверку (PBV 8, Change, KR 1.1)\n"
+                      "   БФТ есть: https://wiki.example/vit/bft-billing\n"
+                      "→ История: US1 [SA] — Сценарии интеграционных тестов с партнёром", text)
+        self.assertIn("→ История: [PO] Описать БФТ семейной подписки", text)
+        self.assertIn("ЭПИК 4. [ACTIVITY] Инциденты и баги витрины (PBV 5, Run, бессрочный, KR 3.1)", text)
+        self.assertIn("  · 1.3 Промокоды на подписку (не в квартал)\n  · 2.2 Рекомендации в карточке товара (отменено)", text)
+        self.assertTrue(text.endswith("Итого: эпиков 4 (enabler 3, бессрочных 1), историй 18.\n"))
+
+    def test_ready_only_after_confirmation(self):
+        self.assertIn("структура не подтверждена", okr_plan.jira_ready(self.put())[0])
+        self.jira["epics"][2]["bft"] = "нет"
+        self.assertEqual(okr_plan.jira_ready(self.put(status="подтверждено")), [])
+        self.jira["project"] = ""
+        self.assertTrue(any("project" in p for p in okr_plan.jira_ready(self.put(status="подтверждено"))))
+
+    def test_transferred_needs_every_key(self):
+        rep = okr_plan.lint(self.put(status="перенесено"))
+        self.assertIn("Эпик 1: нет ключа JIRA — перенос не закончен", rep.errors)
+        n = 0
+        for e in self.jira["epics"]:
+            n += 1
+            e["key"] = f"VIT-{n}"
+            for st in e["stories"]:
+                n += 1
+                st["key"] = f"VIT-{n}"
+        self.assertEqual(okr_plan.lint(self.put(status="перенесено")).errors, [])
+        self.assertIn("[VIT-1]", okr_plan.jira_preview(self.jira))
+
+    def test_csv_only_for_confirmed_structure(self):
+        out = os.path.join(self.tmp.name, "jira.csv")
+        with self.assertRaises(SystemExit):
+            okr_plan.jira_csv(self.put(), out)
+        self.assertEqual(okr_plan.jira_csv(self.put(status="подтверждено"), out), 4 + 18)
+        with open(out, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual((rows[0]["Issue Type"], rows[0]["Summary"], rows[0]["Issue Id"]),
+                         ("Epic", "Биллинг партнёра минуя ручную сверку", "1"))
+        self.assertEqual((rows[1]["Issue Type"], rows[1]["Parent Id"], rows[1]["Summary"]),
+                         ("Story", "1", "US1 [SA] — Сценарии интеграционных тестов с партнёром"))
+        self.assertIn("KR-1.1", rows[0]["Labels"].split())
+        self.assertIn("PBV-8", rows[0]["Labels"].split())
+
+
+
 class Robustness(Case):
     """JSON пишет LLM: любой неверный тип — понятная ошибка, а не трейсбэк."""
 
@@ -536,7 +632,8 @@ class Robustness(Case):
         self.assertTrue(any("не scope (kind='retro')" in w for w in tp.warnings))
 
     def test_wrong_types_never_crash(self):
-        docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json")}
+        docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json",
+                                        "jira-2026Q4.json")}
 
         def paths(node, pre=()):
             if pre:
@@ -562,6 +659,11 @@ class Robustness(Case):
                         ops.append(lambda: okr_plan.export_csv(fp, os.path.join(self.tmp.name, "o.csv")))
                     if name.startswith("scope"):
                         ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
+                        ops.append(lambda: okr_plan.jira_seed(fp, os.path.join(self.tmp.name, "j.json"), force=True))
+                    if name.startswith("jira"):
+                        ops.append(lambda: okr_plan.jira_preview(okr_plan.load_checked(fp), fp))
+                        ops.append(lambda: okr_plan.jira_ready(fp))
+                        ops.append(lambda: okr_plan.jira_csv(fp, os.path.join(self.tmp.name, "j.csv")))
                     for op in ops:
                         try:
                             op()
