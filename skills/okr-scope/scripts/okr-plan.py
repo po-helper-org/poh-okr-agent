@@ -1347,7 +1347,6 @@ def render_teamplanner(doc, source):
         '<div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
         '<div class="layout wide"><main>',
         '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'
-        '<button type="button" id="tpOpenAll">Развернуть все</button><button type="button" id="tpCloseAll">Свернуть все</button>'
         '<button type="button" id="bTsv">Копировать в Sheets</button>'
         '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
         '<p class="tp-sum" id="tpSum"></p>',

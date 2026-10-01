@@ -430,7 +430,7 @@ class TeamPlanner(Case):
                       'Change</span> Биллинг', page)
         self.assertIn('[RESEARCH] Поиск на новой платформе', page)
         self.assertIn('id="tpSum"', page)
-        self.assertIn('id="tpOpenAll"', page)
+        self.assertNotIn('id="tpOpenAll"', page)
         for marker in ('class="basket" id="tpNotes" hidden', 'id="tpNotesBtn"', 'id="tpNotesCopy"', 'id="tpNotesSave"'):
             self.assertIn(marker, page)
 

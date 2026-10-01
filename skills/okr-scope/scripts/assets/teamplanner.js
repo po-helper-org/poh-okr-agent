@@ -528,12 +528,6 @@
   document.getElementById("scrim").onclick = closeSide;
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSide(); });
 
-  document.getElementById("tpOpenAll").onclick = function(){
-    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = true; });
-  };
-  document.getElementById("tpCloseAll").onclick = function(){
-    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = false; });
-  };
 
   /* ---------- выгрузка ---------- */
   document.getElementById("bJson").onclick = function(){
