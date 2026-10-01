@@ -3,6 +3,7 @@
   "quarter": "2026Q4",
   "team": "Витрина",
   "po": "Иванова Анна",
+  "jira_project": "VIT",
   "status": "черновик",
   "updated": "2026-10-06",
   "scope": {
@@ -89,6 +90,8 @@
           "title": "Биллинг партнёра минуя ручную сверку",
           "pbv": 8,
           "tag": "",
+          "category": "Change",
+          "epic": "enabler",
           "teams": [
             "back",
             "partner"
@@ -177,6 +180,8 @@
           "title": "Семейная подписка на витрине",
           "pbv": 9,
           "tag": "",
+          "category": "Disrupt",
+          "epic": "enabler",
           "teams": [
             "front",
             "back"
@@ -294,6 +299,8 @@
           "title": "Поиск на новой платформе",
           "pbv": 6,
           "tag": "RESEARCH",
+          "category": "Run",
+          "epic": "enabler",
           "teams": [
             "back"
           ],
@@ -338,6 +345,8 @@
           "title": "Инциденты и баги витрины",
           "pbv": 5,
           "tag": "ACTIVITY",
+          "category": "Run",
+          "epic": "epic",
           "teams": [
             "front",
             "back"
