@@ -1,0 +1,21 @@
+/* Страница согласования переноса в JIRA: эпик — строка, истории — в карточке. */
+col.c-etype{ width:6.4rem; }
+col.c-from{ width:6rem; }
+col.c-cnt{ width:5.2rem; }
+col.c-att{ width:13rem; }
+td.etype, td.from, td.cnt{ font-family:"Courier New",monospace; font-size:.76rem; }
+td.cnt{ text-align:center; }
+.et{ display:inline-block; padding:0 .35rem; border:1px solid var(--line-soft); font-size:.66rem; letter-spacing:.03em; }
+.et[data-v="enabler"]{ background:#e7eef7; color:#2f4c73; }
+.et[data-v="epic"]{ background:#f2f2f2; color:#555; }
+.enote{ font-size:.76rem; color:var(--muted); margin-top:.15rem; }
+.jkey{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--link); margin-left:.3rem; }
+.flag{ display:inline-block; font-family:"Courier New",monospace; font-size:.66rem; background:#fbe3e5; color:#a33;
+  padding:0 .35rem; margin:0 .25rem .2rem 0; }
+.crd{ display:inline-block; font-family:"Courier New",monospace; font-size:.66rem; letter-spacing:.03em;
+  padding:0 .35rem; margin-right:.35rem; border:1px solid var(--line-soft); vertical-align:1px; }
+.crd[data-v="run"]{ background:#eef1f5; color:#44536a; }
+.crd[data-v="change"]{ background:#e6f2ea; color:#1f6b3a; }
+.crd[data-v="disrupt"]{ background:#f6e8f7; color:#7a2d85; }
+.ask-block{ border:1px solid var(--line); background:var(--mark); padding:.6rem .9rem; margin:1.4rem 0; font-size:.9rem; }
+.ask-block h4{ margin:0 0 .3rem; font-size:.85rem; }

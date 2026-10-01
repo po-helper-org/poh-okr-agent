@@ -969,7 +969,7 @@ def render(path, out):
     elif doc.get("kind") == "teamplanner":
         page_html = render_teamplanner(doc, path)
     elif doc.get("kind") == "jira":
-        raise SystemExit("Структура JIRA не рендерится в страницу — её показывают текстом: okr-plan.py preview <jira.json>")
+        page_html = render_jira(doc, path)
     else:
         raise SystemExit("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     with open(out, "w", encoding="utf-8") as f:
@@ -1568,6 +1568,105 @@ def jira_preview(doc, path=None):
     lines.append(f"Итого: эпиков {counts.get('enabler', 0) + counts.get('epic', 0)} "
                  f"(enabler {counts.get('enabler', 0)}, бессрочных {counts.get('epic', 0)}), историй {stories_total}.")
     return "\n".join(lines) + "\n"
+
+
+UNSURE_MARK = '<mark class="unc">[УТОЧНИТЬ]</mark>'
+
+
+def jira_attention(epic, inis):
+    """Что в эпике требует решения PO до переноса — короткими метками. Невыясненный
+    БФТ сюда не входит: он виден в карточке и в предупреждениях lint."""
+    out = []
+    if not epic.get("stories"):
+        out.append("нет историй")
+    if epic.get("type") == "enabler" and text(epic.get("bft")) == "нет":
+        out.append("сначала БФТ")
+    if any(inis.get(k, {}).get("in_quarter") is None and k in inis for k in epic.get("from") or []):
+        out.append("в квартал ?")
+    return out
+
+
+def render_jira(doc, source):
+    """Страница согласования структуры переноса: эпики строками, истории — в карточке."""
+    quarter, team = text(doc.get("quarter")), text(doc.get("team"))
+    title = f"JIRA {quarter}" + (f" — {team}" if team else "")
+    scope, _ = jira_scope(doc, source)
+    inis = scope_initiatives(scope) if scope else {}
+    epics = doc.get("epics") or []
+    status = doc.get("status", "черновик")
+    rows, cards, attention, stories_total = [], {}, 0, 0
+    for n, epic in enumerate(epics, 1):
+        eid = str(n)
+        flags = jira_attention(epic, inis)
+        attention += bool(flags)
+        stories = epic.get("stories") or []
+        stories_total += len(stories)
+        kind = epic.get("type") if epic.get("type") in EPIC_TYPES else "enabler"
+        key = text(epic.get("key"))
+        rows.append(
+            f'<tr class="row" data-kr="{eid}" data-tags="{kind}{" attention" if flags else ""}">'
+            f'<td class="kr">{eid}</td>'
+            f'<td class="etype"><span class="et" data-v="{kind}">{"ENABLER" if kind == "enabler" else "ЭПИК"}</span></td>'
+            f'<td class="name">{category_badge(epic)}<span class="txt">{esc(jira_summary(epic))}</span>'
+            + (f' <span class="jkey">{esc(key)}</span>' if key else "")
+            + (f'<div class="enote">{esc(epic.get("note"))}</div>' if text(epic.get("note")) else "") + "</td>"
+            f'<td class="from">{esc(", ".join(epic.get("from") or [])) or "—"}</td>'
+            f'<td class="pbv">{pbv_cell(epic.get("pbv"))}</td>'
+            f'<td class="cnt">{len(stories)}</td>'
+            f'<td class="att">{"".join(f"<span class=flag>{esc(x)}</span>" for x in flags)}</td></tr>')
+        line = [EPIC_TYPES.get(kind), f"PBV {epic.get('pbv') if is_int(epic.get('pbv')) else '—'}",
+                category_of(epic), f"KR {', '.join(epic.get('from'))}" if epic.get("from") else "", key]
+        bft = []
+        if kind == "enabler":
+            bft = card_text("БФТ", BFT_STATES.get(text(epic.get("bft")), BFT_STATES[""])
+                            + (f": {text(epic.get('bft_link'))}" if text(epic.get("bft_link")) else ""))
+        cards[eid] = {
+            "head": f"Эпик {eid}" + (f" · {key}" if key else ""),
+            "title": jira_summary(epic),
+            "line": " · ".join(x for x in line if x),
+            "segs": [], "segsCount": "",
+            "blocks": card_list("Истории", [story_line(st) + (f" [{text(st.get('key'))}]" if text(st.get("key")) else "")
+                                            for st in stories]) + bft
+                      + card_text("Описание", epic.get("description"))
+                      + card_list("Требует решения", flags)
+                      + card_text("Пометка", epic.get("note")),
+        }
+    counts = {k: sum(1 for e in epics if e.get("type") == k) for k in EPIC_TYPES}
+    items = [("", "Все эпики", "все", len(epics)),
+             ("attention", "Требуют решения", "требуют решения", attention),
+             ("enabler", "Эпики-enabler", "enabler", counts["enabler"]),
+             ("epic", "Бессрочные эпики", "бессрочные", counts["epic"])]
+    state = {"черновик": "ждёт подтверждения — в JIRA ничего не создано",
+             "подтверждено": "подтверждено — можно переносить",
+             "перенесено": "перенесено в JIRA"}.get(status, status)
+    quote = [f"Эпиков {len(epics)} (enabler {counts['enabler']}, бессрочных {counts['epic']}) · историй {stories_total}"
+             + (f" · требуют решения {attention}" if attention else "") + ".",
+             f"Проект {esc(doc.get('project')) or UNSURE_MARK} · {esc(state)}."]
+    parts = [
+        filter_drawer("Показать", "Эпики", items),
+        '<div class="layout wide"><main>',
+        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{esc(state)}</p></div>',
+        f'<blockquote class="quote">{"<br>".join(quote)}</blockquote>',
+        table(["kr", "etype", "name", "from", "pbv", "cnt", "att"],
+              ["№", "Тип", "Эпик", "KR", "PBV", "Историй", "Требует решения"],
+              "Структура переноса · клик по строке — истории эпика", rows),
+    ]
+    if scope:
+        mapped = {kid for e in epics for kid in e.get("from") or []}
+        skipped = [(kid, ini) for kid, ini in inis.items() if kid not in mapped]
+        if skipped:
+            body = "".join(
+                f'<tr><td>{esc(kid)}</td><td>{esc(ini.get("title"))}</td><td>'
+                + ("отменено" if cancelled(ini) else "не в квартал" if ini.get("in_quarter") is False
+                   else "в квартал не решено" if ini.get("in_quarter") is None else "в квартал, но не в структуре!")
+                + "</td></tr>" for kid, ini in skipped)
+            parts.append('<h3>Не переносится</h3><div class="table-wrap"><table class="mini head">'
+                         f'<tr><td>KR</td><td>Инициатива</td><td>Почему</td></tr>{body}</table></div>')
+    if status == "черновик":
+        parts.append('<div class="ask-block"><h4>Согласование</h4>Всё верно — напишите агенту «да, переносим». '
+                     'Нужны правки — словами в чате или правым кликом по эпику или истории: комментарий для агента.</div>')
+    parts.append("</main></div>")
+    return page(title, source, "jira.css", parts, cards)
 
 
 def jira_ready(path):

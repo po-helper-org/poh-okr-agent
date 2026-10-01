@@ -516,6 +516,26 @@ class Jira(Case):
         self.assertIn("  · 1.3 Промокоды на подписку (не в квартал)\n  · 2.2 Рекомендации в карточке товара (отменено)", text)
         self.assertTrue(text.endswith("Итого: эпиков 4 (enabler 3, бессрочных 1), историй 18.\n"))
 
+    def test_approval_page(self):
+        self.jira["epics"][0]["stories"] = []
+        path = self.put()
+        out = os.path.join(self.tmp.name, "jira.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
+        self.assertIn("<title>JIRA 2026Q4 — Витрина</title>", page)
+        self.assertEqual(page.count('<tr class="row"'), 4)
+        self.assertIn('data-kr="1" data-tags="enabler attention"', page)
+        self.assertIn('data-kr="2" data-tags="enabler attention"', page)
+        self.assertIn('data-kr="4" data-tags="epic"', page)
+        self.assertIn("<span class=flag>нет историй</span>", page)
+        self.assertIn("<span class=flag>сначала БФТ</span>", page)
+        self.assertIn("Эпиков 4 (enabler 3, бессрочных 1) · историй 12 · требуют решения 2.", page)
+        self.assertIn("<td>1.3</td><td>Промокоды на подписку</td><td>не в квартал</td>", page)
+        data = json.loads(page.split('<script type="application/json" id="page-data">')[1].split("</script>")[0])
+        self.assertIn("[PO] Описать БФТ семейной подписки", [b["v"] for b in data["cards"]["2"]["blocks"]])
+        self.assertIn("Согласование", page)
+
     def test_ready_only_after_confirmation(self):
         self.assertIn("структура не подтверждена", okr_plan.jira_ready(self.put())[0])
         self.jira["epics"][2]["bft"] = "нет"

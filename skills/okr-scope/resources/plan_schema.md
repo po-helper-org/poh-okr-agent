@@ -14,11 +14,11 @@ Python 3, без пакетов.
 | Команда | Что делает |
 |---|---|
 | `okr-plan.py lint <file.json> [--final]` | проверяет документ любого вида (`kind`); `--final` — по правилам принятия |
-| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН или TEAMPLANNER |
+| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН, TEAMPLANNER или согласования JIRA |
 | `okr-plan.py seed <scope.json> <teamplanner.json> [--force]` | заготовка TeamPlanner из принятого Scope, который проходит `lint --final`; существующий файл не перезаписывает без `--force` |
 | `okr-plan.py csv <teamplanner.json> <out.csv>` | лист TeamPlanner для Google Sheets / Excel |
 | `okr-plan.py jira-seed <scope.json> <jira.json> [--teamplanner <tp.json>] [--force]` | черновик структуры переноса в JIRA; существующий файл не перезаписывает без `--force` |
-| `okr-plan.py preview <jira.json>` | структура переноса текстом — её показывают PO до создания задач |
+| `okr-plan.py preview <jira.json>` | структура переноса текстом — для самопроверки агента; PO показывают страницу (`render`) |
 | `okr-plan.py jira-ready <jira.json>` | `ГОТОВО К ПЕРЕНОСУ` только для подтверждённой структуры без ошибок `lint --final`; иначе — что мешает |
 | `okr-plan.py jira-csv <jira.json> <out.csv>` | CSV для импорта JIRA, только из подтверждённой структуры |
 
@@ -45,7 +45,7 @@ Python 3, без пакетов.
 ├── retro-<prev>.json / .html        Этап 1 · /okr-retro
 ├── scope-<quarter>.json / .html     Этапы 2–3 · /okr-scope, /okr-stages
 ├── teamplanner-<quarter>.json / .html / .csv   Этап 4 · /okr-teamplanner
-└── jira-<quarter>.json (+ .csv)                 перенос в JIRA · /okr-jira
+└── jira-<quarter>.json / .html (+ .csv)         перенос в JIRA · /okr-jira
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`), `<prev>` — закрываемый (`2026Q3`).
@@ -361,7 +361,9 @@ JSON, и они уходят в CSV. Правки копятся в браузе
 
 | Где | Правило |
 |---|---|
-| Строка эпика | `ЭПИК-ENABLER N.` или `ЭПИК N.` · `[ТЕГ] название` · (PBV, тип, «бессрочный», KR, пометка) · `[ключ]` |
+| Страница согласования | эпик — строка: № · тип · название (+ ключ, пометка) · KR · PBV · историй · «требует решения»; клик — карточка: истории, БФТ, описание; фильтр «Требуют решения» / enabler / бессрочные; «Не переносится»; комментарии правым кликом |
+| «Требует решения» | нет историй · «сначала БФТ» (у enabler `bft: нет`) · «в квартал ?» (KR Scope не решён) |
+| Строка эпика в `preview` | `ЭПИК-ENABLER N.` или `ЭПИК N.` · `[ТЕГ] название` · (PBV, тип, «бессрочный», KR, пометка) · `[ключ]` |
 | Строка БФТ | у enabler: «БФТ есть: ссылка», «БФТ нет — сначала описать», «БФТ не выяснен» |
 | История | `US1 [SA] — название` с кодом, `[SA] название` без кода; `[ключ]`, если создана |
 | Не переносится | инициативы Scope вне эпиков: отменено, не в квартал, в квартал не решено |

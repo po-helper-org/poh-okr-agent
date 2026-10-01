@@ -14,20 +14,22 @@ description: "Перенос плана квартала в JIRA: эпики-ena
 ## На выходе
 
 ```
-.okr/<quarter>/plan/jira-<quarter>.json (+ .csv, если нет доступа к JIRA)
+.okr/<quarter>/plan/jira-<quarter>.json + .html (+ .csv, если нет доступа к JIRA)
 ```
 
 ## Инструкция для LLM
 
 Следуй процессу из `skills/okr-jira/SKILL.md`. Формат данных —
 `skills/okr-scope/resources/plan_schema.md`, раздел «JIRA». Главное: сначала
-показать структуру (`okr-plan.py preview`) и дождаться явного подтверждения PO;
-задачи в JIRA — только после `okr-plan.py jira-ready`.
+показать страницу согласования `jira-<quarter>.html` (в чат — короткая сводка)
+и дождаться явного подтверждения PO; задачи в JIRA — только после
+`okr-plan.py jira-ready`.
 
 ## Отчёт
 
 ```
-JIRA <quarter>: эпиков N (enabler N, бессрочных N), историй N.
+Структура переноса в JIRA: .okr/<quarter>/plan/jira-<quarter>.html
+Эпиков N (enabler N, бессрочных N), историй N. Требуют решения: N.
 
-── СТОП ── Переносим в JIRA в таком виде? Правки — словами.
+── СТОП ── Переносим в таком виде? Правки — словами или комментариями на странице.
 ```
