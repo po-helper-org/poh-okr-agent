@@ -127,8 +127,8 @@ SHAPES = {
         "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "scope": {"file": V}, "roles": L,
         "teams": [{"id": V, "name": V, "external": V, "people": [{"name": V, "role": V}]}],
         "objectives": [{"id": V, "title": V, "krs": [{
-            "id": V, "title": V, "pbv": V, "tag": V, "category": V, "teams": L, "owner": V, "result": T, "comment": T,
-            "details": V,
+            "id": V, "title": V, "pbv": V, "tag": V, "category": V, "epic": V, "teams": L, "owner": V, "result": T,
+            "comment": T, "details": V,
             "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
                        "progress": V, "result": T, "action": T, "comment": T}]}]}],
     },
@@ -409,6 +409,14 @@ def category_of(item):
 def check_category(item, where, rep):
     if category_of(item) not in CATEGORIES:
         rep.error(f"{where}: category — Change, Run, Disrupt или пусто, получено {item.get('category')!r}")
+
+
+def epic_of(kr):
+    """Эпик в JIRA для KR TeamPlanner: задан — он; иначе ACTIVITY — бессрочный, остальное — enabler."""
+    value = text(kr.get("epic"))
+    if value in ("enabler", "epic"):
+        return value
+    return "epic" if text(kr.get("tag")) == "ACTIVITY" else "enabler"
 
 
 def category_badge(item):
@@ -1169,7 +1177,8 @@ def seed(scope_path, out, force=False):
             context = [f"Риск: {text(r)}" for r in notes.get("risks") or []]
             context += [f"Зависимость: {text(d)}" for d in notes.get("dependencies") or []]
             krs.append({"id": text(ini.get("id")), "title": text(ini.get("title")), "pbv": ini.get("pbv"),
-                        "tag": text(ini.get("tag")), "category": category_of(ini), "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
+                        "tag": text(ini.get("tag")), "category": category_of(ini),
+                        "epic": "epic" if text(ini.get("tag")) == "ACTIVITY" or obj.get("activity") else "enabler", "teams": ini.get("teams") or [], "owner": text(scope.get("po")),
                         "result": text(ini.get("result")), "comment": "; ".join(context), "steps": steps})
         if krs:
             objectives.append({"id": text(obj.get("id")), "title": text(obj.get("title")), "krs": krs})
@@ -1218,6 +1227,8 @@ def lint_teamplanner(doc, rep, path):
             if tid not in teams:
                 rep.error(f"{where}: команда {tid!r} не описана в teams")
         check_category(kr, where, rep)
+        if text(kr.get("epic")) not in ("", "enabler", "epic"):
+            rep.error(f"{where}: epic — enabler, epic или пусто")
         if kr.get("details") is not None:
             if not isinstance(kr.get("details"), str):
                 rep.error(f"{where}: details — строка с HTML заметки")
@@ -1288,7 +1299,8 @@ def tp_static(doc):
                 for step in kr.get("steps") or [])
             note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
             parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
-                         f'<span class="kr-title">{category_badge(kr)}{esc(kr.get("title"))}</span></summary>'
+                         f'<span class="et" data-v="{epic_of(kr)}">{"ЭПИК" if epic_of(kr) == "epic" else "ENABLER"}</span>'
+                         f'<span class="kr-title">{category_badge(kr)}{esc(jira_summary(kr))}</span></summary>'
                          f'{note}<ul class="tp-static">{items}</ul></details>')
     return "\n".join(parts)
 
@@ -1309,8 +1321,10 @@ def render_teamplanner(doc, source):
         '<div id="tpPeople"></div><datalist id="tpTeamNames"></datalist></div>',
         '<div class="layout wide"><main>',
         '<div class="tp-top"><h2 class="obj" id="tpObj"></h2><div class="tp-act">'
+        '<button type="button" id="tpOpenAll">Развернуть все</button><button type="button" id="tpCloseAll">Свернуть все</button>'
         '<button type="button" id="bTsv">Копировать в Sheets</button>'
         '<button type="button" class="primary" id="bJson">Скачать JSON</button></div></div>',
+        '<p class="tp-sum" id="tpSum"></p>',
         '<p class="tp-dirty" id="tpDirty" hidden>Есть правки в этом браузере — «Скачать JSON» и отдайте файл агенту. '
         '<button type="button" id="bReset">Сбросить</button></p>',
         '<p class="tp-dirty" id="tpStale" hidden>В этом браузере есть правки к прошлой версии файла — к этой они не '
@@ -1445,7 +1459,8 @@ def jira_seed(scope_path, out, tp_path=None, force=False):
             else:
                 stories = [{"code": "", "tag": text(s.get("role")), "title": text(s.get("title")), "key": ""}
                            for s in (ini.get("notes") or {}).get("stages") or []]
-            endless = text(ini.get("tag")) == "ACTIVITY" or kid in activity
+            endless = epic_of(planned[kid]) == "epic" if kid in planned else \
+                text(ini.get("tag")) == "ACTIVITY" or kid in activity
             epics.append({"from": [kid], "type": "epic" if endless else "enabler",
                           "title": text(ini.get("title")), "tag": text(ini.get("tag")), "pbv": ini.get("pbv"),
                           "category": category_of(ini), "bft": "" if endless else text(ini.get("bft")) if text(ini.get("bft")) in BFT_STATES else "",

@@ -336,6 +336,7 @@ class TeamPlanner(Case):
             doc = json.load(f)
         self.assertEqual([k["id"] for o in doc["objectives"] for k in o["krs"]], ["1.1", "1.2", "2.1", "3.1"])
         self.assertEqual(doc["roles"], okr_plan.TP_ROLES)
+        self.assertEqual([k["epic"] for o in doc["objectives"] for k in o["krs"]], ["enabler", "enabler", "enabler", "epic"])
         ext = [s for s in doc["objectives"][0]["krs"][0]["steps"] if s["ext"]]
         self.assertEqual([(s["role"], s["ext"]) for s in ext], [("BE", "partner")])
         self.assertEqual(doc["status"], "черновик")
@@ -376,6 +377,28 @@ class TeamPlanner(Case):
         okr_plan.render(path, out)
         with open(out, encoding="utf-8") as f:
             self.assertIn('<span class="kr-title"><span class="crd" data-v="run">Run</span> Биллинг', f.read())
+
+    def test_epic_type(self):
+        self.assertEqual([okr_plan.epic_of(k) for _, k in okr_plan.tp_krs(self.tp)], ["enabler", "enabler", "enabler", "epic"])
+        self.assertEqual(okr_plan.epic_of({"tag": "ACTIVITY"}), "epic")
+        self.kr("1.1")["epic"] = "story"
+        self.assertError(self.lint_tp(), "KR 1.1: epic — enabler, epic или пусто")
+        self.kr("1.1")["epic"] = "epic"
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
+        self.assertIn('<span class="et" data-v="epic">ЭПИК</span><span class="kr-title"><span class="crd" data-v="change">'
+                      'Change</span> Биллинг', page)
+        self.assertIn('[RESEARCH] Поиск на новой платформе', page)
+        self.assertIn('id="tpSum"', page)
+        self.assertIn('id="tpOpenAll"', page)
+        scope = self.write(self.scope, "scope-2026Q4.json")
+        jira = os.path.join(self.tmp.name, "jira.json")
+        okr_plan.jira_seed(scope, jira, path)
+        with open(jira, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["epics"][0]["type"], "epic")
 
     def test_step_values(self):
         step = self.kr("2.1")["steps"][0]

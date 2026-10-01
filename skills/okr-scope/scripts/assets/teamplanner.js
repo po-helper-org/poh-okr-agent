@@ -191,25 +191,45 @@
       + (st.ext ? '<span class="who ext">' + esc(whoText(kr, s)) + "</span>" : '<span class="who-box">' + whoInput(kr, s, k) + "</span>")
       + '<button type="button" class="del" data-act="del" data-kr="' + esc(kr.id) + '" data-i="' + i + '" aria-label="Удалить подзадачу">×</button></div>';
   }
+  /* Эпик в JIRA: enabler — инициатива, закрывается БФТ; epic — бессрочный (ACTIVITY,
+     поддержка). Не задан — по тегу, как в okr-plan.py (epic_of). */
+  function epicOf(kr){ return kr.epic || (kr.tag === "ACTIVITY" ? "epic" : "enabler"); }
+  function tier(p){ return p == null ? "none" : p >= 8 ? "high" : p >= 4 ? "mid" : p >= 1 ? "low" : "zero"; }
+  function problems(kr){
+    var steps = kr.steps || [];
+    var open = steps.filter(function(s){ var st = state(kr, s); return st.unassigned || st.norole; }).length;
+    var out = [];
+    if(!steps.length) out.push("нет подзадач");
+    if(open) out.push("без исполнителя " + open);
+    return out;
+  }
   function krBlock(kr){
-    var n = (kr.steps || []).length;
-    var open = (kr.steps || []).filter(function(s){ var st = state(kr, s); return st.unassigned || st.norole; }).length;
+    var n = (kr.steps || []).length, epic = epicOf(kr);
     return '<details class="kr" data-kr="' + esc(kr.id) + '"' + (opened[kr.id] ? " open" : "") + ">"
-      + '<summary><span class="kr-id">' + esc(kr.id) + '</span><span class="kr-title">'
+      + '<summary><span class="kr-id">' + esc(kr.id) + "</span>"
+      + '<span class="et" data-v="' + epic + '">' + (epic === "epic" ? "ЭПИК" : "ENABLER") + "</span>"
+      + '<span class="kr-title">'
       + (["Change", "Run", "Disrupt"].indexOf(kr.category) >= 0 ? '<span class="crd" data-v="' + kr.category.toLowerCase() + '">' + kr.category + "</span> " : "")
-      + esc(kr.title) + "</span>"
-      + '<span class="kr-count">' + n + (open ? ' · <b>без исполнителя ' + open + "</b>" : "") + "</span>"
+      + (kr.tag ? "[" + esc(kr.tag) + "] " : "") + esc(kr.title) + "</span>"
+      + '<span class="kr-meta"><span class="pbvtag" data-tier="' + tier(kr.pbv) + '">' + (kr.pbv == null ? "—" : esc(kr.pbv)) + "</span>"
+      + " подзадач " + n + "</span>"
+      + problems(kr).map(function(p){ return '<span class="flag">' + esc(p) + "</span>"; }).join("")
       + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
       + esc(kr.id) + '">Детальнее</button></summary>'
+      + '<div class="kr-type">Тип в JIRA <select data-k="' + esc(kr.id) + '|kr|epic">'
+      + option("enabler", "Эпик-enabler — инициатива, закрывается БФТ", epic)
+      + option("epic", "Эпик — бессрочный: поддержка, ACTIVITY", epic) + "</select></div>"
       + '<div class="steps">' + (kr.steps || []).map(function(s, i){ return stepRow(kr, s, i); }).join("") + "</div>"
       + '<button type="button" class="add" data-act="add" data-kr="' + esc(kr.id) + '">+ подзадача</button></details>';
   }
 
   var objs = doc.objectives || [];
+  /* cur — индекс цели; -1 — все цели одним списком. */
   var cur = 0, opened = {};
   function fromHash(){
     var m = location.hash.match(/obj=([^&]+)/);
-    if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
+    if(m && m[1] === "all") cur = -1;
+    else if(m) objs.forEach(function(o, i){ if(String(o.id) === decodeURIComponent(m[1])) cur = i; });
   }
   fromHash();
   window.addEventListener("hashchange", function(){ fromHash(); render(); });
@@ -302,14 +322,24 @@
 
   function render(){
     var active = document.activeElement, key = active && active.getAttribute && active.getAttribute("data-k");
-    list.innerHTML = objs.map(function(o, i){
-      return '<button type="button" class="st-item" data-obj="' + i + '"' + (i === cur ? " data-active" : "") + ">"
-        + "OBJ " + esc(o.id) + " — " + esc(o.title) + '<span class="n">' + (o.krs || []).length + " KR</span></button>";
+    var all = [].concat.apply([], objs.map(function(o){ return o.krs || []; }));
+    list.innerHTML = '<button type="button" class="st-item" data-obj="-1"' + (cur === -1 ? " data-active" : "") + ">"
+      + 'Все цели<span class="n">' + all.length + " KR</span></button>"
+      + objs.map(function(o, i){
+        return '<button type="button" class="st-item" data-obj="' + i + '"' + (i === cur ? " data-active" : "") + ">"
+          + "OBJ " + esc(o.id) + " — " + esc(o.title) + '<span class="n">' + (o.krs || []).length + " KR</span></button>";
+      }).join("");
+    var o = objs[cur], shown = o ? (o.krs || []) : all;
+    tab.textContent = o ? "OBJ " + o.id + " из " + objs.length : "Все цели";
+    document.getElementById("tpObj").textContent = o ? "OBJ " + o.id + " — " + o.title : "Все цели";
+    tp.innerHTML = o ? shown.map(krBlock).join("") : objs.map(function(x){
+      return '<h3 class="tp-band">OBJ ' + esc(x.id) + " — " + esc(x.title) + "</h3>" + (x.krs || []).map(krBlock).join("");
     }).join("");
-    var o = objs[cur];
-    tab.textContent = o ? "OBJ " + o.id + " из " + objs.length : "Цели";
-    document.getElementById("tpObj").textContent = o ? "OBJ " + o.id + " — " + o.title : "";
-    tp.innerHTML = o ? (o.krs || []).map(krBlock).join("") : "";
+    var steps = shown.reduce(function(a, k){ return a + (k.steps || []).length; }, 0);
+    var epics = shown.filter(function(k){ return epicOf(k) === "epic"; }).length;
+    var need = shown.filter(function(k){ return problems(k).length; }).length;
+    document.getElementById("tpSum").textContent = "KR " + shown.length + " (enabler " + (shown.length - epics)
+      + ", бессрочных " + epics + ") · подзадач " + steps + (need ? " · требуют решения " + need : "");
     if(key){ var el = tp.querySelector('[data-k="' + key + '"]'); if(el) el.focus(); }
     document.getElementById("tpDirty").hidden = !dirty;
     document.getElementById("tpStale").hidden = !stale;
@@ -344,7 +374,7 @@
     cur = +b.getAttribute("data-obj");
     /* Во встроенной странице (iframe srcdoc, превью) адрес менять нельзя — цель
        всё равно переключается, просто не запоминается в ссылке. */
-    try { history.replaceState(null, "", "#obj=" + encodeURIComponent(objs[cur].id)); } catch(e){}
+    try { history.replaceState(null, "", "#obj=" + (cur < 0 ? "all" : encodeURIComponent(objs[cur].id))); } catch(e){}
     setDrawer(null);
     render();
     window.scrollTo(0, 0);
@@ -352,7 +382,9 @@
   tp.addEventListener("change", function(e){
     var k = e.target.getAttribute("data-k");
     if(!k) return;
-    var p = k.split("|"), kr = findKr(p[0]), s = kr && kr.steps[+p[1]], v = e.target.value;
+    var p = k.split("|"), kr = findKr(p[0]), v = e.target.value;
+    if(kr && p[1] === "kr"){ kr[p[2]] = v; save(); setTimeout(render, 0); return; }
+    var s = kr && kr.steps[+p[1]];
     if(!s) return;
     if(p[2] === "type"){
       if(v.indexOf("EXT:") === 0){
@@ -445,6 +477,13 @@
   document.getElementById("sideClose").onclick = closeSide;
   document.getElementById("scrim").onclick = closeSide;
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSide(); });
+
+  document.getElementById("tpOpenAll").onclick = function(){
+    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = true; });
+  };
+  document.getElementById("tpCloseAll").onclick = function(){
+    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = false; });
+  };
 
   /* ---------- выгрузка ---------- */
   document.getElementById("bJson").onclick = function(){
