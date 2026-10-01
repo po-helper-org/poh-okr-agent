@@ -51,7 +51,7 @@ button.more[data-has]{ border-color:var(--fg); font-weight:bold; }
 .kr-details{ margin:0 0 .6rem 1.3rem; font-size:.9rem; color:var(--muted); }
 
 .steps{ padding:0 0 .2rem 1.3rem; }
-.step{ display:grid; grid-template-columns:7rem minmax(0,1fr) 4.2rem minmax(12rem,22%) 1.8rem; gap:.4rem; align-items:center;
+.step{ display:grid; grid-template-columns:7rem minmax(0,1fr) 3.2rem minmax(12rem,22%) 1.8rem; gap:.4rem; align-items:center;
   padding:.25rem 0 .25rem .5rem; border-left:3px solid transparent; }
 .step[data-ext]{ border-left-color:#b9a6dc; }
 .step[data-norole]{ border-left-color:#e8a3aa; }
@@ -102,41 +102,34 @@ details.kr > summary{ flex-wrap:wrap; }
 @media (max-width:640px){ .kr-type{ padding-left:.4rem; } }
 .jk{ font-family:"Courier New",monospace; font-size:.7rem; color:#2f4c73; }
 
-/* Оценка подзадачи в днях; поля KR (название, PBV, тип в JIRA) и «Удалить KR». */
-.step input.days{ font-family:"Courier New",monospace; text-align:right; }
-.kr-type{ display:flex; flex-wrap:wrap; gap:.3rem 1rem; align-items:center; }
-.kr-type label{ display:flex; align-items:center; gap:.3rem; }
-.kr-type input{ font:inherit; font-size:.8rem; padding:.15rem .3rem; border:1px solid var(--line-soft); background:var(--bg); }
-.kr-type input.kr-name{ width:min(32rem, 60vw); font-family:Georgia,serif; font-size:.88rem; }
-.kr-type input.kr-pbv{ width:3.4rem; }
-.kr-type select{ margin-left:0; }
-button.kr-del{ font:inherit; font-size:.72rem; border:0; background:none; color:var(--faint); text-decoration:underline; cursor:pointer; padding:0; }
-button.kr-del:hover{ color:#a33; }
+/* Оценка подзадачи в днях — узкое поле между названием и исполнителем. */
+.step input.days{ font-family:"Courier New",monospace; font-size:.8rem; text-align:center; }
+.kr-type button.kr-del{ font:inherit; font-size:.7rem; border:0; background:none; color:var(--faint); cursor:pointer;
+  padding:0; margin-left:1rem; text-decoration:underline; }
+.kr-type button.kr-del:hover{ color:#a33; }
 button.add-kr{ display:block; margin:.6rem 0 1rem .2rem; }
 
-/* Комментарии для ИИ-агента: колонка справа, появляется с первым комментарием. */
+/* Комментарии для ИИ-агента — «корзина» в правом нижнем углу: кнопка с числом
+   заметок, по клику — короткий список. Нет заметок — корзины нет. */
 details.kr[data-commented] > summary .kr-id::after{ content:"●"; color:#1a7a1a; font-size:.6rem; margin-left:.3rem; vertical-align:middle; }
 .step[data-commented]{ box-shadow:inset -3px 0 0 #1a7a1a; }
-.notes{ position:fixed; top:0; right:0; bottom:0; width:300px; overflow-y:auto; z-index:30; background:var(--bg);
-  border-left:1px solid var(--line); padding:1rem .9rem; font-family:"Courier New",monospace; font-size:.76rem; }
-.notes[hidden]{ display:none; }
-.notes h4{ margin:0 0 .6rem; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; }
-.notes .item{ border-bottom:1px solid var(--line-soft); padding:.45rem 0; line-height:1.45; }
-.notes .item .where{ color:var(--muted); font-size:.68rem; }
-.notes .item .quote{ color:var(--muted); font-size:.7rem; border-left:2px solid var(--line-soft); padding-left:.4rem; margin:.15rem 0; }
-.notes .item button{ font:inherit; font-size:.66rem; border:0; background:none; color:var(--muted); text-decoration:underline; cursor:pointer; padding:0; }
-.notes .row-btns{ display:flex; flex-direction:column; gap:.3rem; margin-top:.8rem; }
-.notes .row-btns button{ border:1px solid var(--fg); background:var(--bg); color:var(--fg); padding:.35rem; cursor:pointer; font:inherit; font-size:.72rem; }
-.notes .row-btns button.primary{ background:var(--fg); color:var(--bg); }
-body.has-notes .layout.wide{ margin-right:300px; }
-@media (max-width:900px){
-  .notes{ position:static; width:auto; border-left:0; border-top:1px solid var(--line); margin:1rem 16px; }
-  body.has-notes .layout.wide{ margin-right:0; }
-}
-@media print{ .notes, .hintline{ display:none; } }
+.basket{ position:fixed; right:1rem; bottom:1rem; z-index:40; display:flex; flex-direction:column; align-items:flex-end; gap:.4rem;
+  font-family:"Courier New",monospace; font-size:.74rem; }
+.basket[hidden], .basket-box[hidden]{ display:none; }
+.basket-btn{ font:inherit; font-size:.76rem; background:var(--fg); color:var(--bg); border:1px solid var(--fg); padding:.35rem .7rem; cursor:pointer; }
+.basket-btn span{ font-weight:bold; }
+.basket-box{ order:-1; width:min(340px, calc(100vw - 2rem)); max-height:60vh; overflow-y:auto; background:var(--bg);
+  border:1px solid var(--fg); box-shadow:3px 3px 0 var(--line-soft); padding:.6rem .7rem; }
+.basket-box .item{ border-bottom:1px solid var(--line-soft); padding:.35rem 0; line-height:1.4; }
+.basket-box .item .where{ color:var(--muted); font-size:.66rem; }
+.basket-box .item .quote{ color:var(--muted); font-size:.68rem; }
+.basket-box .item button{ font:inherit; font-size:.64rem; border:0; background:none; color:var(--faint); text-decoration:underline; cursor:pointer; padding:0; }
+.basket-act{ display:flex; gap:.3rem; margin-top:.5rem; }
+.basket-act button{ font:inherit; font-size:.7rem; border:1px solid var(--fg); background:var(--bg); color:var(--fg); padding:.25rem .45rem; cursor:pointer; }
+.basket-act button.primary{ background:var(--fg); color:var(--bg); flex:1; }
+@media print{ .basket{ display:none; } }
 /* Узкий экран: название KR — на всю строку, бейджи и счётчики переносятся под него. */
 @media (max-width:640px){
   details.kr > summary .kr-title{ flex:1 1 calc(100% - 6rem); }
-  .kr-type label{ flex:1 1 100%; min-width:0; white-space:nowrap; }
-  .kr-type input.kr-name, .kr-type select{ flex:1; min-width:0; width:auto; max-width:100%; }
+  .kr-type select{ max-width:100%; }
 }

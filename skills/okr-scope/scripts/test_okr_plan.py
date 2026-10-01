@@ -431,7 +431,7 @@ class TeamPlanner(Case):
         self.assertIn('[RESEARCH] Поиск на новой платформе', page)
         self.assertIn('id="tpSum"', page)
         self.assertIn('id="tpOpenAll"', page)
-        for marker in ('id="tpNotes" hidden', 'id="tpNotesCopy"', 'id="tpNotesSave"', "Правый клик по цели, KR или подзадаче"):
+        for marker in ('class="basket" id="tpNotes" hidden', 'id="tpNotesBtn"', 'id="tpNotesCopy"', 'id="tpNotesSave"'):
             self.assertIn(marker, page)
 
     def test_step_values(self):

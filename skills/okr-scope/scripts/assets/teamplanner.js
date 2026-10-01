@@ -3,7 +3,7 @@
    состав команды (команда · тип · ФИО): из него выбирают исполнителей. У подзадачи
    правятся тип, название, оценка в днях и исполнитель; подзадачи и KR можно
    добавить и удалить. Правый клик по цели, KR или подзадаче — комментарий для
-   ИИ-агента; комментарии копятся в колонке справа. Правки живут в localStorage этого браузера, пока их не
+   ИИ-агента; заметки копятся в «корзине» в правом нижнем углу. Правки живут в localStorage этого браузера, пока их не
    выгрузят кнопкой «Скачать JSON». Правила «нет роли в команде» и строки для
    таблицы считаются так же, как в okr-plan.py — меняешь там, меняй и здесь. */
 (function(){
@@ -229,13 +229,10 @@
       + problems(kr).map(function(p){ return '<span class="flag">' + esc(p) + "</span>"; }).join("")
       + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
       + esc(kr.id) + '">Детальнее</button></summary>'
-      + '<div class="kr-type"><label>Название <input class="kr-name" data-k="' + esc(kr.id) + '|kr|title" value="'
-      + esc(kr.title) + '"></label><label>PBV <input class="kr-pbv" data-k="' + esc(kr.id) + '|kr|pbv" type="number" min="0" max="10" value="'
-      + (typeof kr.pbv === "number" ? esc(kr.pbv) : "") + '"></label>'
-      + '<label>Тип в JIRA <select data-k="' + esc(kr.id) + '|kr|epic">'
+      + '<div class="kr-type">Тип в JIRA <select data-k="' + esc(kr.id) + '|kr|epic">'
       + option("enabler", "Эпик-enabler — инициатива, закрывается БФТ", epic)
-      + option("epic", "Эпик — бессрочный: поддержка, ACTIVITY", epic) + "</select></label>"
-      + '<button type="button" class="kr-del" data-act="delkr" data-kr="' + esc(kr.id) + '">Удалить KR</button></div>'
+      + option("epic", "Эпик — бессрочный: поддержка, ACTIVITY", epic) + "</select>"
+      + '<button type="button" class="kr-del" data-act="delkr" data-kr="' + esc(kr.id) + '">удалить KR</button></div>'
       + '<div class="steps">' + (kr.steps || []).map(function(s, i){ return stepRow(kr, s, i); }).join("") + "</div>"
       + '<button type="button" class="add" data-act="add" data-kr="' + esc(kr.id) + '">+ подзадача</button></details>';
   }
@@ -364,11 +361,14 @@
     document.getElementById("tpStale").hidden = !stale;
     if(comments) markCommented();
   }
-  /* Новый KR: id — следующий номер в цели, команды — как у первого KR цели (иначе все
-     свои), подзадач нет. Он не из Scope — lint предупредит, агент сверит со Scope. */
+  /* Новый KR: название спрашиваем сразу, id — следующий номер в цели, команды — как у
+     первого KR цели (иначе все свои), подзадач нет. Он не из Scope — lint предупредит,
+     агент сверит со Scope. */
   function addKr(objId){
     var o = objs.filter(function(x){ return String(x.id) === objId; })[0];
-    if(!o) return;
+    var title = o && window.prompt("Название нового KR", "");
+    if(!title || !title.trim()) return;
+    title = title.trim();
     o.krs = o.krs || [];
     var n = 0;
     o.krs.forEach(function(k){ var m = String(k.id).split("."); n = Math.max(n, +m[m.length - 1] || 0); });
@@ -376,12 +376,10 @@
     while(findKr(id)) id = o.id + "." + (++n + 1);
     var teams = o.krs[0] && o.krs[0].teams ? o.krs[0].teams.slice()
       : (doc.teams || []).filter(function(t){ return !t.external; }).map(function(t){ return t.id; });
-    o.krs.push({id: id, title: "Новый KR", tag: "", category: "", epic: "", teams: teams,
+    o.krs.push({id: id, title: title, tag: "", category: "", epic: "", teams: teams,
                 owner: doc.po || "", result: "", comment: "", steps: []});
     opened[id] = true;
     save(); render();
-    var el = tp.querySelector('[data-k="' + id + '|kr|title"]');
-    if(el){ el.focus(); el.select(); }
   }
   function delKr(id){
     var kr = findKr(id);
@@ -429,12 +427,7 @@
     var k = e.target.getAttribute("data-k");
     if(!k) return;
     var p = k.split("|"), kr = findKr(p[0]), v = e.target.value;
-    if(kr && p[1] === "kr"){
-      if(p[2] === "title") kr.title = v.trim() || kr.title;
-      else if(p[2] === "pbv"){ var n = parseInt(v, 10); if(isNaN(n)) delete kr.pbv; else kr.pbv = Math.max(0, Math.min(10, n)); }
-      else kr[p[2]] = v;
-      save(); setTimeout(render, 0); return;
-    }
+    if(kr && p[1] === "kr"){ kr[p[2]] = v; save(); setTimeout(render, 0); return; }
     var s = kr && kr.steps[+p[1]];
     if(!s) return;
     if(p[2] === "type"){
@@ -583,7 +576,7 @@
     doc = clone(DATA.doc); objs = doc.objectives || []; dirty = false; initRoster(); renderPeople(); render();
   };
 
-  /* ---------- комментарии для ИИ-агента: правый клик, колонка справа ----------
+  /* ---------- комментарии для ИИ-агента: правый клик, «корзина» заметок в углу ----------
      Как на ФАКТ и ПЛАН: страница сама ничего не правит по комментарию — он уходит
      агенту текстом или файлом <имя>.comments.json. Shift + правый клик — обычное
      меню браузера (вставить в поле и т. п.). */
@@ -678,9 +671,12 @@
     lines.push("", "После правок прогони okr-plan.py lint и render и отчитайся по каждому пункту.");
     return lines.join("\n");
   }
+  var basketBox = document.getElementById("tpNotesBox");
+  document.getElementById("tpNotesBtn").onclick = function(){ basketBox.hidden = !basketBox.hidden; };
+  document.addEventListener("mousedown", function(e){ if(!notesBox.contains(e.target) && !(pop && pop.contains(e.target))) basketBox.hidden = true; });
   function renderNotes(){
-    document.body.classList.toggle("has-notes", comments.length > 0);
     notesBox.hidden = !comments.length;
+    if(!comments.length) basketBox.hidden = true;
     document.getElementById("tpNotesN").textContent = comments.length;
     var list = document.getElementById("tpNotesList");
     list.innerHTML = "";

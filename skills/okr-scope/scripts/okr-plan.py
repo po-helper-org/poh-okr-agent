@@ -1357,14 +1357,13 @@ def render_teamplanner(doc, source):
         'применены. <button type="button" id="bStaleGet">Скачать их</button> · '
         '<button type="button" id="bStaleDrop">Отбросить</button></p>',
         f'<div id="tp">{tp_static(doc)}</div>',
-        '<p class="hintline">Правый клик по цели, KR или подзадаче — комментарий для ИИ-агента; комментарии '
-        'копятся справа. Shift + правый клик — обычное меню браузера.</p>',
         '</main></div>',
-        '<aside class="notes" id="tpNotes" hidden><h4>Комментарии для ИИ-агента · <span id="tpNotesN">0</span></h4>'
-        '<div id="tpNotesList"></div><div class="row-btns">'
+        '<div class="basket" id="tpNotes" hidden><button type="button" class="basket-btn" id="tpNotesBtn" '
+        'title="Комментарии для ИИ-агента: правый клик по цели, KR или подзадаче">Заметки <span id="tpNotesN">0</span></button>'
+        '<div class="basket-box" id="tpNotesBox" hidden><div id="tpNotesList"></div><div class="basket-act">'
         '<button type="button" class="primary" id="tpNotesCopy">Скопировать для агента</button>'
-        '<button type="button" id="tpNotesSave">Скачать файлом</button>'
-        '<button type="button" id="tpNotesClear">Очистить</button></div></aside>',
+        '<button type="button" id="tpNotesSave">Файлом</button>'
+        '<button type="button" id="tpNotesClear">Очистить</button></div></div></div>',
         '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
         '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
         '<h3 class="side-title" id="sideTitle"></h3>'
