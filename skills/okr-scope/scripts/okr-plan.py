@@ -672,8 +672,11 @@ def filter_drawer(label, title, items):
             f'<button class="drawer-close" type="button">×</button></div>{buttons}</div>')
 
 
-def page(title, source, css, parts, cards):
-    data = json.dumps({"file": os.path.basename(source), "cards": cards}, ensure_ascii=False).replace("<", "\\u003c")
+def page(title, source, css, parts, cards, unit=None):
+    meta = {"file": os.path.basename(source), "cards": cards}
+    if unit:
+        meta["unit"] = unit
+    data = json.dumps(meta, ensure_ascii=False).replace("<", "\\u003c")
     body = "\n".join(parts + [
         '<div class="promptbox"><button type="button" id="commentsBtn">Комментарии: 0</button>'
         '<div class="panel" id="commentsPanel"><h4>Комментарии для ИИ-агента</h4><div id="commentsList"></div>'
@@ -1587,14 +1590,19 @@ def jira_attention(epic, inis):
 
 
 def render_jira(doc, source):
-    """Страница согласования структуры переноса: эпики строками, истории — в карточке."""
+    """Страница согласования структуры переноса — в стиле TeamPlanner: эпик раскрывается
+    на месте в истории, БФТ и описание; правый клик по любому пункту — комментарий."""
     quarter, team = text(doc.get("quarter")), text(doc.get("team"))
     title = f"JIRA {quarter}" + (f" — {team}" if team else "")
     scope, _ = jira_scope(doc, source)
     inis = scope_initiatives(scope) if scope else {}
     epics = doc.get("epics") or []
     status = doc.get("status", "черновик")
-    rows, cards, attention, stories_total = [], {}, 0, 0
+    blocks, cards, attention, stories_total = [], {}, 0, 0
+
+    def q(sec, quote):
+        return f'data-sec="{html.escape(sec)}" data-quote="{html.escape(quote)}"'
+
     for n, epic in enumerate(epics, 1):
         eid = str(n)
         flags = jira_attention(epic, inis)
@@ -1603,34 +1611,38 @@ def render_jira(doc, source):
         stories_total += len(stories)
         kind = epic.get("type") if epic.get("type") in EPIC_TYPES else "enabler"
         key = text(epic.get("key"))
-        rows.append(
-            f'<tr class="row" data-kr="{eid}" data-tags="{kind}{" attention" if flags else ""}">'
-            f'<td class="kr">{eid}</td>'
-            f'<td class="etype"><span class="et" data-v="{kind}">{"ENABLER" if kind == "enabler" else "ЭПИК"}</span></td>'
-            f'<td class="name">{category_badge(epic)}<span class="txt">{esc(jira_summary(epic))}</span>'
-            + (f' <span class="jkey">{esc(key)}</span>' if key else "")
-            + (f'<div class="enote">{esc(epic.get("note"))}</div>' if text(epic.get("note")) else "") + "</td>"
-            f'<td class="from">{esc(", ".join(epic.get("from") or [])) or "—"}</td>'
-            f'<td class="pbv">{pbv_cell(epic.get("pbv"))}</td>'
-            f'<td class="cnt">{len(stories)}</td>'
-            f'<td class="att">{"".join(f"<span class=flag>{esc(x)}</span>" for x in flags)}</td></tr>')
-        line = [EPIC_TYPES.get(kind), f"PBV {epic.get('pbv') if is_int(epic.get('pbv')) else '—'}",
-                category_of(epic), f"KR {', '.join(epic.get('from'))}" if epic.get("from") else "", key]
-        bft = []
+        summary = jira_summary(epic)
+        meta = [f"KR {', '.join(epic.get('from'))}" if epic.get("from") else "", f"историй {len(stories)}"]
+        head = (f'<summary><span class="kr-id">{eid}</span>'
+                f'<span class="et" data-v="{kind}">{"ENABLER" if kind == "enabler" else "ЭПИК"}</span>'
+                f'<span class="kr-title">{category_badge(epic)}{esc(summary)}'
+                + (f' <span class="jkey">{esc(key)}</span>' if key else "") + "</span>"
+                f'<span class="jmeta">{pbv_cell(epic.get("pbv"))} {esc(" · ".join(x for x in meta if x))}</span>'
+                + "".join(f"<span class=flag>{esc(x)}</span>" for x in flags) + "</summary>")
+        body = []
+        if text(epic.get("note")):
+            body.append(f'<div class="jline" {q("Пометка", text(epic.get("note")))}>{esc(epic.get("note"))}</div>')
         if kind == "enabler":
-            bft = card_text("БФТ", BFT_STATES.get(text(epic.get("bft")), BFT_STATES[""])
-                            + (f": {text(epic.get('bft_link'))}" if text(epic.get("bft_link")) else ""))
-        cards[eid] = {
-            "head": f"Эпик {eid}" + (f" · {key}" if key else ""),
-            "title": jira_summary(epic),
-            "line": " · ".join(x for x in line if x),
-            "segs": [], "segsCount": "",
-            "blocks": card_list("Истории", [story_line(st) + (f" [{text(st.get('key'))}]" if text(st.get("key")) else "")
-                                            for st in stories]) + bft
-                      + card_text("Описание", epic.get("description"))
-                      + card_list("Требует решения", flags)
-                      + card_text("Пометка", epic.get("note")),
-        }
+            bft = BFT_STATES.get(text(epic.get("bft")), BFT_STATES[""])
+            link = text(epic.get("bft_link"))
+            body.append(f'<div class="jline jbft" data-v="{html.escape(text(epic.get("bft")) or "unknown")}" {q("БФТ", bft)}>'
+                        f'{esc(bft)}' + (f': <a href="{html.escape(link)}" target="_blank" rel="noopener">{esc(link)}</a>' if link else "")
+                        + "</div>")
+        rows = []
+        for st in stories:
+            lead = " ".join(x for x in (text(st.get("code")), text(st.get("tag"))) if x)
+            skey = text(st.get("key"))
+            rows.append(f'<div class="story" {q("Истории", story_line(st))}><span class="t">{esc(lead) or "—"}</span>'
+                        f'<span class="st-title">{esc(st.get("title"))}</span>'
+                        + (f'<span class="jkey">{esc(skey)}</span>' if skey else "") + "</div>")
+        body.append('<div class="stories">' + ("".join(rows) or '<div class="story none" '
+                    + q("Истории", "нет историй") + '>историй нет — нужны до переноса</div>') + "</div>")
+        if text(epic.get("description")):
+            body.append(f'<div class="jdesc" {q("Описание", text(epic.get("description")))}>{esc_unc(epic.get("description"))}</div>')
+        blocks.append(f'<details class="row jepic" data-kr="{eid}" data-tags="{kind}{" attention" if flags else ""}">'
+                      + head + '<div class="jbody">' + "".join(body) + "</div></details>")
+        cards[eid] = {"head": f"Эпик {eid}", "title": summary, "line": "", "segs": [], "segsCount": "", "blocks": []}
+
     counts = {k: sum(1 for e in epics if e.get("type") == k) for k in EPIC_TYPES}
     items = [("", "Все эпики", "все", len(epics)),
              ("attention", "Требуют решения", "требуют решения", attention),
@@ -1639,17 +1651,17 @@ def render_jira(doc, source):
     state = {"черновик": "ждёт подтверждения — в JIRA ничего не создано",
              "подтверждено": "подтверждено — можно переносить",
              "перенесено": "перенесено в JIRA"}.get(status, status)
-    quote = [f"Эпиков {len(epics)} (enabler {counts['enabler']}, бессрочных {counts['epic']}) · историй {stories_total}"
-             + (f" · требуют решения {attention}" if attention else "") + ".",
-             f"Проект {esc(doc.get('project')) or UNSURE_MARK} · {esc(state)}."]
+    summary_line = (f"Эпиков {len(epics)} (enabler {counts['enabler']}, бессрочных {counts['epic']}) · историй {stories_total}"
+                    + (f" · требуют решения {attention}" if attention else "")
+                    + f" · проект {esc(doc.get('project')) or UNSURE_MARK} · {esc(state)}.")
     parts = [
         filter_drawer("Показать", "Эпики", items),
         '<div class="layout wide"><main>',
-        f'<div class="head"><h1>{html.escape(title)}</h1><p class="meta">{esc(state)}</p></div>',
-        f'<blockquote class="quote">{"<br>".join(quote)}</blockquote>',
-        table(["kr", "etype", "name", "from", "pbv", "cnt", "att"],
-              ["№", "Тип", "Эпик", "KR", "PBV", "Историй", "Требует решения"],
-              "Структура переноса · клик по строке — истории эпика", rows),
+        f'<div class="tp-top"><h2 class="obj">{html.escape(title)}</h2><div class="tp-act">'
+        '<button type="button" id="jOpen">Развернуть все</button><button type="button" id="jClose">Свернуть все</button>'
+        '</div></div>',
+        f'<p class="jsum">{summary_line}</p>',
+        '<div class="jepics">' + "".join(blocks) + "</div>",
     ]
     if scope:
         mapped = {kid for e in epics for kid in e.get("from") or []}
@@ -1660,13 +1672,17 @@ def render_jira(doc, source):
                 + ("отменено" if cancelled(ini) else "не в квартал" if ini.get("in_quarter") is False
                    else "в квартал не решено" if ini.get("in_quarter") is None else "в квартал, но не в структуре!")
                 + "</td></tr>" for kid, ini in skipped)
-            parts.append('<h3>Не переносится</h3><div class="table-wrap"><table class="mini head">'
-                         f'<tr><td>KR</td><td>Инициатива</td><td>Почему</td></tr>{body}</table></div>')
+            parts.append('<details class="jskip"><summary>Не переносится: ' + str(len(skipped)) + '</summary>'
+                         '<div class="table-wrap"><table class="mini head">'
+                         f'<tr><td>KR</td><td>Инициатива</td><td>Почему</td></tr>{body}</table></div></details>')
     if status == "черновик":
         parts.append('<div class="ask-block"><h4>Согласование</h4>Всё верно — напишите агенту «да, переносим». '
-                     'Нужны правки — словами в чате или правым кликом по эпику или истории: комментарий для агента.</div>')
+                     'Нужны правки — словами в чате или правым кликом по эпику, истории, БФТ: комментарий для агента.</div>')
     parts.append("</main></div>")
-    return page(title, source, "jira.css", parts, cards)
+    parts.append("<script>document.getElementById('jOpen').onclick=function(){document.querySelectorAll('details.jepic')"
+                 ".forEach(function(d){d.open=true})};document.getElementById('jClose').onclick=function(){"
+                 "document.querySelectorAll('details.jepic').forEach(function(d){d.open=false})};</script>")
+    return page(title, source, "jira.css", parts, cards, unit="Эпик")
 
 
 def jira_ready(path):

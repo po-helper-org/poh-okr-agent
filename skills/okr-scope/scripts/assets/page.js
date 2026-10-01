@@ -1,11 +1,13 @@
-/* Страницы планирования (ФАКТ, ПЛАН): фильтр, карточка KR и комментарии для
-   ИИ-агента. Страница ничего не правит сама: правый клик по пункту карточки
+/* Страницы планирования (ФАКТ, ПЛАН, согласование JIRA): фильтр, карточка KR и
+   комментарии для ИИ-агента. Строка — tr.row (клик открывает карточку) или
+   details.row (раскрывается на месте, пункты внутри комментируются так же). Страница ничего не правит сама: правый клик по пункту карточки
    оставляет комментарий, комментарии уходят агенту кнопкой «Скопировать для
    агента» или файлом — агент правит JSON и пересобирает страницу. */
 (function(){
   var PAGE = JSON.parse(document.getElementById("page-data").textContent);
   var CARDS = PAGE.cards;
   var KEY = "okr-comments:" + PAGE.file;
+  var UNIT = PAGE.unit || "KR";
 
   function el(tag, cls, text){
     var node = document.createElement(tag);
@@ -26,7 +28,7 @@
   /* — фильтр в левой рейке — */
   var tab = document.getElementById("stTab");
   var drawer = document.getElementById("stDrawer");
-  var rows = Array.prototype.slice.call(document.querySelectorAll("tr.row"));
+  var rows = Array.prototype.slice.call(document.querySelectorAll(".row"));
   var items = Array.prototype.slice.call(drawer.querySelectorAll(".st-item"));
   function apply(value){
     rows.forEach(function(r){
@@ -124,7 +126,7 @@
   document.getElementById("sideClose").addEventListener("click", close);
   document.getElementById("scrim").addEventListener("click", close);
   rows.forEach(function(r){
-    r.addEventListener("click", function(){ open(r.getAttribute("data-kr")); });
+    if(r.tagName === "TR") r.addEventListener("click", function(){ open(r.getAttribute("data-kr")); });
   });
   document.addEventListener("keydown", function(e){ if(e.key === "Escape"){ selBtn.hidden = true; if(pop) hidePopover(); else close(); } });
 
@@ -154,15 +156,16 @@
     if(picked) return picked;
     var node = e.target.closest("[data-sec]");
     if(node && side.contains(node) && openId) return {kr: openId, section: node.getAttribute("data-sec"), quote: node.getAttribute("data-quote")};
-    var row = e.target.closest("tr.row");
-    if(row) return {kr: row.getAttribute("data-kr"), section: "KR целиком", quote: CARDS[row.getAttribute("data-kr")].title};
+    var row = e.target.closest(".row");
+    if(node && row) return {kr: row.getAttribute("data-kr"), section: node.getAttribute("data-sec"), quote: node.getAttribute("data-quote")};
+    if(row) return {kr: row.getAttribute("data-kr"), section: UNIT + " целиком", quote: CARDS[row.getAttribute("data-kr")].title};
     return null;
   }
   function sameTarget(c, t){ return c.kr === t.kr && c.section === t.section && c.quote === t.quote; }
   function showPopover(t, x, y){
     hidePopover();
     pop = el("div", "popover");
-    pop.appendChild(el("div", "pmeta", "Комментарий для ИИ-агента · KR " + t.kr + " · " + t.section));
+    pop.appendChild(el("div", "pmeta", "Комментарий для ИИ-агента · " + UNIT + " " + t.kr + " · " + t.section));
     if(t.quote && t.quote !== t.section) pop.appendChild(el("div", "pquote", t.quote));
     var existing = comments.filter(function(c){ return sameTarget(c, t); });
     existing.forEach(function(c){
@@ -245,6 +248,12 @@
       if(comments.some(function(c){ return c.kr === id; })) r.setAttribute("data-commented", "");
       else r.removeAttribute("data-commented");
     });
+    document.querySelectorAll(".row [data-sec]").forEach(function(node){
+      var t = {kr: node.closest(".row").getAttribute("data-kr"), section: node.getAttribute("data-sec"),
+               quote: node.getAttribute("data-quote")};
+      if(comments.some(function(c){ return sameTarget(c, t); })) node.setAttribute("data-commented", "");
+      else node.removeAttribute("data-commented");
+    });
     if(!openId) return;
     side.querySelectorAll("[data-sec]").forEach(function(node){
       var t = {kr: openId, section: node.getAttribute("data-sec"), quote: node.getAttribute("data-quote")};
@@ -258,7 +267,7 @@
     var lines = ["Комментарии PO к " + PAGE.file + " — поправь JSON по каждому пункту:", ""];
     comments.forEach(function(c, n){
       var quote = c.quote && c.quote !== c.section ? " — «" + c.quote + "»" : "";
-      lines.push((n + 1) + ". KR " + c.kr + " · " + c.section + quote + ": " + c.text);
+      lines.push((n + 1) + ". " + UNIT + " " + c.kr + " · " + c.section + quote + ": " + c.text);
     });
     lines.push("", "После правок прогони okr-plan.py lint и render и отчитайся по каждому пункту.");
     return lines.join("\n");
@@ -274,7 +283,7 @@
     }
     comments.forEach(function(c){
       var item = el("div", "item");
-      item.appendChild(el("div", "where", "KR " + c.kr + " · " + c.section));
+      item.appendChild(el("div", "where", UNIT + " " + c.kr + " · " + c.section));
       item.appendChild(el("div", "", c.text));
       var del = el("button", "", "удалить");
       del.type = "button";
