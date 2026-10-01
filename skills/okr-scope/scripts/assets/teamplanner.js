@@ -1,7 +1,9 @@
 /* Редактор TEAMPLANNER. Один экран — одна цель (OBJ), цели переключаются в
    левой выезжающей панели, KR раскрываются в список подзадач. В той же панели —
-   состав команды (команда · тип · ФИО): из него выбирают исполнителей. У подзадачи правятся тип, название и исполнитель; подзадачи можно
-   добавить и удалить. Правки живут в localStorage этого браузера, пока их не
+   состав команды (команда · тип · ФИО): из него выбирают исполнителей. У подзадачи
+   правятся тип, название, оценка в днях и исполнитель; подзадачи и KR можно
+   добавить и удалить. Правый клик по цели, KR или подзадаче — комментарий для
+   ИИ-агента; заметки копятся в «корзине» в правом нижнем углу. Правки живут в localStorage этого браузера, пока их не
    выгрузят кнопкой «Скачать JSON». Правила «нет роли в команде» и строки для
    таблицы считаются так же, как в okr-plan.py — меняешь там, меняй и здесь. */
 (function(){
@@ -18,7 +20,7 @@
   }
   var BASE = hash(JSON.stringify(DATA.doc));
   var COLUMNS = ["Название", "Комментарий", "Роль", "Исполнитель", "Начало", "Конец",
-                 "Статус", "Прогресс, %", "Образ результата", "Образ действия"];
+                 "Статус", "Прогресс, %", "Образ результата", "Образ действия", "Оценка, дн"];
 
   function clone(x){ return JSON.parse(JSON.stringify(x)); }
   function esc(v){
@@ -78,6 +80,13 @@
     var e = (kr.steps || []).map(function(x){ return x.end; }).filter(Boolean).sort();
     return [s[0] || "", e.length ? e[e.length - 1] : ""];
   }
+  /* Оценка в днях: обычное число от 0; сумма у KR — как kr_days / num_text в okr-plan.py. */
+  function isDays(v){ return typeof v === "number" && isFinite(v) && v >= 0; }
+  function krDays(kr){
+    var d = (kr.steps || []).filter(function(s){ return isDays(s.days); });
+    return d.length ? Math.round(d.reduce(function(a, s){ return a + s.days; }, 0) * 100) / 100 : null;
+  }
+  function numText(v){ return String(Math.round(v * 100) / 100); }
   function roleText(s){ return s.ext ? "EXT[" + s.role + "]" : (s.role || ""); }
   function whoText(kr, s){
     var st = state(kr, s);
@@ -127,12 +136,14 @@
         rows.push({"Название": "KR " + kr.id + " " + (kr.tag ? "[" + kr.tag + "] " : "") + kr.title + " (общий прогресс)",
                    "Комментарий": [kr.result, kr.comment, richText(kr.details)].filter(Boolean).join("\n"),
                    "Исполнитель": kr.owner || "", "Начало": d[0], "Конец": d[1],
-                   "Статус": ST[krStatus(kr)], "Прогресс, %": pct == null ? "" : pct});
+                   "Статус": ST[krStatus(kr)], "Прогресс, %": pct == null ? "" : pct,
+                   "Оценка, дн": krDays(kr) == null ? "" : numText(krDays(kr))});
         (kr.steps || []).forEach(function(s){
           rows.push({"Название": (s.title || "") + " (" + roleText(s) + ")", "Комментарий": s.comment || "",
                      "Роль": roleText(s), "Исполнитель": whoText(kr, s), "Начало": s.start || "", "Конец": s.end || "",
                      "Статус": ST[s.status || "TODO"] || "", "Прогресс, %": stepPct(s),
-                     "Образ результата": s.result || "", "Образ действия": s.action || ""});
+                     "Образ результата": s.result || "", "Образ действия": s.action || "",
+                     "Оценка, дн": isDays(s.days) ? numText(s.days) : ""});
         });
       });
     });
@@ -186,8 +197,10 @@
   function stepRow(kr, s, i){
     var st = state(kr, s), k = kr.id + "|" + i + "|";
     var flag = st.ext ? " data-ext" : st.norole ? " data-norole" : st.unassigned ? " data-unassigned" : "";
-    return '<div class="step"' + flag + ">" + typeSelect(kr, s, k)
+    return '<div class="step"' + flag + ' data-kr="' + esc(kr.id) + '" data-i="' + i + '">' + typeSelect(kr, s, k)
       + '<input class="title" data-k="' + k + 'title" value="' + esc(s.title) + '" aria-label="Название">'
+      + '<input class="days" data-k="' + k + 'days" inputmode="decimal" autocomplete="off" value="'
+      + (isDays(s.days) ? esc(numText(s.days)) : "") + '" placeholder="дн" title="Оценка, дней" aria-label="Оценка, дней">'
       + (st.ext ? '<span class="who ext">' + esc(whoText(kr, s)) + "</span>" : '<span class="who-box">' + whoInput(kr, s, k) + "</span>")
       + '<button type="button" class="del" data-act="del" data-kr="' + esc(kr.id) + '" data-i="' + i + '" aria-label="Удалить подзадачу">×</button></div>';
   }
@@ -212,13 +225,14 @@
       + (["Change", "Run", "Disrupt"].indexOf(kr.category) >= 0 ? '<span class="crd" data-v="' + kr.category.toLowerCase() + '">' + kr.category + "</span> " : "")
       + (kr.tag ? "[" + esc(kr.tag) + "] " : "") + esc(kr.title) + "</span>"
       + '<span class="kr-meta"><span class="pbvtag" data-tier="' + tier(kr.pbv) + '">' + (kr.pbv == null ? "—" : esc(kr.pbv)) + "</span>"
-      + " подзадач " + n + (kr.jira_key ? ' <span class="jk">' + esc(kr.jira_key) + "</span>" : "") + "</span>"
+      + " подзадач " + n + (krDays(kr) == null ? "" : " · " + numText(krDays(kr)) + " дн") + (kr.jira_key ? ' <span class="jk">' + esc(kr.jira_key) + "</span>" : "") + "</span>"
       + problems(kr).map(function(p){ return '<span class="flag">' + esc(p) + "</span>"; }).join("")
       + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
       + esc(kr.id) + '">Детальнее</button></summary>'
       + '<div class="kr-type">Тип в JIRA <select data-k="' + esc(kr.id) + '|kr|epic">'
       + option("enabler", "Эпик-enabler — инициатива, закрывается БФТ", epic)
-      + option("epic", "Эпик — бессрочный: поддержка, ACTIVITY", epic) + "</select></div>"
+      + option("epic", "Эпик — бессрочный: поддержка, ACTIVITY", epic) + "</select>"
+      + '<button type="button" class="kr-del" data-act="delkr" data-kr="' + esc(kr.id) + '">удалить KR</button></div>'
       + '<div class="steps">' + (kr.steps || []).map(function(s, i){ return stepRow(kr, s, i); }).join("") + "</div>"
       + '<button type="button" class="add" data-act="add" data-kr="' + esc(kr.id) + '">+ подзадача</button></details>';
   }
@@ -332,8 +346,10 @@
     var o = objs[cur], shown = o ? (o.krs || []) : all;
     tab.textContent = o ? "OBJ " + o.id + " из " + objs.length : "Все цели";
     document.getElementById("tpObj").textContent = o ? "OBJ " + o.id + " — " + o.title : "Все цели";
-    tp.innerHTML = o ? shown.map(krBlock).join("") : objs.map(function(x){
-      return '<h3 class="tp-band">OBJ ' + esc(x.id) + " — " + esc(x.title) + "</h3>" + (x.krs || []).map(krBlock).join("");
+    function addKrBtn(x){ return '<button type="button" class="add add-kr" data-act="addkr" data-obj="' + esc(x.id) + '">+ KR</button>'; }
+    tp.innerHTML = o ? shown.map(krBlock).join("") + addKrBtn(o) : objs.map(function(x){
+      return '<h3 class="tp-band" data-objid="' + esc(x.id) + '">OBJ ' + esc(x.id) + " — " + esc(x.title) + "</h3>"
+        + (x.krs || []).map(krBlock).join("") + addKrBtn(x);
     }).join("");
     var steps = shown.reduce(function(a, k){ return a + (k.steps || []).length; }, 0);
     var epics = shown.filter(function(k){ return epicOf(k) === "epic"; }).length;
@@ -343,6 +359,34 @@
     if(key){ var el = tp.querySelector('[data-k="' + key + '"]'); if(el) el.focus(); }
     document.getElementById("tpDirty").hidden = !dirty;
     document.getElementById("tpStale").hidden = !stale;
+    if(comments) markCommented();
+  }
+  /* Новый KR: название спрашиваем сразу, id — следующий номер в цели, команды — как у
+     первого KR цели (иначе все свои), подзадач нет. Он не из Scope — lint предупредит,
+     агент сверит со Scope. */
+  function addKr(objId){
+    var o = objs.filter(function(x){ return String(x.id) === objId; })[0];
+    var title = o && window.prompt("Название нового KR", "");
+    if(!title || !title.trim()) return;
+    title = title.trim();
+    o.krs = o.krs || [];
+    var n = 0;
+    o.krs.forEach(function(k){ var m = String(k.id).split("."); n = Math.max(n, +m[m.length - 1] || 0); });
+    var id = o.id + "." + (n + 1);
+    while(findKr(id)) id = o.id + "." + (++n + 1);
+    var teams = o.krs[0] && o.krs[0].teams ? o.krs[0].teams.slice()
+      : (doc.teams || []).filter(function(t){ return !t.external; }).map(function(t){ return t.id; });
+    o.krs.push({id: id, title: title, tag: "", category: "", epic: "", teams: teams,
+                owner: doc.po || "", result: "", comment: "", steps: []});
+    opened[id] = true;
+    save(); render();
+  }
+  function delKr(id){
+    var kr = findKr(id);
+    if(!kr || !confirm("Удалить KR " + id + " «" + (kr.title || "") + "» вместе с подзадачами?")) return;
+    objs.forEach(function(o){ o.krs = (o.krs || []).filter(function(k){ return k !== kr; }); });
+    if(sideKr === kr) closeSide();
+    save(); render();
   }
   function findKr(id){
     var hit = null;
@@ -394,6 +438,10 @@
       } else { s.role = v; s.ext = ""; }
     } else if(p[2] === "title"){
       s.title = v.trim() || kr.title;
+    } else if(p[2] === "days"){
+      /* «2,5» и «2.5» — одно и то же; не число — оценка снимается. */
+      var d = Number(String(v).trim().replace(",", "."));
+      if(!String(v).trim() || !isFinite(d) || d < 0) delete s.days; else s.days = Math.round(d * 100) / 100;
     } else if(p[2] === "who"){
       var who = resolveWho(kr, s, v);
       if(who === null){
@@ -418,6 +466,8 @@
   tp.addEventListener("click", function(e){
     var b = e.target.closest("[data-act]");
     if(!b) return;
+    if(b.getAttribute("data-act") === "addkr"){ addKr(b.getAttribute("data-obj")); return; }
+    if(b.getAttribute("data-act") === "delkr"){ delKr(b.getAttribute("data-kr")); return; }
     var kr = findKr(b.getAttribute("data-kr")), i = +b.getAttribute("data-i");
     if(!kr) return;
     if(b.getAttribute("data-act") === "more"){
@@ -478,12 +528,6 @@
   document.getElementById("scrim").onclick = closeSide;
   document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSide(); });
 
-  document.getElementById("tpOpenAll").onclick = function(){
-    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = true; });
-  };
-  document.getElementById("tpCloseAll").onclick = function(){
-    tp.querySelectorAll("details.kr").forEach(function(d){ d.open = false; });
-  };
 
   /* ---------- выгрузка ---------- */
   document.getElementById("bJson").onclick = function(){
@@ -526,6 +570,142 @@
     doc = clone(DATA.doc); objs = doc.objectives || []; dirty = false; initRoster(); renderPeople(); render();
   };
 
+  /* ---------- комментарии для ИИ-агента: правый клик, «корзина» заметок в углу ----------
+     Как на ФАКТ и ПЛАН: страница сама ничего не правит по комментарию — он уходит
+     агенту текстом или файлом <имя>.comments.json. Shift + правый клик — обычное
+     меню браузера (вставить в поле и т. п.). */
+  var CKEY = "okr-comments:" + DATA.file, comments = [];
+  try { comments = JSON.parse(localStorage.getItem(CKEY) || "[]"); } catch(e){ comments = []; }
+  if(!Array.isArray(comments)) comments = [];
+  var notesBox = document.getElementById("tpNotes"), pop = null;
+  function persistComments(){
+    try { localStorage.setItem(CKEY, JSON.stringify(comments)); } catch(e){}
+    renderNotes();
+  }
+  function stepQuote(s){ return "[" + roleText(s) + "] " + (s.title || ""); }
+  function krQuote(kr){ return (kr.tag ? "[" + kr.tag + "] " : "") + (kr.title || ""); }
+  function targetOf(node){
+    var step = node.closest(".step[data-kr]");
+    if(step){
+      var kr = findKr(step.getAttribute("data-kr")), s = kr && kr.steps[+step.getAttribute("data-i")];
+      if(s) return {kr: kr.id, section: "Подзадача", quote: stepQuote(s)};
+    }
+    var box = node.closest("details.kr");
+    if(box){
+      var k = findKr(box.getAttribute("data-kr"));
+      if(k) return {kr: k.id, section: "KR целиком", quote: krQuote(k)};
+    }
+    var band = node.closest("[data-objid]");
+    var o = band ? objs.filter(function(x){ return String(x.id) === band.getAttribute("data-objid"); })[0] : objs[cur];
+    if(o && (band || node.closest("#tpObj"))) return {kr: "", section: "OBJ " + o.id, quote: o.title};
+    return null;
+  }
+  function same(c, t){ return c.kr === t.kr && c.section === t.section && c.quote === t.quote; }
+  function where(c){ return (c.kr ? "KR " + c.kr + " · " : "") + c.section; }
+  function hidePop(){ if(pop){ pop.remove(); pop = null; } }
+  function node(tag, cls, txt){ var n = document.createElement(tag); if(cls) n.className = cls; if(txt != null) n.textContent = txt; return n; }
+  function showPop(t, x, y){
+    hidePop();
+    pop = node("div", "popover");
+    pop.appendChild(node("div", "pmeta", "Комментарий для ИИ-агента · " + where(t)));
+    if(t.quote) pop.appendChild(node("div", "pquote", t.quote));
+    comments.filter(function(c){ return same(c, t); }).forEach(function(c){
+      var item = node("div", "pex-item", c.text), del = node("button", "pex-del", "удалить");
+      del.type = "button";
+      del.onclick = function(){ comments = comments.filter(function(z){ return z !== c; }); persistComments(); showPop(t, x, y); };
+      item.appendChild(node("br")); item.appendChild(del); pop.appendChild(item);
+    });
+    var area = node("textarea");
+    area.placeholder = "Что поправить: другой исполнитель, лишняя подзадача, срок, вопрос…";
+    pop.appendChild(area);
+    var row = node("div", "prow"), ok = node("button", "", "Оставить"), cancel = node("button", "cancel", "Отмена");
+    ok.type = cancel.type = "button";
+    row.appendChild(ok); row.appendChild(cancel); pop.appendChild(row);
+    ok.onclick = function(){
+      var txt = area.value.trim();
+      if(!txt) return;
+      comments.push({kr: t.kr, section: t.section, quote: t.quote, text: txt, at: new Date().toISOString()});
+      persistComments(); hidePop();
+    };
+    cancel.onclick = hidePop;
+    area.addEventListener("keydown", function(e){ if(e.key === "Enter" && (e.metaKey || e.ctrlKey)) ok.click(); });
+    document.body.appendChild(pop);
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(x, window.scrollX + document.documentElement.clientWidth - w - 8)) + "px";
+    pop.style.top = Math.max(8, Math.min(y, window.scrollY + document.documentElement.clientHeight - h - 8)) + "px";
+    area.focus();
+  }
+  document.querySelector("main").addEventListener("contextmenu", function(e){
+    if(e.shiftKey) return;
+    var t = targetOf(e.target);
+    if(!t) return;
+    e.preventDefault();
+    showPop(t, e.pageX, e.pageY);
+  });
+  document.addEventListener("mousedown", function(e){ if(pop && !pop.contains(e.target)) hidePop(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") hidePop(); });
+  function markCommented(){
+    tp.querySelectorAll("details.kr").forEach(function(d){
+      var id = d.getAttribute("data-kr");
+      d.toggleAttribute("data-commented", comments.some(function(c){ return c.kr === id && c.section === "KR целиком"; }));
+    });
+    tp.querySelectorAll(".step[data-kr]").forEach(function(n){
+      var kr = findKr(n.getAttribute("data-kr")), s = kr && kr.steps[+n.getAttribute("data-i")];
+      n.toggleAttribute("data-commented", !!s && comments.some(function(c){
+        return c.kr === kr.id && c.section === "Подзадача" && c.quote === stepQuote(s);
+      }));
+    });
+  }
+  function agentPrompt(){
+    var lines = ["Комментарии к " + DATA.file + " — поправь JSON по каждому пункту:", ""];
+    comments.forEach(function(c, n){
+      lines.push((n + 1) + ". " + where(c) + (c.quote ? " — «" + c.quote + "»" : "") + ": " + c.text);
+    });
+    if(dirty) lines.push("", "На странице есть правки — PO пришлёт и файл из «Скачать JSON»: сначала положи его.");
+    lines.push("", "После правок прогони okr-plan.py lint и render и отчитайся по каждому пункту.");
+    return lines.join("\n");
+  }
+  var basketBox = document.getElementById("tpNotesBox");
+  document.getElementById("tpNotesBtn").onclick = function(){ basketBox.hidden = !basketBox.hidden; };
+  document.addEventListener("mousedown", function(e){ if(!notesBox.contains(e.target) && !(pop && pop.contains(e.target))) basketBox.hidden = true; });
+  function renderNotes(){
+    notesBox.hidden = !comments.length;
+    if(!comments.length) basketBox.hidden = true;
+    document.getElementById("tpNotesN").textContent = comments.length;
+    var list = document.getElementById("tpNotesList");
+    list.innerHTML = "";
+    comments.forEach(function(c){
+      var item = node("div", "item");
+      item.appendChild(node("div", "where", where(c)));
+      if(c.quote) item.appendChild(node("div", "quote", c.quote));
+      item.appendChild(node("div", "", c.text));
+      var del = node("button", "", "удалить");
+      del.type = "button";
+      del.onclick = function(){ comments = comments.filter(function(z){ return z !== c; }); persistComments(); };
+      item.appendChild(del);
+      list.appendChild(item);
+    });
+    markCommented();
+  }
+  document.getElementById("tpNotesCopy").onclick = function(){
+    var b = this, txt = agentPrompt();
+    function done(){ b.textContent = "Скопировано"; setTimeout(function(){ b.textContent = "Скопировать для агента"; }, 1500); }
+    function fallback(){
+      var t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select();
+      try { document.execCommand("copy"); done(); } catch(e){} t.remove();
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, fallback);
+    else fallback();
+  };
+  document.getElementById("tpNotesSave").onclick = function(){
+    download({file: DATA.file, comments: comments}, DATA.file.replace(/\.json$/, "") + ".comments.json");
+  };
+  document.getElementById("tpNotesClear").onclick = function(){
+    if(!comments.length || !confirm("Удалить все комментарии на этой странице?")) return;
+    comments = []; persistComments();
+  };
+
   renderPeople();
   render();
+  renderNotes();
 })();
