@@ -239,7 +239,8 @@ class StagesLint(Case):
         self.write(self.scope, "scope-2026Q4.json")
         out = os.path.join(self.tmp.name, "scope.html")
         okr_plan.render(os.path.join(self.tmp.name, "scope-2026Q4.json"), out)
-        page = open(out, encoding="utf-8").read()
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
         self.assertIn("<th>БФТ</th>", page)
         self.assertIn('<span class="bft" data-v="no">нет</span>', page)
         self.assertIn('<span class="bft" data-v="unknown">?</span>', page)
@@ -256,6 +257,16 @@ class StagesLint(Case):
     def test_not_taken_carryover_counts_as_decided(self):
         self.ini("2.1")["in_quarter"] = False
         self.assertEqual([e for e in self.lint(scope=self.scope).errors if "Retro" in e], [])
+
+    def test_category_values(self):
+        self.ini("1.1")["category"] = "Grow"
+        self.assertError(self.lint(scope=self.scope), "KR 1.1: category — Change, Run, Disrupt или пусто")
+
+    def test_category_is_empty_by_default_even_when_accepted(self):
+        self.assertNotIn("category", self.ini("1.3"))
+        self.ini("1.1")["category"] = None
+        self.ini("1.2")["category"] = ""
+        self.assertEqual(self.lint(scope=self.scope, final=True).errors, [])
 
     def test_scope_phase_skips_stage_checks(self):
         self.scope["phase"] = "scope"
@@ -322,6 +333,9 @@ class Render(Case):
         self.assertIn("продолжается 2 KR, в плане 2, не берём 0, не решено 0", page)
         self.assertIn('data-kr="2.2" data-tags="back" data-cancelled', page)
         self.assertIn("инициатив 5, в квартал 4 ·", page)
+        self.assertIn("Тип: Change 1 · Run 2 · Disrupt 1.", page)
+        self.assertIn('<td class="name"><span class="crd" data-v="disrupt">Disrupt</span> <span class="txt">Семейная', page)
+        self.assertIn('<td class="name"><span class="txt">Промокоды на подписку</span>', page)
         self.assertIn('data-kr="1.3" data-tags="front back" data-out', page)
         self.assertIn('<span class="inq" data-v="yes">✓ да</span>', page)
         self.assertIn('data-value="partner" data-name="Биллинг партнёра">', page)
@@ -361,9 +375,11 @@ class TeamPlanner(Case):
             doc = json.load(f)
         self.assertEqual([k["id"] for o in doc["objectives"] for k in o["krs"]], ["1.1", "1.2", "2.1", "3.1"])
         self.assertEqual(doc["roles"], okr_plan.TP_ROLES)
+        self.assertEqual([k["epic"] for o in doc["objectives"] for k in o["krs"]], ["enabler", "enabler", "enabler", "epic"])
         ext = [s for s in doc["objectives"][0]["krs"][0]["steps"] if s["ext"]]
         self.assertEqual([(s["role"], s["ext"]) for s in ext], [("BE", "partner")])
         self.assertEqual(doc["status"], "черновик")
+        self.assertEqual([k["category"] for o in doc["objectives"] for k in o["krs"]], ["Change", "Disrupt", "Run", "Run"])
 
     def test_seed_requires_accepted_scope(self):
         self.scope["status"] = "черновик"
@@ -390,6 +406,33 @@ class TeamPlanner(Case):
         rep = self.lint_tp(final=True)
         self.assertIn("KR 1.2, этап 6: нет исполнителя", rep.errors)
         self.assertTrue(any("этап 7: нет исполнителя, и роли DOPS нет" in e for e in rep.errors))
+
+    def test_category_checked_and_shown(self):
+        self.kr("1.1")["category"] = "run"
+        self.assertError(self.lint_tp(), "KR 1.1: category — Change, Run, Disrupt или пусто")
+        self.kr("1.1")["category"] = "Run"
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            self.assertIn('<span class="kr-title"><span class="crd" data-v="run">Run</span> Биллинг', f.read())
+
+    def test_epic_type(self):
+        self.assertEqual([okr_plan.epic_of(k) for _, k in okr_plan.tp_krs(self.tp)], ["enabler", "enabler", "enabler", "epic"])
+        self.assertEqual(okr_plan.epic_of({"tag": "ACTIVITY"}), "epic")
+        self.kr("1.1")["epic"] = "story"
+        self.assertError(self.lint_tp(), "KR 1.1: epic — enabler, epic или пусто")
+        self.kr("1.1")["epic"] = "epic"
+        path = self.write(self.tp, "teamplanner-2026Q4.json")
+        out = os.path.join(self.tmp.name, "tp.html")
+        okr_plan.render(path, out)
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
+        self.assertIn('<span class="et" data-v="epic">ЭПИК</span><span class="kr-title"><span class="crd" data-v="change">'
+                      'Change</span> Биллинг', page)
+        self.assertIn('[RESEARCH] Поиск на новой платформе', page)
+        self.assertIn('id="tpSum"', page)
+        self.assertIn('id="tpOpenAll"', page)
 
     def test_step_values(self):
         step = self.kr("2.1")["steps"][0]
@@ -469,6 +512,66 @@ class TeamPlanner(Case):
         self.assertEqual(sum(r["Исполнитель"] == "нет роли в команде" for r in rows), 2)
 
 
+
+class Jira(Case):
+    """Перенос в JIRA идёт прямо из TeamPlanner: KR — эпик, этап — история."""
+
+    def setUp(self):
+        super().setUp()
+        self.tp = fixture("teamplanner-2026Q4.json")
+
+    def put(self, status=None, assign=False):
+        self.write(self.scope, "scope-2026Q4.json")
+        doc = copy.deepcopy(self.tp)
+        if status:
+            doc["status"] = status
+        if assign:
+            for o in doc["objectives"]:
+                for k in o["krs"]:
+                    for st in k["steps"]:
+                        if not st["who"] and not st["ext"]:
+                            st["ext"] = "partner"
+        return self.write(doc, "teamplanner-2026Q4.json")
+
+    def test_key_and_project_format(self):
+        self.tp["jira_project"] = "vit"
+        kr = self.tp["objectives"][0]["krs"][0]
+        kr["jira_key"] = "VIT 1"
+        kr["steps"][0]["jira_key"] = "vit-2"
+        rep = okr_plan.lint(self.put())
+        for fragment in ("jira_project: ключ проекта JIRA", "KR 1.1: jira_key — ключ JIRA",
+                         "KR 1.1, этап 1: jira_key — ключ JIRA"):
+            self.assertError(rep, fragment)
+        kr["jira_key"], kr["steps"][0]["jira_key"], self.tp["jira_project"] = "VIT-1", "VIT-2", "VIT"
+        self.assertEqual(okr_plan.lint(self.put()).errors, [])
+
+    def test_ready_only_for_accepted_teamplanner(self):
+        problems = okr_plan.jira_ready(self.put())
+        self.assertIn("TeamPlanner не принят", problems[0])
+        self.assertTrue(any("нет исполнителя" in p for p in problems))
+        self.assertEqual(okr_plan.jira_ready(self.put(status="принято", assign=True)), [])
+        self.tp["jira_project"] = ""
+        self.assertTrue(any(p.startswith("jira_project") for p in okr_plan.jira_ready(self.put("принято", True))))
+
+    def test_csv(self):
+        out = os.path.join(self.tmp.name, "jira.csv")
+        with self.assertRaises(SystemExit):
+            okr_plan.jira_csv(self.put(), out)
+        steps = sum(len(k["steps"]) for o in self.tp["objectives"] for k in o["krs"])
+        self.assertEqual(okr_plan.jira_csv(self.put("принято", True), out), 4 + steps)
+        with open(out, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.DictReader(f))
+        epic = rows[0]
+        self.assertEqual((epic["Issue Type"], epic["Issue Id"], epic["Parent Id"]), ("Epic", "1", ""))
+        self.assertTrue(epic["Summary"].endswith("Биллинг партнёра минуя ручную сверку"))
+        for label in ("OKR-2026Q4", "KR-1.1", "epic-enabler", "Change", "PBV-8"):
+            self.assertIn(label, epic["Labels"].split())
+        self.assertEqual((rows[1]["Issue Type"], rows[1]["Parent Id"]), ("Story", "1"))
+        self.assertTrue(rows[1]["Summary"].startswith("[SA] "))
+        self.assertIn("EXT[BE]", " ".join(r["Summary"] for r in rows))
+        activity = next(r for r in rows if r["Issue Type"] == "Epic" and "KR-3.1" in r["Labels"].split())
+        self.assertIn("epic-epic", activity["Labels"].split())
+        self.assertTrue(activity["Summary"].startswith("[ACTIVITY] "))
 
 class Robustness(Case):
     """JSON пишет LLM: любой неверный тип — понятная ошибка, а не трейсбэк."""
@@ -574,6 +677,8 @@ class Robustness(Case):
                            lambda: okr_plan.render(fp, os.path.join(self.tmp.name, "o.html"))]
                     if name.startswith("teamplanner"):
                         ops.append(lambda: okr_plan.export_csv(fp, os.path.join(self.tmp.name, "o.csv")))
+                        ops.append(lambda: okr_plan.jira_ready(fp))
+                        ops.append(lambda: okr_plan.jira_csv(fp, os.path.join(self.tmp.name, "j.csv")))
                     if name.startswith("scope"):
                         ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
                     for op in ops:

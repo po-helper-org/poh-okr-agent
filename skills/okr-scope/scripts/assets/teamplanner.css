@@ -94,3 +94,27 @@ ul.tp-static .t{ font-family:"Courier New",monospace; font-weight:bold; display:
   .rt{ font-size:16px; min-height:50vh; }
   .rt-bar button{ padding:.4rem .6rem; }
 }
+
+/* Тип инициативы: Run — поддержать, Change — развить, Disrupt — создать новое. */
+.crd{ display:inline-block; font-family:"Courier New",monospace; font-size:.66rem; letter-spacing:.03em;
+  padding:0 .35rem; margin-right:.35rem; border:1px solid var(--line-soft); vertical-align:1px; }
+.crd[data-v="run"]{ background:#eef1f5; color:#44536a; }
+.crd[data-v="change"]{ background:#e6f2ea; color:#1f6b3a; }
+.crd[data-v="disrupt"]{ background:#f6e8f7; color:#7a2d85; }
+
+/* Верхнеуровневая строка KR — как на странице согласования JIRA: тип эпика,
+   PBV, число подзадач, что требует решения. */
+.tp-sum{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); margin:-.4rem 0 1rem; }
+h3.tp-band{ background:#dfe7f5; border-top:2px solid var(--line); margin:1.4rem 0 0; padding:.4rem .6rem; font-size:.9rem; }
+details.kr > summary{ flex-wrap:wrap; }
+.et{ display:inline-block; font-family:"Courier New",monospace; font-size:.64rem; letter-spacing:.03em; padding:0 .35rem;
+  border:1px solid var(--line-soft); }
+.et[data-v="enabler"]{ background:#e7eef7; color:#2f4c73; }
+.et[data-v="epic"]{ background:#f2f2f2; color:#555; }
+.kr-meta{ font-family:"Courier New",monospace; font-size:.72rem; color:var(--muted); white-space:nowrap; }
+.flag{ display:inline-block; font-family:"Courier New",monospace; font-size:.66rem; background:#fbe3e5; color:#a33; padding:0 .35rem; }
+.kr-type{ font-family:"Courier New",monospace; font-size:.74rem; color:var(--muted); padding:.1rem 0 .4rem 1.8rem; }
+.kr-type select{ font:inherit; font-size:.74rem; padding:.15rem .3rem; border:1px solid var(--line-soft); background:var(--bg); margin-left:.4rem; }
+.tp-act{ flex-wrap:wrap; }
+@media (max-width:640px){ .kr-type{ padding-left:.4rem; } }
+.jk{ font-family:"Courier New",monospace; font-size:.7rem; color:#2f4c73; }

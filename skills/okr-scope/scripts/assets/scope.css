@@ -63,3 +63,10 @@ span.bft[data-v="yes"]{ color:#1a7a1a; font-weight:700; }
 span.bft[data-v="no"]{ color:#a11; font-weight:700; }
 span.bft[data-v="unknown"]{ background:var(--mark); border:1px dashed var(--line); padding:0 .35rem; }
 span.bft[data-v="na"]{ color:var(--faint); }
+
+/* Тип инициативы: Run — поддержать, Change — развить, Disrupt — создать новое. */
+.crd{ display:inline-block; font-family:"Courier New",monospace; font-size:.66rem; letter-spacing:.03em;
+  padding:0 .35rem; margin-right:.35rem; border:1px solid var(--line-soft); vertical-align:1px; }
+.crd[data-v="run"]{ background:#eef1f5; color:#44536a; }
+.crd[data-v="change"]{ background:#e6f2ea; color:#1f6b3a; }
+.crd[data-v="disrupt"]{ background:#f6e8f7; color:#7a2d85; }
