@@ -212,7 +212,7 @@
       + (["Change", "Run", "Disrupt"].indexOf(kr.category) >= 0 ? '<span class="crd" data-v="' + kr.category.toLowerCase() + '">' + kr.category + "</span> " : "")
       + (kr.tag ? "[" + esc(kr.tag) + "] " : "") + esc(kr.title) + "</span>"
       + '<span class="kr-meta"><span class="pbvtag" data-tier="' + tier(kr.pbv) + '">' + (kr.pbv == null ? "—" : esc(kr.pbv)) + "</span>"
-      + " подзадач " + n + "</span>"
+      + " подзадач " + n + (kr.jira_key ? ' <span class="jk">' + esc(kr.jira_key) + "</span>" : "") + "</span>"
       + problems(kr).map(function(p){ return '<span class="flag">' + esc(p) + "</span>"; }).join("")
       + '<button type="button" class="more"' + (richText(kr.details) ? " data-has" : "") + ' data-act="more" data-kr="'
       + esc(kr.id) + '">Детальнее</button></summary>'

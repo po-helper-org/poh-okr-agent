@@ -1,5 +1,5 @@
 ---
-description: "Перенос плана квартала в JIRA: эпики-enabler, бессрочные эпики и истории из Scope и TeamPlanner. Сначала показывает структуру и ждёт подтверждения PO, потом создаёт задачи (Atlassian MCP) или готовит CSV для импорта."
+description: "Перенос плана квартала в JIRA прямо из TeamPlanner: KR — эпики (enabler или бессрочный), подзадачи — истории. Нет TeamPlanner — собирает; есть — просит PO подтвердить и проверяет. Задачи (Atlassian MCP) или CSV для импорта — только после явного «да»."
 ---
 
 ## Использование
@@ -8,28 +8,30 @@ description: "Перенос плана квартала в JIRA: эпики-ena
 /okr-jira <quarter>
 ```
 
-`<quarter>` — планируемый квартал (`2026Q4`). Идёт после `/okr-scope`
-(и `/okr-teamplanner`, если он был).
+`<quarter>` — планируемый квартал (`2026Q4`). Идёт после `/okr-teamplanner`;
+если TeamPlanner ещё нет — соберёт его сам.
 
 ## На выходе
 
 ```
-.okr/<quarter>/plan/jira-<quarter>.json + .html (+ .csv, если нет доступа к JIRA)
+.okr/<quarter>/plan/teamplanner-<quarter>.json + .html   с jira_project и ключами jira_key
+.okr/<quarter>/plan/jira-<quarter>.csv                   только если нет доступа к JIRA
 ```
 
 ## Инструкция для LLM
 
 Следуй процессу из `skills/okr-jira/SKILL.md`. Формат данных —
-`skills/okr-scope/resources/plan_schema.md`, раздел «JIRA». Главное: сначала
-показать страницу согласования `jira-<quarter>.html` (в чат — короткая сводка)
-и дождаться явного подтверждения PO; задачи в JIRA — только после
+`skills/okr-scope/resources/plan_schema.md`, разделы «TeamPlanner» и «Перенос
+в JIRA». Главное: показать страницу TeamPlanner (в чат — короткая сводка) и
+дождаться явного подтверждения PO; задачи в JIRA — только после
 `okr-plan.py jira-ready`.
 
 ## Отчёт
 
 ```
-Структура переноса в JIRA: .okr/<quarter>/plan/jira-<quarter>.html
-Эпиков N (enabler N, бессрочных N), историй N. Требуют решения: N.
+TeamPlanner для переноса в JIRA: .okr/<quarter>/plan/teamplanner-<quarter>.html
+Эпиков N (enabler N, бессрочных N), историй N. Проект: <ключ>.
+Мешает переносу: <…или «ничего»>.
 
-── СТОП ── Переносим в таком виде? Правки — словами или комментариями на странице.
+── СТОП ── Переносим в JIRA в таком виде?
 ```

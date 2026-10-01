@@ -53,8 +53,8 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
    экран на цель: техлиды раскрывают KR, добавляют и удаляют подзадачи, меняют
    тип, название и исполнителя; «Скачать JSON» возвращает правки агенту,
    «Копировать в Sheets» вставляет лист TeamPlanner.
-9. `/okr-jira` показывает, какие эпики и истории заведёт в JIRA, и после «да»
-   переносит план.
+9. `/okr-jira` переносит TeamPlanner в JIRA: KR — эпики, подзадачи — истории.
+   Сначала просит PO подтвердить страницу TeamPlanner, задачи — только после «да».
 10. В середине квартала — экватор, отчёт `.md` + презентация `.pptx`
    (`/okr-equator`).
 
@@ -71,7 +71,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | 2 | `/okr-scope <quarter>` | PO в свободной форме, можно голосом, рассказывает, что и для каких команд хочет увидеть. Из рассказа — первичный драфт, дальше итерации и выравнивание | принятая страница ПЛАН `scope-<quarter>.html` |
 | 3 | `/okr-stages <quarter>` | Необязательно. Условия, риски, зависимости, неопределённости и первые этапы инициатив — на той же странице ПЛАН. Этапы станут заготовкой TeamPlanner | декомпозиция на странице ПЛАН |
 | 4 | `/okr-teamplanner <quarter>` | Каждый KR, взятый в квартал, — операционные этапы полного цикла: `PO, ADR, SA, BA, BE, FE, QA, DOPS, RM` и `EXT[роль]` для внешнего ресурса. У этапа — исполнитель, сроки, статус, образ результата и образ действия. Техлиды правят тип, название и исполнителя прямо на странице | страница TEAMPLANNER `teamplanner-<quarter>.html` и таблица `.csv` |
-| 5 | `/okr-jira <quarter>` | Перенос в JIRA: эпики-enabler (инициатива, закрывается БФТ), бессрочные эпики (ACTIVITY, поддержка) и истории. Агент всегда сначала показывает структуру и ждёт подтверждения PO, потом создаёт задачи (Atlassian MCP) или готовит CSV для импорта | эпики и истории в JIRA, `jira-<quarter>.json` с ключами |
+| 5 | `/okr-jira <quarter>` | Перенос в JIRA прямо из TeamPlanner: KR — эпик-enabler (инициатива, закрывается БФТ) или бессрочный эпик (ACTIVITY, поддержка), подзадачи — истории. Нет TeamPlanner — агент его соберёт; есть — просит PO подтвердить и проверяет. Задачи (Atlassian MCP) или CSV для импорта — только после «да» | эпики и истории в JIRA, ключи `jira_key` в TeamPlanner |
 
 `<quarter>` везде — планируемый квартал (`2026Q4`); ретро закрывает предыдущий.
 Начинать всегда можно с `/okr-retro`: он видит, на каком этапе остановились, и
@@ -162,7 +162,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
   plan/scope-<quarter>.json + .html           страница ПЛАН
   plan/teamplanner-<quarter>.json + .html     страница TEAMPLANNER
   plan/teamplanner-<quarter>.csv              лист для Google Sheets
-  plan/jira-<quarter>.json                    структура переноса в JIRA
+  plan/jira-<quarter>.csv                     импорт в JIRA, если нет Atlassian MCP
   equator/экватор-<quarter>.md
   equator/экватор-<quarter>.pptx
 ```

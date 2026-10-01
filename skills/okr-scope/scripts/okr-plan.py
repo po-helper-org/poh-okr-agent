@@ -5,11 +5,8 @@
   okr-plan.py render <file.json> <out.html>
   okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
-  okr-plan.py jira-seed <scope.json> <jira.json> [--teamplanner <tp.json>] [--force]
-                                                      черновик структуры переноса в JIRA
-  okr-plan.py preview <jira.json>                      структура переноса текстом — показать PO
-  okr-plan.py jira-ready <jira.json>                   можно ли создавать задачи (подтверждено + lint)
-  okr-plan.py jira-csv <jira.json> <out.csv>           CSV для импорта JIRA (только подтверждённая структура)
+  okr-plan.py jira-ready <teamplanner.json>            можно ли переносить в JIRA: принят, lint --final, проект
+  okr-plan.py jira-csv <teamplanner.json> <out.csv>    CSV для импорта JIRA из принятого TeamPlanner
 
 Источник истины — JSON. HTML и CSV всегда пересобираются из него, руками не правятся.
 Только стандартная библиотека Python.
@@ -116,21 +113,15 @@ SHAPES = {
                       "uncertainties": L}}]}],
         "retro_dropped": [{"id": V, "reason": T}], "open_questions": L,
     },
-    "jira": {
-        "kind": V, "quarter": V, "team": V, "status": V, "updated": V, "scope": {"file": V}, "project": V,
-        "labels": L,
-        "epics": [{"from": L, "type": V, "title": V, "tag": V, "pbv": V, "category": V, "bft": V, "bft_link": V,
-                   "note": T, "description": T, "key": V,
-                   "stories": [{"code": V, "tag": V, "title": V, "description": T, "key": V}]}],
-    },
     "teamplanner": {
         "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "scope": {"file": V}, "roles": L,
+        "jira_project": V,
         "teams": [{"id": V, "name": V, "external": V, "people": [{"name": V, "role": V}]}],
         "objectives": [{"id": V, "title": V, "krs": [{
-            "id": V, "title": V, "pbv": V, "tag": V, "category": V, "epic": V, "teams": L, "owner": V, "result": T,
-            "comment": T, "details": V,
+            "id": V, "title": V, "pbv": V, "tag": V, "category": V, "epic": V, "jira_key": V, "teams": L, "owner": V,
+            "result": T, "comment": T, "details": V,
             "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
-                       "progress": V, "result": T, "action": T, "comment": T}]}]}],
+                       "progress": V, "result": T, "action": T, "comment": T, "jira_key": V}]}]}],
     },
 }
 
@@ -145,7 +136,7 @@ def shape_errors(doc, spec=None, where=""):
         kind = doc.get("kind")
         spec = SHAPES.get(kind) if isinstance(kind, str) else None
         if spec is None:
-            return ["kind: ожидается 'retro', 'scope', 'teamplanner' или 'jira'"]
+            return ["kind: ожидается 'retro', 'scope' или 'teamplanner'"]
     names = {str: "строка", int: "число", float: "число", bool: "true/false", list: "список", dict: "объект"}
     got = lambda v: names.get(type(v), type(v).__name__)
     out = []
@@ -602,24 +593,21 @@ def lint_retro_link(doc, initiatives, retro, rep):
 def lint(path, final=False, retro_path=None):
     doc = load(path)
     kind = doc.get("kind")
-    statuses = JIRA_STATUSES if kind == "jira" else STATUSES
-    rep = Report(final or doc.get("status") in ("принято", "подтверждено", "перенесено"))
+    rep = Report(final or doc.get("status") == "принято")
     shape = shape_errors(doc)
     if shape:
         rep.errors += shape
         return rep
-    if doc.get("status", "черновик") not in statuses:
-        rep.error(f"status: одно из {statuses}")
+    if doc.get("status", "черновик") not in STATUSES:
+        rep.error(f"status: одно из {STATUSES}")
     if kind == "retro":
         lint_retro(doc, rep)
     elif kind == "scope":
         lint_scope(doc, rep, *resolve_retro(doc, path, retro_path))
     elif kind == "teamplanner":
         lint_teamplanner(doc, rep, path)
-    elif kind == "jira":
-        lint_jira(doc, rep, path)
     else:
-        rep.error("kind: ожидается 'retro', 'scope', 'teamplanner' или 'jira'")
+        rep.error("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     return rep
 
 
@@ -680,11 +668,8 @@ def filter_drawer(label, title, items):
             f'<button class="drawer-close" type="button">×</button></div>{buttons}</div>')
 
 
-def page(title, source, css, parts, cards, unit=None):
-    meta = {"file": os.path.basename(source), "cards": cards}
-    if unit:
-        meta["unit"] = unit
-    data = json.dumps(meta, ensure_ascii=False).replace("<", "\\u003c")
+def page(title, source, css, parts, cards):
+    data = json.dumps({"file": os.path.basename(source), "cards": cards}, ensure_ascii=False).replace("<", "\\u003c")
     body = "\n".join(parts + [
         '<div class="promptbox"><button type="button" id="commentsBtn">Комментарии: 0</button>'
         '<div class="panel" id="commentsPanel"><h4>Комментарии для ИИ-агента</h4><div id="commentsList"></div>'
@@ -979,8 +964,6 @@ def render(path, out):
         page_html = render_scope(doc, path, resolve_retro(doc, path, None)[0])
     elif doc.get("kind") == "teamplanner":
         page_html = render_teamplanner(doc, path)
-    elif doc.get("kind") == "jira":
-        page_html = render_jira(doc, path)
     else:
         raise SystemExit("kind: ожидается 'retro', 'scope' или 'teamplanner'")
     with open(out, "w", encoding="utf-8") as f:
@@ -1203,6 +1186,9 @@ def lint_teamplanner(doc, rep, path):
     if not text(doc.get("team")):
         rep.gate("team: не указана команда")
     roles = doc.get("roles") or TP_ROLES
+    project = text(doc.get("jira_project"))
+    if project and not re.match(r"^[A-Z][A-Z0-9_]+$", project):
+        rep.error(f"jira_project: ключ проекта JIRA заглавными латинскими, получено {project!r}")
     teams = tp_teams(doc)
     if not teams or "" in teams or len(teams) != len(doc.get("teams") or []):
         rep.error("teams: у каждой команды нужен уникальный id")
@@ -1229,6 +1215,9 @@ def lint_teamplanner(doc, rep, path):
         check_category(kr, where, rep)
         if text(kr.get("epic")) not in ("", "enabler", "epic"):
             rep.error(f"{where}: epic — enabler, epic или пусто")
+        for item, at in [(kr, where)] + [(st, f"{where}, этап {m}") for m, st in enumerate(kr.get("steps") or [], 1)]:
+            if text(item.get("jira_key")) and not JIRA_KEY_RE.match(text(item.get("jira_key"))):
+                rep.error(f"{at}: jira_key — ключ JIRA вида ABC-123, получено {item.get('jira_key')!r}")
         if kr.get("details") is not None:
             if not isinstance(kr.get("details"), str):
                 rep.error(f"{where}: details — строка с HTML заметки")
@@ -1300,7 +1289,9 @@ def tp_static(doc):
             note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
             parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
                          f'<span class="et" data-v="{epic_of(kr)}">{"ЭПИК" if epic_of(kr) == "epic" else "ENABLER"}</span>'
-                         f'<span class="kr-title">{category_badge(kr)}{esc(jira_summary(kr))}</span></summary>'
+                         f'<span class="kr-title">{category_badge(kr)}{esc(jira_summary(kr))}</span>'
+                         + (f' <span class="jk">{esc(kr.get("jira_key"))}</span>' if text(kr.get("jira_key")) else "")
+                         + f'</summary>'
                          f'{note}<ul class="tp-static">{items}</ul></details>')
     return "\n".join(parts)
 
@@ -1399,15 +1390,11 @@ def export_csv(path, out):
     return len(rows)
 
 
-# ---------------------------------------------------------------- JIRA: структура переноса
+# ---------------------------------------------------------------- JIRA: перенос из TeamPlanner
 
-# Перенос плана в JIRA. Агент пишет jira-<quarter>.json — структуру переноса;
-# скрипт её проверяет, показывает текстом для согласования и пускает к созданию
-# задач только после подтверждения. Создаёт задачи агент (Atlassian MCP) или
-# импорт JIRA из CSV, и только из подтверждённой структуры.
-JIRA_STATUSES = ["черновик", "подтверждено", "перенесено"]
-EPIC_TYPES = {"enabler": "ЭПИК-ENABLER", "epic": "ЭПИК"}
-BFT_STATES = {"есть": "БФТ есть", "нет": "БФТ нет — сначала описать", "": "БФТ не выяснен"}
+# В JIRA уходит принятый TeamPlanner: KR — эпик (enabler — инициатива, закрывается
+# БФТ; epic — бессрочный), этап — история. Ключи созданных задач пишутся в
+# TeamPlanner (jira_key) — повторный перенос их пропускает.
 JIRA_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
 JIRA_CSV_COLUMNS = ["Issue Id", "Parent Id", "Issue Type", "Summary", "Epic Name", "Labels", "Description"]
 
@@ -1417,325 +1404,46 @@ def jira_summary(item):
     return (f"[{tag}] " if tag else "") + text(item.get("title"))
 
 
-def story_line(story):
-    """«US1 [SRE] — название» с кодом, «[SA] название» без кода, иначе просто название."""
-    code, tag, title = text(story.get("code")), text(story.get("tag")), text(story.get("title"))
-    if code:
-        return f"{code}{f' [{tag}]' if tag else ''} — {title}"
-    return f"[{tag}] {title}" if tag else title
-
-
-def scope_initiatives(scope):
-    return {text(i.get("id")): i for o in scope.get("objectives") or [] for i in o.get("initiatives") or []}
-
-
-def jira_scope(doc, path):
-    ref = text((doc.get("scope") or {}).get("file"))
-    if not ref:
-        return None, "не указан (scope.file)"
-    return load_linked(os.path.join(os.path.dirname(os.path.abspath(path)), ref), "scope")
-
-
-def jira_seed(scope_path, out, tp_path=None, force=False):
-    """Черновик структуры: эпик на инициативу, истории — из TeamPlanner или этапов Scope."""
-    if os.path.exists(out) and not force:
-        raise SystemExit(f"{out} уже есть — заготовка перезаписала бы согласованную структуру и ключи JIRA. "
-                         "Продолжай с ним; начать заново — --force")
-    scope = load_checked(scope_path, "scope")
-    tp = load_checked(tp_path, "teamplanner") if tp_path else None
-    planned = {text(k.get("id")): k for _, k in tp_krs(tp)} if tp else {}
-    activity = {text(i.get("id")) for o in scope.get("objectives") or [] if o.get("activity")
-                for i in o.get("initiatives") or []}
-    epics = []
-    for obj in scope.get("objectives") or []:
-        for ini in obj.get("initiatives") or []:
-            if cancelled(ini) or ini.get("in_quarter") is False:
-                continue
-            kid = text(ini.get("id"))
-            if kid in planned:
-                stories = [{"code": "", "tag": ("EXT-" if text(s.get("ext")) else "") + text(s.get("role")),
-                            "title": text(s.get("title")), "key": ""}
-                           for s in planned[kid].get("steps") or []]
-            else:
-                stories = [{"code": "", "tag": text(s.get("role")), "title": text(s.get("title")), "key": ""}
-                           for s in (ini.get("notes") or {}).get("stages") or []]
-            endless = epic_of(planned[kid]) == "epic" if kid in planned else \
-                text(ini.get("tag")) == "ACTIVITY" or kid in activity
-            epics.append({"from": [kid], "type": "epic" if endless else "enabler",
-                          "title": text(ini.get("title")), "tag": text(ini.get("tag")), "pbv": ini.get("pbv"),
-                          "category": category_of(ini), "bft": "" if endless else text(ini.get("bft")) if text(ini.get("bft")) in BFT_STATES else "",
-                          "bft_link": "", "note": "", "description": text(ini.get("result")), "key": "",
-                          "stories": stories})
-    doc = {"kind": "jira", "quarter": scope.get("quarter"), "team": scope.get("team"), "status": "черновик",
-           "updated": scope.get("updated"), "scope": {"file": os.path.basename(scope_path)},
-           "project": "", "labels": [f"OKR-{text(scope.get('quarter'))}"], "epics": epics}
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    return len(epics)
-
-
-def lint_jira(doc, rep, path):
-    if not QUARTER_RE.match(text(doc.get("quarter"))):
-        rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
-    project = text(doc.get("project"))
-    if project and not re.match(r"^[A-Z][A-Z0-9_]+$", project):
-        rep.error(f"project: ключ проекта JIRA заглавными латинскими, получено {project!r}")
-    if not project:
-        rep.gate("project: не указан проект JIRA (ключ, например VIT)")
-    epics = doc.get("epics") or []
-    if not epics:
-        rep.error("epics: нет ни одного эпика")
-    scope, problem = jira_scope(doc, path)
-    if problem:
-        rep.gate(f"scope: файл {problem}")
-    inis = scope_initiatives(scope) if scope else {}
-    mapped = {}
-    status = doc.get("status", "черновик")
-    for n, epic in enumerate(epics, 1):
-        where = f"Эпик {n}"
-        if epic.get("type") not in EPIC_TYPES:
-            rep.error(f"{where}: type — {' или '.join(EPIC_TYPES)}")
-        if not text(epic.get("title")):
-            rep.error(f"{where}: нет названия")
-        pbv = epic.get("pbv")
-        if pbv is not None and (not is_int(pbv) or not 0 <= pbv <= 9):
-            rep.error(f"{where}: PBV — целое 0..9")
-        check_category(epic, where, rep)
-        if text(epic.get("bft")) not in BFT_STATES:
-            rep.error(f"{where}: bft — «есть», «нет» или пусто")
-        for kid in epic.get("from") or []:
-            if kid in mapped:
-                rep.error(f"{where}: KR {kid} уже перенесён в эпик {mapped[kid]}")
-            mapped[kid] = n
-            ini = inis.get(kid)
-            if scope and ini is None:
-                rep.error(f"{where}: KR {kid} нет в Scope")
-            elif ini is not None and cancelled(ini):
-                rep.error(f"{where}: KR {kid} отменён в Scope — его не переносят")
-            elif ini is not None and ini.get("in_quarter") is False:
-                rep.error(f"{where}: KR {kid} не идёт в квартал по Scope — его не переносят")
-            elif ini is not None and ini.get("in_quarter") is None:
-                rep.gate(f"{where}: KR {kid} — в квартал не решено; решите до переноса")
-        if not (epic.get("from") or []):
-            rep.warn(f"{where}: не связан ни с одной инициативой Scope (from)")
-        stories = epic.get("stories") or []
-        if epic.get("type") == "enabler" and not stories:
-            rep.gate(f"{where}: у эпика-enabler нет историй")
-        if epic.get("type") == "enabler" and not text(epic.get("bft")):
-            rep.warn(f"{where}: БФТ не выяснен")
-        for m, story in enumerate(stories, 1):
-            if not text(story.get("title")):
-                rep.error(f"{where}, история {m}: нет названия")
-        for item, at in [(epic, where)] + [(s, f"{where}, история {m}") for m, s in enumerate(stories, 1)]:
-            key = text(item.get("key"))
-            if key and not JIRA_KEY_RE.match(key):
-                rep.error(f"{at}: key — ключ JIRA вида ABC-123, получено {key!r}")
-            if status == "перенесено" and not key:
-                rep.gate(f"{at}: нет ключа JIRA — перенос не закончен")
-    if scope:
-        for kid, ini in inis.items():
-            if kid not in mapped and not cancelled(ini) and ini.get("in_quarter") is True:
-                rep.gate(f"KR {kid} идёт в квартал по Scope, но не попал ни в один эпик")
-
-
-def jira_preview(doc, path=None):
-    """Структура переноса текстом — для согласования в чате, до создания задач."""
-    status = doc.get("status", "черновик")
-    head = f"JIRA {text(doc.get('quarter'))}" + (f" — {text(doc.get('team'))}" if text(doc.get("team")) else "")
-    head += f" · проект {text(doc.get('project')) or '[УТОЧНИТЬ]'} · {status}"
-    if status == "черновик":
-        head += " — ждёт подтверждения, в JIRA ничего не создано"
-    lines = [head, ""]
-    counts = {"enabler": 0, "epic": 0}
-    stories_total = 0
-    for n, epic in enumerate(doc.get("epics") or [], 1):
-        counts[epic.get("type")] = counts.get(epic.get("type"), 0) + 1
-        extra = [f"PBV {epic.get('pbv')}" if is_int(epic.get("pbv")) else "PBV —"]
-        extra += [category_of(epic)] if category_of(epic) else []
-        extra += ["бессрочный"] if epic.get("type") == "epic" else []
-        extra += [f"KR {', '.join(epic.get('from'))}"] if epic.get("from") else []
-        extra += [text(epic.get("note"))] if text(epic.get("note")) else []
-        key = f" [{text(epic.get('key'))}]" if text(epic.get("key")) else ""
-        lines.append(f"{EPIC_TYPES.get(epic.get('type'), 'ЭПИК')} {n}. {jira_summary(epic)} ({', '.join(extra)}){key}")
-        if epic.get("type") == "enabler":
-            link = f": {text(epic.get('bft_link'))}" if text(epic.get("bft_link")) else ""
-            lines.append(f"   {BFT_STATES.get(text(epic.get('bft')), BFT_STATES[''])}{link}")
-        for story in epic.get("stories") or []:
-            stories_total += 1
-            skey = f" [{text(story.get('key'))}]" if text(story.get("key")) else ""
-            lines.append(f"→ История: {story_line(story)}{skey}")
-        if not epic.get("stories"):
-            lines.append("→ историй нет")
-        lines.append("")
-    if path:
-        scope, _ = jira_scope(doc, path)
-        if scope:
-            mapped = {kid for e in doc.get("epics") or [] for kid in e.get("from") or []}
-            skipped = []
-            for kid, ini in scope_initiatives(scope).items():
-                if kid in mapped:
-                    continue
-                why = "отменено" if cancelled(ini) else "не в квартал" if ini.get("in_quarter") is False else \
-                    "в квартал не решено" if ini.get("in_quarter") is None else "в квартал, но не в структуре!"
-                skipped.append(f"{kid} {text(ini.get('title'))} ({why})")
-            if skipped:
-                lines.append("Не переносится:")
-                lines += [f"  · {s}" for s in skipped]
-                lines.append("")
-    lines.append(f"Итого: эпиков {counts.get('enabler', 0) + counts.get('epic', 0)} "
-                 f"(enabler {counts.get('enabler', 0)}, бессрочных {counts.get('epic', 0)}), историй {stories_total}.")
-    return "\n".join(lines) + "\n"
-
-
-UNSURE_MARK = '<mark class="unc">[УТОЧНИТЬ]</mark>'
-
-
-def jira_attention(epic, inis):
-    """Что в эпике требует решения PO до переноса — короткими метками. Невыясненный
-    БФТ сюда не входит: он виден в карточке и в предупреждениях lint."""
-    out = []
-    if not epic.get("stories"):
-        out.append("нет историй")
-    if epic.get("type") == "enabler" and text(epic.get("bft")) == "нет":
-        out.append("сначала БФТ")
-    if any(inis.get(k, {}).get("in_quarter") is None and k in inis for k in epic.get("from") or []):
-        out.append("в квартал ?")
-    return out
-
-
-def render_jira(doc, source):
-    """Страница согласования структуры переноса — в стиле TeamPlanner: эпик раскрывается
-    на месте в истории, БФТ и описание; правый клик по любому пункту — комментарий."""
-    quarter, team = text(doc.get("quarter")), text(doc.get("team"))
-    title = f"JIRA {quarter}" + (f" — {team}" if team else "")
-    scope, _ = jira_scope(doc, source)
-    inis = scope_initiatives(scope) if scope else {}
-    epics = doc.get("epics") or []
-    status = doc.get("status", "черновик")
-    blocks, cards, attention, stories_total = [], {}, 0, 0
-
-    def q(sec, quote):
-        return f'data-sec="{html.escape(sec)}" data-quote="{html.escape(quote)}"'
-
-    for n, epic in enumerate(epics, 1):
-        eid = str(n)
-        flags = jira_attention(epic, inis)
-        attention += bool(flags)
-        stories = epic.get("stories") or []
-        stories_total += len(stories)
-        kind = epic.get("type") if epic.get("type") in EPIC_TYPES else "enabler"
-        key = text(epic.get("key"))
-        summary = jira_summary(epic)
-        meta = [f"KR {', '.join(epic.get('from'))}" if epic.get("from") else "", f"историй {len(stories)}"]
-        head = (f'<summary><span class="kr-id">{eid}</span>'
-                f'<span class="et" data-v="{kind}">{"ENABLER" if kind == "enabler" else "ЭПИК"}</span>'
-                f'<span class="kr-title">{category_badge(epic)}{esc(summary)}'
-                + (f' <span class="jkey">{esc(key)}</span>' if key else "") + "</span>"
-                f'<span class="jmeta">{pbv_cell(epic.get("pbv"))} {esc(" · ".join(x for x in meta if x))}</span>'
-                + "".join(f"<span class=flag>{esc(x)}</span>" for x in flags) + "</summary>")
-        body = []
-        if text(epic.get("note")):
-            body.append(f'<div class="jline" {q("Пометка", text(epic.get("note")))}>{esc(epic.get("note"))}</div>')
-        if kind == "enabler":
-            bft = BFT_STATES.get(text(epic.get("bft")), BFT_STATES[""])
-            link = text(epic.get("bft_link"))
-            body.append(f'<div class="jline jbft" data-v="{html.escape(text(epic.get("bft")) or "unknown")}" {q("БФТ", bft)}>'
-                        f'{esc(bft)}' + (f': <a href="{html.escape(link)}" target="_blank" rel="noopener">{esc(link)}</a>' if link else "")
-                        + "</div>")
-        rows = []
-        for st in stories:
-            lead = " ".join(x for x in (text(st.get("code")), text(st.get("tag"))) if x)
-            skey = text(st.get("key"))
-            rows.append(f'<div class="story" {q("Истории", story_line(st))}><span class="t">{esc(lead) or "—"}</span>'
-                        f'<span class="st-title">{esc(st.get("title"))}</span>'
-                        + (f'<span class="jkey">{esc(skey)}</span>' if skey else "") + "</div>")
-        body.append('<div class="stories">' + ("".join(rows) or '<div class="story none" '
-                    + q("Истории", "нет историй") + '>историй нет — нужны до переноса</div>') + "</div>")
-        if text(epic.get("description")):
-            body.append(f'<div class="jdesc" {q("Описание", text(epic.get("description")))}>{esc_unc(epic.get("description"))}</div>')
-        blocks.append(f'<details class="row jepic" data-kr="{eid}" data-tags="{kind}{" attention" if flags else ""}">'
-                      + head + '<div class="jbody">' + "".join(body) + "</div></details>")
-        cards[eid] = {"head": f"Эпик {eid}", "title": summary, "line": "", "segs": [], "segsCount": "", "blocks": []}
-
-    counts = {k: sum(1 for e in epics if e.get("type") == k) for k in EPIC_TYPES}
-    items = [("", "Все эпики", "все", len(epics)),
-             ("attention", "Требуют решения", "требуют решения", attention),
-             ("enabler", "Эпики-enabler", "enabler", counts["enabler"]),
-             ("epic", "Бессрочные эпики", "бессрочные", counts["epic"])]
-    state = {"черновик": "ждёт подтверждения — в JIRA ничего не создано",
-             "подтверждено": "подтверждено — можно переносить",
-             "перенесено": "перенесено в JIRA"}.get(status, status)
-    summary_line = (f"Эпиков {len(epics)} (enabler {counts['enabler']}, бессрочных {counts['epic']}) · историй {stories_total}"
-                    + (f" · требуют решения {attention}" if attention else "")
-                    + f" · проект {esc(doc.get('project')) or UNSURE_MARK} · {esc(state)}.")
-    parts = [
-        filter_drawer("Показать", "Эпики", items),
-        '<div class="layout wide"><main>',
-        f'<div class="tp-top"><h2 class="obj">{html.escape(title)}</h2><div class="tp-act">'
-        '<button type="button" id="jOpen">Развернуть все</button><button type="button" id="jClose">Свернуть все</button>'
-        '</div></div>',
-        f'<p class="jsum">{summary_line}</p>',
-        '<div class="jepics">' + "".join(blocks) + "</div>",
-    ]
-    if scope:
-        mapped = {kid for e in epics for kid in e.get("from") or []}
-        skipped = [(kid, ini) for kid, ini in inis.items() if kid not in mapped]
-        if skipped:
-            body = "".join(
-                f'<tr><td>{esc(kid)}</td><td>{esc(ini.get("title"))}</td><td>'
-                + ("отменено" if cancelled(ini) else "не в квартал" if ini.get("in_quarter") is False
-                   else "в квартал не решено" if ini.get("in_quarter") is None else "в квартал, но не в структуре!")
-                + "</td></tr>" for kid, ini in skipped)
-            parts.append('<details class="jskip"><summary>Не переносится: ' + str(len(skipped)) + '</summary>'
-                         '<div class="table-wrap"><table class="mini head">'
-                         f'<tr><td>KR</td><td>Инициатива</td><td>Почему</td></tr>{body}</table></div></details>')
-    if status == "черновик":
-        parts.append('<div class="ask-block"><h4>Согласование</h4>Всё верно — напишите агенту «да, переносим». '
-                     'Нужны правки — словами в чате или правым кликом по эпику, истории, БФТ: комментарий для агента.</div>')
-    parts.append("</main></div>")
-    parts.append("<script>document.getElementById('jOpen').onclick=function(){document.querySelectorAll('details.jepic')"
-                 ".forEach(function(d){d.open=true})};document.getElementById('jClose').onclick=function(){"
-                 "document.querySelectorAll('details.jepic').forEach(function(d){d.open=false})};</script>")
-    return page(title, source, "jira.css", parts, cards, unit="Эпик")
+def story_summary(step):
+    return f"[{role_text(step)}] {text(step.get('title'))}"
 
 
 def jira_ready(path):
-    """Пускает к созданию задач: структура подтверждена и проходит lint --final."""
-    doc = load_checked(path, "jira")
+    """Пускает к переносу: TeamPlanner принят, проходит lint --final, указан проект JIRA."""
+    doc = load_checked(path, "teamplanner")
     problems = []
-    if doc.get("status") not in ("подтверждено", "перенесено"):
-        problems.append("структура не подтверждена — покажи preview и дождись явного «да» от PO "
-                        "(после него status: \"подтверждено\")")
+    if doc.get("status") != "принято":
+        problems.append("TeamPlanner не принят — покажи страницу PO и дождись явного «да» "
+                        "(после него status: \"принято\")")
+    if not text(doc.get("jira_project")):
+        problems.append("jira_project: не указан проект JIRA (ключ, например VIT)")
     problems += lint(path, final=True).errors
     return problems
 
 
 def jira_csv(path, out):
-    """CSV для импорта JIRA: эпики и истории со связью через Issue Id / Parent Id."""
+    """CSV для импорта JIRA: KR — Epic, этап — Story (Parent Id), только из принятого TeamPlanner."""
     problems = jira_ready(path)
     if problems:
         raise SystemExit("Не готово к переносу:\n  " + "\n  ".join(problems))
     doc = load(path)
-    base = [text(x) for x in doc.get("labels") or [] if text(x)]
+    quarter = text(doc.get("quarter"))
     rows, n = [], 0
-    for epic in doc.get("epics") or []:
+    for _, kr in tp_krs(doc):
         n += 1
         eid = n
-        labels = base + [f"KR-{k}" for k in epic.get("from") or []] + ([category_of(epic)] if category_of(epic) else [])
-        labels += [f"PBV-{epic.get('pbv')}"] if is_int(epic.get("pbv")) else []
-        desc = [text(epic.get("description"))]
-        if epic.get("type") == "enabler":
-            desc.append(BFT_STATES.get(text(epic.get("bft")), BFT_STATES[""])
-                        + (f": {text(epic.get('bft_link'))}" if text(epic.get("bft_link")) else ""))
-        rows.append({"Issue Id": eid, "Issue Type": "Epic", "Summary": jira_summary(epic), "Epic Name": jira_summary(epic),
-                     "Labels": " ".join(labels), "Description": "\n".join(x for x in desc if x)})
-        for story in epic.get("stories") or []:
+        labels = [f"OKR-{quarter}", f"KR-{text(kr.get('id'))}", "epic-" + epic_of(kr)]
+        labels += [category_of(kr)] if category_of(kr) else []
+        labels += [f"PBV-{kr.get('pbv')}"] if is_int(kr.get("pbv")) else []
+        desc = "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment")), rich_text(kr.get("details"))) if x)
+        rows.append({"Issue Id": eid, "Issue Type": "Epic", "Summary": jira_summary(kr), "Epic Name": jira_summary(kr),
+                     "Labels": " ".join(labels), "Description": desc})
+        for step in kr.get("steps") or []:
             n += 1
-            title = story_line(story)
-            rows.append({"Issue Id": n, "Parent Id": eid, "Issue Type": "Story", "Summary": title,
-                         "Labels": " ".join(base + [f"KR-{k}" for k in epic.get("from") or []]),
-                         "Description": text(story.get("description"))})
+            rows.append({"Issue Id": n, "Parent Id": eid, "Issue Type": "Story", "Summary": story_summary(step),
+                         "Labels": f"OKR-{quarter} KR-{text(kr.get('id'))}",
+                         "Description": "\n".join(x for x in (text(step.get("result")), text(step.get("action")),
+                                                              text(step.get("comment"))) if x)})
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=JIRA_CSV_COLUMNS, restval="")
         writer.writeheader()
@@ -1746,7 +1454,7 @@ def jira_csv(path, out):
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-seed", "preview", "jira-ready", "jira-csv"):
+    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-ready", "jira-csv"):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd, path = argv[0], argv[1]
@@ -1762,9 +1470,6 @@ def main(argv):
             return 1
         print(f"OK{' (предупреждений: ' + str(len(rep.warnings)) + ')' if rep.warnings else ''}")
         return 0
-    if cmd == "preview":
-        sys.stdout.write(jira_preview(load_checked(path, "jira"), path))
-        return 0
     if cmd == "jira-ready":
         problems = jira_ready(path)
         if problems:
@@ -1777,11 +1482,6 @@ def main(argv):
     if len(argv) < 3:
         print(__doc__.strip(), file=sys.stderr)
         return 2
-    if cmd == "jira-seed":
-        tp = argv[argv.index("--teamplanner") + 1] if "--teamplanner" in argv else None
-        count = jira_seed(path, argv[2], tp, force="--force" in argv)
-        print(f"Written {argv[2]} ({count} эпиков) — дальше: доработать, preview, подтверждение PO")
-        return 0
     if cmd == "jira-csv":
         count = jira_csv(path, argv[2])
         print(f"Written {argv[2]} ({count} строк)")

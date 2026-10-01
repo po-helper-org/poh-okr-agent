@@ -100,3 +100,4 @@ details.kr > summary{ flex-wrap:wrap; }
 .kr-type select{ font:inherit; font-size:.74rem; padding:.15rem .3rem; border:1px solid var(--line-soft); background:var(--bg); margin-left:.4rem; }
 .tp-act{ flex-wrap:wrap; }
 @media (max-width:640px){ .kr-type{ padding-left:.4rem; } }
+.jk{ font-family:"Courier New",monospace; font-size:.7rem; color:#2f4c73; }
