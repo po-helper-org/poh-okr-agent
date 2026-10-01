@@ -50,7 +50,9 @@ KR_ID_RE = re.compile(r"^\d+(\.\d+)+$")
 UNSURE_RE = re.compile(r"\[УТОЧНИТЬ[^\]\n]*\]")
 
 TEAMPLANNER_COLUMNS = ["Название", "Комментарий", "Роль", "Исполнитель", "Начало", "Конец",
-                       "Статус", "Прогресс, %", "Образ результата", "Образ действия"]
+                       "Статус", "Прогресс, %", "Образ результата", "Образ действия", "Оценка, дн"]
+# KR с малым PBV и исследования по умолчанию начинаются с одного шага — собрать БФТ.
+BFT_STEP_TITLE = "Сбор БФТ-требований"
 
 
 def text(value):
@@ -67,6 +69,31 @@ def unsure(value):
 
 def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_days(value):
+    """Оценка подзадачи в днях: обычное неотрицательное число (целое или дробное)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 and value == value
+
+
+def num_text(value):
+    """Число как в JS: 5.0 → «5», 2.5 → «2.5»; округление до сотых."""
+    value = round(value, 2)
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
+def step_days(step):
+    return step.get("days") if is_days(step.get("days")) else None
+
+
+def kr_days(kr):
+    days = [d for d in (step_days(st) for st in kr.get("steps") or []) if d is not None]
+    return round(sum(days), 2) if days else None
+
+
+def needs_bft_only(kr):
+    """PBV < 5 или RESEARCH: по умолчанию одна подзадача — [PO] Сбор БФТ-требований."""
+    return (is_int(kr.get("pbv")) and kr.get("pbv") < 5) or text(kr.get("tag")) == "RESEARCH"
 
 
 def cancelled(item):
@@ -121,7 +148,7 @@ SHAPES = {
             "id": V, "title": V, "pbv": V, "tag": V, "category": V, "epic": V, "jira_key": V, "teams": L, "owner": V,
             "result": T, "comment": T, "details": V,
             "steps": [{"role": V, "title": V, "ext": V, "who": V, "start": V, "end": V, "status": V,
-                       "progress": V, "result": T, "action": T, "comment": T, "jira_key": V}]}]}],
+                       "progress": V, "days": V, "result": T, "action": T, "comment": T, "jira_key": V}]}]}],
     },
 }
 
@@ -1157,6 +1184,9 @@ def seed(scope_path, out, force=False):
                       "ext": ext_team if st.get("ext") else "", "who": "", "start": "", "end": "",
                       "status": text(st.get("status")) or "TODO", "result": "", "action": "", "comment": ""}
                      for st in notes.get("stages") or []]
+            if not steps and needs_bft_only(ini):
+                steps = [{"role": "PO", "title": BFT_STEP_TITLE, "ext": "", "who": "", "start": "", "end": "",
+                          "status": "TODO", "result": "", "action": "", "comment": ""}]
             context = [f"Риск: {text(r)}" for r in notes.get("risks") or []]
             context += [f"Зависимость: {text(d)}" for d in notes.get("dependencies") or []]
             krs.append({"id": text(ini.get("id")), "title": text(ini.get("title")), "pbv": ini.get("pbv"),
@@ -1212,6 +1242,8 @@ def lint_teamplanner(doc, rep, path):
         for tid in kr.get("teams") or []:
             if tid not in teams:
                 rep.error(f"{where}: команда {tid!r} не описана в teams")
+        if not text(kr.get("title")):
+            rep.error(f"{where}: нет названия")
         check_category(kr, where, rep)
         if text(kr.get("epic")) not in ("", "enabler", "epic"):
             rep.error(f"{where}: epic — enabler, epic или пусто")
@@ -1245,6 +1277,8 @@ def lint_teamplanner(doc, rep, path):
             progress = step.get("progress")
             if progress is not None and (not is_int(progress) or not 0 <= progress <= 100):
                 rep.error(f"{at}: progress — целое 0..100")
+            if step.get("days") is not None and not is_days(step.get("days")):
+                rep.error(f"{at}: days — оценка в днях, число от 0")
             for key in ("start", "end"):
                 if text(step.get(key)) and not DATE_RE.match(text(step.get(key))):
                     rep.error(f"{at}: {key} — дата ГГГГ-ММ-ДД")
@@ -1284,7 +1318,8 @@ def tp_static(doc):
         for kr in obj.get("krs") or []:
             items = "".join(
                 f'<li><span class="t">{esc(role_text(step))}</span> {esc_unc(step.get("title"))}'
-                f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}</li>'
+                f' — {esc(who_text(doc, kr, step)) or "исполнитель не выбран"}'
+                + (f' · {num_text(step_days(step))} дн' if step_days(step) is not None else "") + '</li>'
                 for step in kr.get("steps") or [])
             note = f'<div class="kr-details">{rich_html(kr.get("details"))}</div>' if rich_text(kr.get("details")) else ""
             parts.append(f'<details class="kr" open><summary><span class="kr-id">{esc(kr.get("id"))}</span>'
@@ -1322,7 +1357,14 @@ def render_teamplanner(doc, source):
         'применены. <button type="button" id="bStaleGet">Скачать их</button> · '
         '<button type="button" id="bStaleDrop">Отбросить</button></p>',
         f'<div id="tp">{tp_static(doc)}</div>',
+        '<p class="hintline">Правый клик по цели, KR или подзадаче — комментарий для ИИ-агента; комментарии '
+        'копятся справа. Shift + правый клик — обычное меню браузера.</p>',
         '</main></div>',
+        '<aside class="notes" id="tpNotes" hidden><h4>Комментарии для ИИ-агента · <span id="tpNotesN">0</span></h4>'
+        '<div id="tpNotesList"></div><div class="row-btns">'
+        '<button type="button" class="primary" id="tpNotesCopy">Скопировать для агента</button>'
+        '<button type="button" id="tpNotesSave">Скачать файлом</button>'
+        '<button type="button" id="tpNotesClear">Очистить</button></div></aside>',
         '<div class="scrim" id="scrim"></div><div class="side" id="side"><div class="side-head">'
         '<span class="kr-id" id="sideKr"></span><button class="drawer-close" id="sideClose" type="button">×</button></div>'
         '<h3 class="side-title" id="sideTitle"></h3>'
@@ -1363,7 +1405,8 @@ def tp_rows(doc):
                          "Комментарий": "\n".join(x for x in (text(kr.get("result")), text(kr.get("comment")),
                                                              rich_text(kr.get("details"))) if x),
                          "Исполнитель": text(kr.get("owner")), "Начало": start, "Конец": end,
-                         "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct})
+                         "Статус": STATUS_RU[kr_status(kr)], "Прогресс, %": "" if pct is None else pct,
+                         "Оценка, дн": "" if kr_days(kr) is None else num_text(kr_days(kr))})
             for step in kr.get("steps") or []:
                 rows.append({"Название": f"{text(step.get('title'))} ({role_text(step)})",
                              "Комментарий": text(step.get("comment")), "Роль": role_text(step),
@@ -1371,7 +1414,8 @@ def tp_rows(doc):
                              "Начало": text(step.get("start")), "Конец": text(step.get("end")),
                              "Статус": STATUS_RU.get(text(step.get("status")) or "TODO", ""),
                              "Прогресс, %": step_pct(step),
-                             "Образ результата": text(step.get("result")), "Образ действия": text(step.get("action"))})
+                             "Образ результата": text(step.get("result")), "Образ действия": text(step.get("action")),
+                             "Оценка, дн": "" if step_days(step) is None else num_text(step_days(step))})
     return rows
 
 
@@ -1406,6 +1450,10 @@ def jira_summary(item):
 
 def story_summary(step):
     return f"[{role_text(step)}] {text(step.get('title'))}"
+
+
+def days_note(step):
+    return f"Оценка: {num_text(step_days(step))} дн." if step_days(step) is not None else ""
 
 
 def jira_ready(path):
@@ -1443,7 +1491,7 @@ def jira_csv(path, out):
             rows.append({"Issue Id": n, "Parent Id": eid, "Issue Type": "Story", "Summary": story_summary(step),
                          "Labels": f"OKR-{quarter} KR-{text(kr.get('id'))}",
                          "Description": "\n".join(x for x in (text(step.get("result")), text(step.get("action")),
-                                                              text(step.get("comment"))) if x)})
+                                                              text(step.get("comment")), days_note(step)) if x)})
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=JIRA_CSV_COLUMNS, restval="")
         writer.writeheader()

@@ -342,6 +342,43 @@ class TeamPlanner(Case):
         self.assertEqual(doc["status"], "черновик")
         self.assertEqual([k["category"] for o in doc["objectives"] for k in o["krs"]], ["Change", "Disrupt", "Run", "Run"])
 
+    def test_seed_small_and_research_krs_start_with_bft(self):
+        inis = {i["id"]: i for o in self.scope["objectives"] for i in o["initiatives"]}
+        inis["2.1"]["notes"].pop("stages")  # Scope без /okr-stages у этой инициативы
+        self.scope["phase"] = "scope"
+        inis["3.1"]["pbv"] = 4
+        inis["1.1"]["pbv"] = 3
+        out = os.path.join(self.tmp.name, "seed.json")
+        okr_plan.seed(self.write(self.scope, "scope-2026Q4.json"), out)
+        with open(out, encoding="utf-8") as f:
+            krs = {k["id"]: k for o in json.load(f)["objectives"] for k in o["krs"]}
+        bft = [("PO", "Сбор БФТ-требований")]
+        self.assertEqual([(s["role"], s["title"]) for s in krs["2.1"]["steps"]], bft)
+        self.assertEqual([(s["role"], s["title"]) for s in krs["3.1"]["steps"]], bft)
+        self.assertEqual(len(krs["1.1"]["steps"]), 4)  # этапы /okr-stages важнее заготовки
+        self.assertEqual(krs["1.2"]["steps"][0]["role"], "PO")
+        self.assertTrue(okr_plan.needs_bft_only({"pbv": 0}))
+        self.assertFalse(okr_plan.needs_bft_only({"pbv": 5, "tag": "BUG"}))
+        self.assertFalse(okr_plan.needs_bft_only({}))
+
+    def test_days_estimate(self):
+        steps = self.kr("1.1")["steps"]
+        steps[0]["days"], steps[1]["days"] = 3, 2.5
+        self.assertEqual(self.lint_tp().errors, [])
+        self.assertEqual(okr_plan.kr_days(self.kr("1.1")), 5.5)
+        self.assertIsNone(okr_plan.kr_days(self.kr("1.2")))
+        self.assertEqual((okr_plan.num_text(5.0), okr_plan.num_text(0.1 + 0.2)), ("5", "0.3"))
+        rows = okr_plan.tp_rows(self.tp)
+        self.assertEqual(rows[1]["Оценка, дн"], "5.5")
+        self.assertEqual((rows[2]["Оценка, дн"], rows[3]["Оценка, дн"], rows[4]["Оценка, дн"]), ("3", "2.5", ""))
+        for bad in (-1, "3", True):
+            steps[0]["days"] = bad
+            self.assertError(self.lint_tp(), "KR 1.1, этап 1: days — оценка в днях")
+
+    def test_kr_needs_title(self):
+        self.kr("1.1")["title"] = ""
+        self.assertError(self.lint_tp(), "KR 1.1: нет названия")
+
     def test_seed_requires_accepted_scope(self):
         self.scope["status"] = "черновик"
         with self.assertRaises(SystemExit):
@@ -394,6 +431,8 @@ class TeamPlanner(Case):
         self.assertIn('[RESEARCH] Поиск на новой платформе', page)
         self.assertIn('id="tpSum"', page)
         self.assertIn('id="tpOpenAll"', page)
+        for marker in ('id="tpNotes" hidden', 'id="tpNotesCopy"', 'id="tpNotesSave"', "Правый клик по цели, KR или подзадаче"):
+            self.assertIn(marker, page)
 
     def test_step_values(self):
         step = self.kr("2.1")["steps"][0]
