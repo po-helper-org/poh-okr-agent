@@ -1,7 +1,7 @@
 # Брендбук экватора
 
 Извлечено из реального референс-деку PO (`srgbClr`, не тема Office по
-умолчанию). Используется `build_equator_pptx.js` и (по ссылке)
+умолчанию). Используется `build_equator_pptx.js`, `skills/okr-present/scripts/build_present_pptx.js` и (по ссылке)
 `skills/okr-plan-deck/scripts/build_plan_deck.js`. Переопределяется через
 `okr-config.md → brand_override`.
 

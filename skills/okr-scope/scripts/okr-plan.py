@@ -2,7 +2,8 @@
 """Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, презентация команде, CSV.
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
-  okr-plan.py render <file.json> <out.html>            страница или презентация (kind: present)
+  okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН или TEAMPLANNER
+  okr-plan.py present <present.json> <data.json>       факты презентации квартала для build_present_pptx.js
   okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
   okr-plan.py jira-ready <teamplanner.json>            можно ли переносить в JIRA: принят, lint --final, проект
@@ -152,7 +153,10 @@ SHAPES = {
     },
     "present": {
         "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "teamplanner": {"file": V},
-        "message": T, "retro_note": T, "objectives": [{"id": V, "message": T}], "how": L, "asks": L, "skip": L,
+        "message": T, "retro_note": T, "objectives": [{"id": V, "message": T}],
+        "risks": [{"category": V, "title": T, "detail": T, "kr": V}],
+        "sprints": [{"name": V, "start": V, "end": V}], "sprint_weeks": V,
+        "how": L, "asks": L, "skip": L,
     },
 }
 
@@ -998,7 +1002,8 @@ def render(path, out):
     elif doc.get("kind") == "teamplanner":
         page_html = render_teamplanner(doc, path)
     elif doc.get("kind") == "present":
-        page_html = render_present(doc, path)
+        raise SystemExit("Презентация собирается в .pptx: okr-plan.py present <present.json> <data.json>, "
+                         "затем node skills/okr-present/scripts/build_present_pptx.js <data.json> <out.pptx>")
     else:
         raise SystemExit("kind: ожидается 'retro', 'scope', 'teamplanner' или 'present'")
     with open(out, "w", encoding="utf-8") as f:
@@ -1507,12 +1512,16 @@ def jira_csv(path, out):
 
 # ---------------------------------------------------------------- Презентация квартала команде
 
-# Слайды, которые можно скрыть списком skip. Титул, цели, слайды целей и финал есть всегда.
-PRESENT_SLIDES = {"retro": "итоги прошлого квартала", "people": "кто за что отвечает",
-                  "timeline": "как двигаемся", "risks": "риски и зависимости",
-                  "not_taken": "что не берём", "how": "как работаем"}
+# Презентация — .pptx в формате отчёта-экватора (/okr-equator): от общего к частному.
+# Вводная → Ретро по каждой цели → Планы по каждой цели. Здесь считаются все факты
+# (payload), рисует слайды skills/okr-present/scripts/build_present_pptx.js.
+PRESENT_SLIDES = {"retro": "часть «Ретро» и «Результаты прошлого»", "risks": "актуальные риски",
+                  "sprints": "инициативы по спринтам", "gantt": "GANTT по сотрудникам", "asks": "что нужно от команды"}
+RISK_CATEGORIES = ["Внешнее", "Ресурс", "Срок", "Зависимость", "Организация", "Техническое", "Общее"]
 MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь",
              "октябрь", "ноябрь", "декабрь"]
+OUTCOME_RU = {"done": "закрыт", "partial": "частично", "failed": "не сделан", "dropped": "отменён",
+              "unknown": "нет оценки"}
 
 
 def present_sources(doc, path):
@@ -1544,6 +1553,31 @@ def present_sources(doc, path):
     return tp, scope, retro, problems
 
 
+def present_sprints(doc, quarter):
+    """Спринты квартала: из sprints документа или по sprint_weeks (по умолчанию 2 недели)
+    от начала квартала; короткий хвост присоединяется к последнему спринту."""
+    import datetime
+    given = [s for s in doc.get("sprints") or [] if isinstance(s, dict)]
+    if given:
+        return [{"name": text(s.get("name")) or f"Спринт {n}", "start": text(s.get("start")), "end": text(s.get("end"))}
+                for n, s in enumerate(given, 1)]
+    bounds = quarter_bounds(quarter)
+    if not bounds:
+        return []
+    weeks = doc.get("sprint_weeks") if is_int(doc.get("sprint_weeks")) and 1 <= doc.get("sprint_weeks") <= 6 else 2
+    day = datetime.date.fromisoformat(bounds[0])
+    last = datetime.date.fromisoformat(bounds[1])
+    out = []
+    while day <= last:
+        end = min(day + datetime.timedelta(days=7 * weeks - 1), last)
+        # Хвост короче полуспринта — не отдельный спринт, а продолжение последнего.
+        if (last - end).days < max(7, 7 * weeks * 0.6):
+            end = last
+        out.append({"name": f"Спринт {len(out) + 1}", "start": day.isoformat(), "end": end.isoformat()})
+        day = end + datetime.timedelta(days=1)
+    return out
+
+
 def lint_present(doc, rep, path):
     quarter = text(doc.get("quarter"))
     if not QUARTER_RE.match(quarter):
@@ -1566,15 +1600,51 @@ def lint_present(doc, rep, path):
         for n, obj in enumerate(doc.get("objectives") or [], 1):
             if text(obj.get("id")) not in ids:
                 rep.error(f"objectives[{n}]: цели {obj.get('id')!r} нет в TeamPlanner")
+        kr_ids = {text(kr.get("id")) for _, kr in tp_krs(tp)}
+        for n, risk in enumerate(doc.get("risks") or [], 1):
+            where = f"risks[{n}]"
+            if not text(risk.get("title")):
+                rep.error(f"{where}: нет title — в чём риск")
+            if text(risk.get("category")) and text(risk.get("category")) not in RISK_CATEGORIES:
+                rep.error(f"{where}: category — одно из {RISK_CATEGORIES}")
+            if text(risk.get("kr")) and text(risk.get("kr")) not in kr_ids:
+                rep.error(f"{where}: KR {risk.get('kr')!r} нет в TeamPlanner")
     if scope and scope.get("status") != "принято":
         rep.gate("Scope не принят — команде показывают принятый план")
     for value in doc.get("skip") or []:
         if text(value) not in PRESENT_SLIDES:
             rep.error(f"skip: {value!r} — одно из {sorted(PRESENT_SLIDES)}")
+    sprints = present_sprints(doc, quarter)
+    for n, sp in enumerate(doc.get("sprints") or [], 1):
+        if not isinstance(sp, dict) or not DATE_RE.match(text(sp.get("start"))) or not DATE_RE.match(text(sp.get("end"))):
+            rep.error(f"sprints[{n}]: нужны start и end — даты ГГГГ-ММ-ДД")
+        elif text(sp.get("start")) > text(sp.get("end")):
+            rep.error(f"sprints[{n}]: начало позже конца")
+    if doc.get("sprint_weeks") is not None and not (is_int(doc.get("sprint_weeks")) and 1 <= doc.get("sprint_weeks") <= 6):
+        rep.error("sprint_weeks: целое 1..6 — длина спринта в неделях")
+    if len(sprints) > 8:
+        rep.warn(f"спринтов {len(sprints)} — таблица по спринтам будет тесной, укрупни sprint_weeks")
     if not text(doc.get("message")):
         rep.gate("message: нет главной мысли квартала — одно предложение для титула")
-    if retro and not text(doc.get("retro_note")) and "retro" not in (doc.get("skip") or []):
-        rep.warn("retro_note: нет вывода из прошлого квартала — слайд итогов будет только с цифрами")
+
+
+def day_index(date, bounds):
+    """Доля квартала (0..1) для даты ГГГГ-ММ-ДД; за границами — к краю; не дата — None."""
+    import datetime
+    try:
+        day = datetime.date.fromisoformat(text(date))
+        start = datetime.date.fromisoformat(bounds[0])
+        end = datetime.date.fromisoformat(bounds[1])
+    except ValueError:
+        return None
+    span = (end - start).days + 1
+    return round(min(max((day - start).days / span, 0.0), 1.0), 4)
+
+
+def short_date(date):
+    """2026-10-05 → 05.10; не дата — как есть."""
+    date = text(date)
+    return f"{date[8:10]}.{date[5:7]}" if DATE_RE.match(date) else date
 
 
 def months_of(quarter):
@@ -1585,251 +1655,234 @@ def months_of(quarter):
     return [MONTHS_RU[first - 1 + k] for k in range(3)]
 
 
-def day_index(date, bounds):
-    """Доля квартала (0..1) для даты ГГГГ-ММ-ДД; за границами — к краю."""
+def retro_part(retro):
+    """Ретро прошлого квартала: по каждой цели — исходы KR, что сделали, что осталось, что дальше."""
+    quarter = text(retro.get("next_quarter"))
+
+    def counts(krs):
+        c = {k: sum(1 for kr in krs if outcome(kr) == k) for k in OUTCOME_RU}
+        c["total"] = len(krs)
+        return c
+
+    objectives, all_krs = [], []
+    for obj in retro.get("objectives") or []:
+        krs = obj.get("krs") or []
+        all_krs += krs
+        rows = []
+        for kr in krs:
+            plan = kr.get("plan") or []
+            step = lambda s: text(s.get("step") or s.get("title"))
+            done = [step(s) for s in plan if text(s.get("status")) == "DONE" and step(s)]
+            left = [step(s) for s in plan if text(s.get("status")) != "DONE" and step(s)]
+            rows.append({"kr": text(kr.get("id")), "title": text(kr.get("title")),
+                         "pbv": kr.get("pbv") if is_int(kr.get("pbv")) else None,
+                         "outcome": outcome(kr), "result": fact_text(kr),
+                         "done": done, "left": left, "next": next_text(kr, quarter)})
+        st = retro_stats({"objectives": [obj]})
+        objectives.append({"code": f"OBJ {text(obj.get('id'))}", "name": text(obj.get("title")),
+                           "goal": text(obj.get("outcome")), "weighted": st["weighted"],
+                           "counts": counts(krs), "rows": rows})
+    total = retro_stats(retro)
+    return {"quarter": text(retro.get("quarter")), "weighted": total["weighted"],
+            "counts": counts(all_krs), "objectives": objectives}
+
+
+def quarter_weeks(quarter):
+    """Недели квартала: по 7 дней от первого дня; хвост короче недели — в последнюю."""
     import datetime
+    bounds = quarter_bounds(quarter)
+    if not bounds:
+        return []
     start = datetime.date.fromisoformat(bounds[0])
-    end = datetime.date.fromisoformat(bounds[1])
+    days = (datetime.date.fromisoformat(bounds[1]) - start).days + 1
+    count = max(days // 7, 1)
+    return [(start + datetime.timedelta(days=7 * k)).isoformat() for k in range(count)]
+
+
+def week_of(date, weeks):
+    """Номер недели квартала для даты; за границами — крайняя неделя; не дата — None."""
+    import datetime
+    if not weeks or not DATE_RE.match(text(date)):
+        return None
     try:
-        day = datetime.date.fromisoformat(date)
+        day = datetime.date.fromisoformat(text(date))
     except ValueError:
         return None
-    span = (end - start).days + 1
-    return min(max((day - start).days / span, 0.0), 1.0)
+    k = (day - datetime.date.fromisoformat(weeks[0])).days // 7
+    return min(max(k, 0), len(weeks) - 1)
 
 
-def present_people(tp):
-    """Люди → роль, KR, где они отвечают или делают подзадачи, число подзадач, оценка."""
-    people = {}
-    for team in (tp.get("teams") or []):
-        for person in team.get("people") or []:
-            name = text(person.get("name"))
-            if name:
-                people.setdefault(name, {"roles": [], "owner": [], "krs": [], "steps": 0, "days": 0})
-                role = text(person.get("role"))
-                if role and role not in people[name]["roles"]:
-                    people[name]["roles"].append(role)
-    unassigned, external = 0, {}
-    for _, kr in tp_krs(tp):
-        kid = text(kr.get("id"))
-        owner = text(kr.get("owner"))
-        if owner:
-            people.setdefault(owner, {"roles": [], "owner": [], "krs": [], "steps": 0, "days": 0})
-            people[owner]["owner"].append(kid)
-        for step in kr.get("steps") or []:
-            state = step_state(tp, kr, step)
-            who = text(step.get("who"))
-            if state["ext"]:
-                team = text(tp_teams(tp).get(state["ext"], {}).get("name") or state["ext"])
-                external.setdefault(team, [])
-                if kid not in external[team]:
-                    external[team].append(kid)
-            elif who:
-                p = people.setdefault(who, {"roles": [], "owner": [], "krs": [], "steps": 0, "days": 0})
-                p["steps"] += 1
-                p["days"] += step_days(step) or 0
-                if kid not in p["krs"]:
-                    p["krs"].append(kid)
-            else:
-                unassigned += 1
+def step_weeks(step, weeks):
+    """(первая, последняя) неделя подзадачи; одна из дат — точкой; нет дат — (None, None)."""
+    a, b = week_of(step.get("start"), weeks), week_of(step.get("end"), weeks)
+    if a is None and b is None:
+        return None, None
+    a = a if a is not None else b
+    b = b if b is not None else a
+    return min(a, b), max(a, b)
+
+
+def gantt_people(gantt, n_weeks, tp):
+    """GANTT по сотрудникам: строка — человек (или «внешняя команда», «исполнитель не выбран»),
+    по неделям — KR, над которыми он работает, и общий статус его подзадач в эту неделю."""
     order = {r: i for i, r in enumerate(tp.get("roles") or TP_ROLES)}
-    rows = [(name, p) for name, p in people.items() if p["steps"] or p["owner"]]
-    rows.sort(key=lambda r: (0 if r[1]["owner"] else 1, min([order.get(x, 99) for x in r[1]["roles"]] or [99]), r[0]))
-    return rows, unassigned, external
+    people = {}
+    for st in gantt:
+        who = st["who"]
+        kind = "ext" if who.startswith("внешний ресурс") else "none" if who in ("нет роли в команде", "исполнитель не выбран") else "person"
+        key = who if kind != "none" else f"{who} · {st['role']}"
+        p = people.setdefault(key, {"who": who, "kind": kind, "roles": [], "steps": 0, "days": 0, "undated": 0,
+                                    "weeks": [{"krs": [], "status": []} for _ in range(n_weeks)]})
+        if st["role"] not in p["roles"]:
+            p["roles"].append(st["role"])
+        p["steps"] += 1
+        p["days"] = round(p["days"] + (st["days"] or 0), 2)
+        if st["w0"] is None:
+            p["undated"] += 1
+            continue
+        for k in range(st["w0"], st["w1"] + 1):
+            cell = p["weeks"][k]
+            if st["kr"] not in cell["krs"]:
+                cell["krs"].append(st["kr"])
+            cell["status"].append(st["status"])
+    out = []
+    for p in people.values():
+        for cell in p["weeks"]:
+            sts = cell.pop("status")
+            cell["status"] = ("BLOCKED" if "BLOCKED" in sts else "IN PROGRESS" if "IN PROGRESS" in sts
+                              else "DONE" if sts and all(x == "DONE" for x in sts) else "TODO" if sts else "")
+        out.append(p)
+    rank = {"person": 0, "ext": 1, "none": 2}
+    out.sort(key=lambda p: (rank[p["kind"]], min(order.get(r.split("[")[-1].rstrip("]"), 99) for r in p["roles"]), p["who"]))
+    return out
 
 
-def short_date(date):
-    """2026-10-05 → 05.10; не дата — как есть."""
-    return f"{date[8:10]}.{date[5:7]}" if DATE_RE.match(date) else date
-
-
-def slide(kind, title, body, eyebrow=""):
-    head = f'<div class="eyebrow">{esc(eyebrow)}</div>' if eyebrow else ""
-    return f'<section class="slide" data-kind="{kind}">{head}<h2>{esc(title)}</h2>{body}</section>'
-
-
-def render_present(doc, source):
-    tp, scope, retro, problems = present_sources(doc, source)
+def present_payload(doc, path):
+    """Все факты презентации одним JSON — рисует build_present_pptx.js. Агент его не пишет."""
+    tp, scope, retro, problems = present_sources(doc, path)
     if not tp:
         raise SystemExit(problems.get("teamplanner", "TeamPlanner не найден"))
-    quarter, team = text(doc.get("quarter")), text(doc.get("team") or tp.get("team"))
-    po = text(doc.get("po") or tp.get("po"))
+    quarter = text(doc.get("quarter")) or text(tp.get("quarter"))
+    bounds = quarter_bounds(quarter)
     skip = {text(x) for x in doc.get("skip") or []}
-    krs = list(tp_krs(tp))
-    inis = {text(i.get("id")): (o, i) for o in (scope or {}).get("objectives") or [] for i in o.get("initiatives") or []}
+    inis = {text(i.get("id")): i for o in (scope or {}).get("objectives") or [] for i in o.get("initiatives") or []}
     scope_objs = {text(o.get("id")): o for o in (scope or {}).get("objectives") or []}
     messages = {text(o.get("id")): text(o.get("message")) for o in doc.get("objectives") or []}
-    steps_total = sum(len(kr.get("steps") or []) for _, kr in krs)
-    days = [kr_days(kr) for _, kr in krs if kr_days(kr) is not None]
-    slides = []
+    teams = tp_teams(tp)
+    sprints = present_sprints(doc, quarter)
+    weeks = quarter_weeks(quarter)
+    goal_of = lambda oid: messages.get(oid) or text((scope_objs.get(oid) or {}).get("why"))
 
-    # 1 · титул
-    meta = " · ".join(x for x in (f"PO: {esc(po)}" if po else "", esc(doc.get("updated"))) if x)
-    slides.append(f'<section class="slide cover" data-kind="cover"><div class="eyebrow">ПЛАН КВАРТАЛА</div>'
-                  f'<h1>{esc(quarter)}<br><span class="accent">{esc(team)}</span></h1>'
-                  f'<p class="message">{esc(doc.get("message"))}</p><p class="meta">{meta}</p></section>')
+    # Риски: курированные PO (risks) — главные; к ним — заметки Scope и внешние команды.
+    curated = [{"category": text(r.get("category")) or "Общее", "title": text(r.get("title")),
+                "detail": text(r.get("detail")), "kr": text(r.get("kr"))} for r in doc.get("risks") or []]
+    derived = []
+    for _, kr in tp_krs(tp):
+        kid = text(kr.get("id"))
+        notes = (inis.get(kid) or {}).get("notes") or {}
+        derived += [{"category": "Срок", "title": text(r), "detail": "", "kr": kid} for r in notes.get("risks") or [] if text(r)]
+        derived += [{"category": "Зависимость", "title": text(d), "detail": "", "kr": kid}
+                    for d in notes.get("dependencies") or [] if text(d)]
+        for step in kr.get("steps") or []:
+            if text(step.get("ext")):
+                team = text(teams.get(text(step.get("ext")), {}).get("name") or step.get("ext"))
+                derived.append({"category": "Внешнее", "title": f"{team}: {text(step.get('title'))}",
+                                "detail": "", "kr": kid})
+    risks = curated + [r for r in derived if r["title"] not in {c["title"] for c in curated}]
 
-    # 2 · итоги прошлого квартала
-    if retro and "retro" not in skip:
-        st = retro_stats(retro)
-        c = st["counts"]
-        carried = [(kr, text((kr.get("next") or {}).get("kr"))) for _, kr in retro_krs(retro) if next_action(kr) == "continue"]
-        nums = "".join(f'<div class="num"><b>{v}</b><span>{label}</span></div>' for v, label in (
-            (f'{st["weighted"]} %' if st["weighted"] is not None else "—", "итог квартала по PBV"),
-            (c.get("done", 0), "закрыто"), (c.get("partial", 0), "частично"),
-            (c.get("failed", 0), "не сделано"), (c.get("dropped", 0), "отменено")))
-        carry = "".join(f'<li><b>{esc(kr.get("id"))}</b> {esc(kr.get("title"))}'
-                        + (f' <span class="to">→ KR {esc(target)}</span>' if target else "") + "</li>" for kr, target in carried)
-        note = f'<p class="lead">{esc(doc.get("retro_note"))}</p>' if text(doc.get("retro_note")) else ""
-        body = (f'<div class="nums">{nums}</div>{note}'
-                + (f'<h3>Продолжаем в {esc(quarter)}</h3><ul class="plain">{carry}</ul>' if carry else ""))
-        slides.append(slide("retro", f"Итоги {text(retro.get('quarter'))}", body, "ОТКУДА МЫ ИДЁМ"))
-
-    # 3 · цели квартала
-    cards = []
+    objectives = []
     for obj in tp.get("objectives") or []:
         oid = text(obj.get("id"))
-        okrs = obj.get("krs") or []
-        why = messages.get(oid) or text((scope_objs.get(oid) or {}).get("why"))
-        cats = {}
-        for kr in okrs:
-            if category_of(kr):
-                cats[category_of(kr)] = cats.get(category_of(kr), 0) + 1
-        facts = f"KR {len(okrs)}" + "".join(f" · {k} {v}" for k, v in cats.items())
-        cards.append(f'<div class="goal"><div class="gid">OBJ {esc(oid)}</div><h3>{esc(obj.get("title"))}</h3>'
-                     + (f"<p>{esc(why)}</p>" if why else "") + f'<div class="facts">{esc(facts)}</div></div>')
-    total = f"Целей {len(tp.get('objectives') or [])} · KR {len(krs)} · подзадач {steps_total}"
-    if days:
-        total += f" · оценка {num_text(sum(days))} дн"
-    slides.append(slide("goals", "Чем занимаемся в квартале",
-                        f'<div class="goals">{"".join(cards)}</div><p class="total">{esc(total)}</p>', "ЦЕЛИ"))
-
-    # 4 · по слайду на цель
-    for obj in tp.get("objectives") or []:
-        oid = text(obj.get("id"))
-        rows = []
+        krs = []
         for kr in sorted(obj.get("krs") or [], key=lambda k: -pbv_of(k)):
+            ini = inis.get(text(kr.get("id"))) or {}
             start, end = kr_dates(kr)
-            ini = (inis.get(text(kr.get("id"))) or (None, {}))[1]
-            result = text(kr.get("result")) or text(ini.get("result"))
-            when = " — ".join(short_date(x) for x in (start, end) if x) or "уточняется"
-            d = kr_days(kr)
-            rows.append(
-                f'<tr><td class="kid">{esc(kr.get("id"))}</td>'
-                f'<td><div class="krt">{category_badge(kr)}{esc(jira_summary(kr))}</div>'
-                + (f'<div class="res">{esc(result)}</div>' if result else "") + "</td>"
-                f'<td>{pbv_cell(kr.get("pbv"))}</td><td>{esc(kr.get("owner")) or "—"}</td>'
-                f'<td class="mono">{esc(when)}</td><td class="mono">{num_text(d) + " дн" if d is not None else "—"}</td></tr>')
-        why = messages.get(oid) or text((scope_objs.get(oid) or {}).get("why"))
-        body = ((f'<p class="lead">{esc(why)}</p>' if why else "")
-                + '<table class="krs"><thead><tr><th>KR</th><th>Что и какой результат</th><th>PBV</th>'
-                  '<th>Отвечает</th><th>Сроки</th><th>Оценка</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table>")
-        slides.append(slide("objective", f"OBJ {oid} — {text(obj.get('title'))}", body, "ЦЕЛЬ"))
-
-    # 5 · кто за что отвечает
-    if "people" not in skip:
-        people, unassigned, external = present_people(tp)
-        rows = "".join(
-            f'<tr><td><b>{esc(name)}</b></td><td class="mono">{esc(", ".join(p["roles"]))}</td>'
-            f'<td>{esc(", ".join(p["owner"])) or "—"}</td><td>{esc(", ".join(p["krs"])) or "—"}</td>'
-            f'<td class="mono">{p["steps"] or "—"}</td><td class="mono">{num_text(p["days"]) + " дн" if p["days"] else "—"}</td></tr>'
-            for name, p in people)
-        notes = []
-        if external:
-            notes.append("Внешние команды: " + "; ".join(f"{t} — KR {', '.join(k)}" for t, k in external.items()))
-        if unassigned:
-            notes.append(f"Без исполнителя подзадач: {unassigned} — назначим на этой встрече")
-        body = ('<table class="people"><thead><tr><th>Кто</th><th>Роль</th><th>Отвечает за KR</th>'
-                '<th>Делает в KR</th><th>Подзадач</th><th>Оценка</th></tr></thead><tbody>' + rows + "</tbody></table>"
-                + "".join(f'<p class="note">{esc(n)}</p>' for n in notes))
-        slides.append(slide("people", "Кто за что отвечает", body, "КОМАНДА"))
-
-    # 6 · как двигаемся — шкала квартала
-    bounds = quarter_bounds(quarter)
-    if "timeline" not in skip and bounds:
-        lines, undated = [], []
-        for _, kr in krs:
-            start, end = kr_dates(kr)
-            a = day_index(start, bounds) if start else None
-            b = day_index(end, bounds) if end else None
-            label = f'<span class="kid">{esc(kr.get("id"))}</span> {esc(kr.get("title"))}'
-            if a is None and b is None:
-                undated.append(label)
-                continue
-            a = a if a is not None else b
-            b = b if b is not None else a
-            left, width = a * 100, max((b - a) * 100, 1.5)
-            lines.append(f'<div class="tl-row"><div class="tl-label">{label}</div><div class="tl-track">'
-                         f'<div class="tl-bar" data-s="{status_slug(kr_status(kr))}" style="left:{left:.1f}%;width:{width:.1f}%">'
-                         f'</div></div></div>')
-        months = "".join(f"<span>{m}</span>" for m in months_of(quarter))
-        body = (f'<div class="tl"><div class="tl-row tl-head"><div class="tl-label"></div><div class="tl-months">{months}</div></div>'
-                + "".join(lines) + "</div>"
-                + (f'<p class="note">Сроки уточняются: {", ".join(undated)}</p>' if undated else "")
-                + '<p class="legend"><i data-s="todo"></i>не начато <i data-s="in-progress"></i>в работе '
-                  '<i data-s="blocked"></i>заблокировано <i data-s="done"></i>готово</p>')
-        if lines or undated:
-            slides.append(slide("timeline", "Как двигаемся по кварталу", body, "ПЛАН ПО ВРЕМЕНИ"))
-
-    # 7 · риски и зависимости
-    if "risks" not in skip:
-        items = []
-        for _, kr in krs:
-            kid = text(kr.get("id"))
-            notes = ((inis.get(kid) or (None, {}))[1].get("notes")) or {}
-            items += [("риск", kid, text(r)) for r in notes.get("risks") or [] if text(r)]
-            items += [("зависимость", kid, text(d)) for d in notes.get("dependencies") or [] if text(d)]
+            krs.append({"id": text(kr.get("id")), "title": text(kr.get("title")), "tag": text(kr.get("tag")),
+                        "category": category_of(kr), "epic": epic_of(kr),
+                        "pbv": kr.get("pbv") if is_int(kr.get("pbv")) else None,
+                        "result": text(kr.get("result")) or text(ini.get("result")),
+                        "owner": text(kr.get("owner")), "start": short_date(start), "end": short_date(end),
+                        "a": day_index(start, bounds) if start and bounds else None,
+                        "b": day_index(end, bounds) if end and bounds else None,
+                        "days": kr_days(kr), "status": kr_status(kr), "steps": len(kr.get("steps") or []),
+                        "from_retro": bool(ini.get("from_retro"))})
+        gantt = []
+        for kr in obj.get("krs") or []:
             for step in kr.get("steps") or []:
-                if text(step.get("ext")):
-                    team_name = text(tp_teams(tp).get(text(step.get("ext")), {}).get("name") or step.get("ext"))
-                    items.append(("внешняя команда", kid, f"{team_name}: {text(step.get('title'))}"))
-        if items:
-            body = '<ul class="risks">' + "".join(
-                f'<li><span class="rk" data-k="{esc(k)}">{esc(k)}</span><span class="kid">KR {esc(kid)}</span> {esc(t)}</li>'
-                for k, kid, t in items) + "</ul>"
-            slides.append(slide("risks", "Риски и зависимости", body, "НА ЧТО СМОТРИМ"))
+                start, end = text(step.get("start")), text(step.get("end"))
+                w0, w1 = step_weeks(step, weeks)
+                gantt.append({"kr": text(kr.get("id")), "role": role_text(step), "title": text(step.get("title")),
+                              "who": who_text(tp, kr, step) or "исполнитель не выбран", "w0": w0, "w1": w1,
+                              "dates": " — ".join(short_date(x) for x in (start, end) if x),
+                              "days": step_days(step), "status": text(step.get("status")) or "TODO"})
+        kr_ids = {k["id"] for k in krs}
+        objectives.append({"code": f"OBJ {oid}", "name": text(obj.get("title")), "goal": goal_of(oid),
+                           "krs": krs, "gantt": gantt, "people": gantt_people(gantt, len(weeks), tp),
+                           "risks": [r for r in risks if r["kr"] in kr_ids]})
 
-    # 8 · что не берём
-    if scope and "not_taken" not in skip:
-        out = [(i, "отменено: " + text(i.get("cancel_reason")) if cancelled(i) else "не в этом квартале")
-               for o in scope.get("objectives") or [] for i in o.get("initiatives") or []
-               if cancelled(i) or i.get("in_quarter") is False]
-        if out:
-            body = '<ul class="plain">' + "".join(
-                f'<li><b>{esc(i.get("id"))}</b> {esc(i.get("title"))} <span class="why">— {esc(reason)}</span></li>'
-                for i, reason in out) + "</ul>"
-            slides.append(slide("not_taken", "Что не берём в квартал", body, "ФОКУС"))
+    # Спринты: какие роли работают над KR в каждую неделю квартала (подзадачи с датами).
+    sprint_rows, undated = [], []
+    for obj in tp.get("objectives") or []:
+        for kr in sorted(obj.get("krs") or [], key=lambda k: -pbv_of(k)):
+            cells = [[] for _ in weeks]
+            dated = False
+            for step in kr.get("steps") or []:
+                w0, w1 = step_weeks(step, weeks)
+                if w0 is None:
+                    continue
+                dated = True
+                for k in range(w0, w1 + 1):
+                    if role_text(step) not in cells[k]:
+                        cells[k].append(role_text(step))
+            if dated:
+                sprint_rows.append({"obj": text(obj.get("id")), "kr": text(kr.get("id")), "title": text(kr.get("title")),
+                                    "weeks": cells})
+            else:
+                undated.append(f"{text(kr.get('id'))} {text(kr.get('title'))}")
 
-    # 9 · как работаем
-    how, asks = doc.get("how") or [], doc.get("asks") or []
-    if "how" not in skip and (how or asks):
-        col = lambda title, values: (f'<div><h3>{title}</h3><ul class="wins">'
-                                     + "".join(f"<li>{esc(v)}</li>" for v in values) + "</ul></div>") if values else ""
-        slides.append(slide("how", "Как работаем в квартале",
-                            f'<div class="two">{col("Ритм", how)}{col("Что нужно от команды", asks)}</div>', "ПРОЦЕСС"))
+    retro_data = retro_part(retro) if retro and "retro" not in skip else None
+    team = text(doc.get("team") or tp.get("team"))
+    asks = [{"num": n, "title": text(a)} for n, a in enumerate(doc.get("asks") or [], 1) if text(a)]
+    return {
+        "meta": {"quarter": quarter, "team": team, "po": text(doc.get("po") or tp.get("po")),
+                 "message": text(doc.get("message")), "updated": text(doc.get("updated")),
+                 "period": " — ".join(short_date(x) for x in bounds) if bounds else "",
+                 "prev_quarter": retro_data["quarter"] if retro_data else "",
+                 "retro_note": text(doc.get("retro_note"))},
+        "months": months_of(quarter),
+        "weeks": [short_date(w) for w in weeks],
+        "retro": retro_data,
+        "risks": risks if "risks" not in skip else [],
+        "roadmap": [{"code": o["code"], "name": o["name"], "items": [
+            (f"[{k['tag']}] " if k["tag"] else "") + k["title"] for k in o["krs"]]} for o in objectives],
+        "sprints": None if not sprints else {
+            "labels": [{"name": sp["name"], "dates": f"{short_date(sp['start'])} — {short_date(sp['end'])}",
+                        "w0": week_of(sp["start"], weeks), "w1": week_of(sp["end"], weeks)} for sp in sprints],
+            "rows": [] if "sprints" in skip else sprint_rows, "undated": undated},
+        "objectives": objectives,
+        "gantt": "gantt" not in skip,
+        "how": [text(x) for x in doc.get("how") or [] if text(x)],
+        "asks": asks if "asks" not in skip else [],
+    }
 
-    # 10 · финал
-    files = " · ".join(x for x in (
-        f"план — {text((tp.get('scope') or {}).get('file')).replace('.json', '.html')}" if scope else "",
-        f"подзадачи — {text((doc.get('teamplanner') or {}).get('file')).replace('.json', '.html')}") if x)
-    slides.append(f'<section class="slide cover end" data-kind="end"><h1>Вопросы<br><span class="accent">и обсуждение</span></h1>'
-                  f'<p class="meta">{esc(files)}</p></section>')
 
-    title = f"{quarter} — {team}" if team else quarter
-    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-            f'<title>{html.escape("Квартал " + title)}</title>\n'
-            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
-            f'<style>\n{asset("present.css")}</style>\n</head>\n<body>\n<div id="stage">\n' + "\n".join(slides)
-            + '\n</div>\n<div id="nav"><button id="prev" type="button" aria-label="Назад">‹</button><span id="pos"></span>'
-              '<button id="next" type="button" aria-label="Вперёд">›</button></div>\n'
-            f'<script>{asset("present.js")}</script>\n</body>\n</html>\n')
+def present_json(path, out):
+    """okr-plan.py present: факты презентации в JSON для build_present_pptx.js."""
+    doc = load_checked(path, "present")
+    rep = lint(path)
+    if rep.errors:
+        raise SystemExit("Презентация не проходит проверку:\n  " + "\n  ".join(rep.errors))
+    payload = present_payload(doc, path)
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return payload
 
 
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-ready", "jira-csv"):
+    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-ready", "jira-csv", "present"):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd, path = argv[0], argv[1]
@@ -1860,6 +1913,11 @@ def main(argv):
     if cmd == "jira-csv":
         count = jira_csv(path, argv[2])
         print(f"Written {argv[2]} ({count} строк)")
+        return 0
+    if cmd == "present":
+        data = present_json(path, argv[2])
+        print(f"Written {argv[2]} (целей {len(data['objectives'])}, рисков {len(data['risks'])}"
+              + (f", ретро {data['retro']['quarter']}" if data["retro"] else "") + ")")
         return 0
     if cmd == "render":
         render(path, argv[2])

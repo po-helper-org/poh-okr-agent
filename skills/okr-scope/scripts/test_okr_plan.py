@@ -575,7 +575,8 @@ class Jira(Case):
         self.assertTrue(activity["Summary"].startswith("[ACTIVITY] "))
 
 class Present(Case):
-    """Презентация квартала команде: агент пишет только посыл, остальное — из TeamPlanner, Scope и Retro."""
+    """Презентация квартала команде: агент пишет только посыл, факты считает okr-plan.py present,
+    слайды рисует build_present_pptx.js."""
 
     def setUp(self):
         super().setUp()
@@ -595,11 +596,8 @@ class Present(Case):
         self.write(tp, "teamplanner-2026Q4.json")
         return self.write(self.present, "present-2026Q4.json")
 
-    def page(self):
-        out = os.path.join(self.tmp.name, "present.html")
-        okr_plan.render(self.put(), out)
-        with open(out, encoding="utf-8") as f:
-            return f.read()
+    def data(self):
+        return okr_plan.present_json(self.put(), os.path.join(self.tmp.name, "data.json"))
 
     def test_fixture_is_valid(self):
         self.assertEqual(okr_plan.lint(self.put(), final=True).errors, [])
@@ -607,46 +605,92 @@ class Present(Case):
         self.assertIn("TeamPlanner не принят — команде показывают принятый план", rep.errors)
 
     def test_lint_rules(self):
-        self.present.update(quarter="2026Q3", message="", skip=["people", "intro"])
+        self.present.update(quarter="2026Q3", message="", skip=["gantt", "intro"], sprint_weeks=9)
         self.present["objectives"].append({"id": "9", "message": "x"})
+        self.present["risks"].append({"category": "Погода", "title": "", "kr": "7.7"})
+        self.present["sprints"] = [{"name": "С1", "start": "2026-10-10", "end": "2026-10-01"}]
         rep = okr_plan.lint(self.put(), final=True)
         for fragment in ("quarter: '2026Q3', а TeamPlanner — за '2026Q4'", "objectives[2]: цели '9' нет",
-                         "skip: 'intro'", "message: нет главной мысли"):
+                         "skip: 'intro'", "message: нет главной мысли", "sprint_weeks: целое 1..6",
+                         "risks[3]: нет title", "risks[3]: category", "risks[3]: KR '7.7' нет",
+                         "sprints[1]: начало позже конца"):
             self.assertError(rep, fragment)
         self.present["teamplanner"]["file"] = "nope.json"
         self.assertError(okr_plan.lint(self.put()), "teamplanner: файл nope.json не найден")
 
-    def test_slides(self):
-        page = self.page()
-        kinds = re.findall(r'<section class="slide[^"]*" data-kind="(\w+)"', page)
-        self.assertEqual(kinds, ["cover", "retro", "goals", "objective", "objective", "objective", "people",
-                                 "timeline", "risks", "not_taken", "how", "end"])
-        self.assertIn("Закрываем биллинг с партнёром", page)
-        self.assertIn("<b>76 %</b><span>итог квартала по PBV</span>", page)
-        self.assertIn('<span class="to">→ KR 1.1</span>', page)
-        self.assertIn("Подписка продаётся и сверяется без ручной работы", page)  # message цели важнее why из Scope
-        self.assertIn("Старый каталог держим только ради поиска", page)         # why из Scope, если message нет
-        self.assertIn("Целей 3 · KR 4 · подзадач 17 · оценка 3 дн", page)
-        self.assertIn("Внешние команды: Биллинг партнёра — KR 1.1", page)
-        self.assertIn('<span class="rk" data-k="риск">риск</span><span class="kid">KR 1.1</span>', page)
-        self.assertIn("<b>2.2</b> Рекомендации в карточке товара", page)
-        self.assertIn("<span>октябрь</span><span>ноябрь</span><span>декабрь</span>", page)
-        self.assertIn('id="next"', page)
+    def test_render_points_to_pptx(self):
+        with self.assertRaises(SystemExit) as e:
+            okr_plan.render(self.put(), os.path.join(self.tmp.name, "x.html"))
+        self.assertIn("build_present_pptx.js", str(e.exception))
+
+    def test_intro_and_parts(self):
+        d = self.data()
+        self.assertEqual(d["meta"]["quarter"], "2026Q4")
+        self.assertEqual(d["meta"]["prev_quarter"], "2026Q3")
+        self.assertEqual(d["meta"]["period"], "01.10 — 31.12")
+        self.assertEqual(len(d["weeks"]), 13)
+        # Ретро: итог по PBV, разбор по каждой цели — что сделали, что осталось, что дальше.
+        self.assertEqual(d["retro"]["weighted"], 76)
+        kr = d["retro"]["objectives"][0]["rows"][1]
+        self.assertEqual((kr["kr"], kr["outcome"]), ("1.2", "partial"))
+        self.assertEqual(kr["done"], ["Согласование API с партнёром", "Клиент API партнёра"])
+        self.assertIn("Интеграционные тесты", kr["left"])
+        self.assertEqual(kr["next"], "Продолжается в 2026Q4 — KR 1.1")
+        # Риски: сначала курированные PO, затем заметки Scope и внешние команды, без дублей.
+        self.assertEqual([r["category"] for r in d["risks"][:2]], ["Внешнее", "Ресурс"])
+        self.assertTrue(any(r["title"].startswith("Биллинг партнёра:") for r in d["risks"]))
+        # Roadmap — KR по убыванию PBV в колонке цели.
+        self.assertEqual(d["roadmap"][0]["items"], ["Семейная подписка на витрине", "Биллинг партнёра минуя ручную сверку"])
+        # Планы: инициативы цели, риски по её KR, GANTT по подзадачам.
+        o = d["objectives"][0]
+        self.assertEqual([k["id"] for k in o["krs"]], ["1.2", "1.1"])
+        self.assertTrue(all(r["kr"] in ("1.1", "1.2") for r in o["risks"]))
+        self.assertEqual(o["gantt"][0]["who"], "Смирнова Елена")
+        self.assertEqual((o["gantt"][0]["w0"], o["gantt"][0]["w1"]), (0, 1))
+        self.assertEqual(d["asks"][0], {"num": 1, "title": "Проверить свои подзадачи и оценки до пятницы"})
+        # GANTT по сотрудникам: строка — человек, по неделям — его KR; внешние и без исполнителя — в конце.
+        people = {p["who"]: p for p in o["people"]}
+        self.assertEqual(people["Смирнова Елена"]["steps"], 2)
+        self.assertEqual(people["Смирнова Елена"]["weeks"][0], {"krs": ["1.1"], "status": "DONE"})
+        self.assertEqual(people["внешний ресурс: Биллинг партнёра"]["weeks"][0]["status"], "BLOCKED")
+        kinds = [p["kind"] for p in o["people"]]
+        self.assertEqual(kinds, sorted(kinds, key=["person", "ext", "none"].index))
+        self.assertEqual(kinds[-1], "ext")
+        unassigned = okr_plan.gantt_people([{"who": "исполнитель не выбран", "role": "QA", "kr": "1.2", "w0": 1, "w1": 1,
+                                              "days": None, "status": "TODO"}], 13, self.tp)
+        self.assertEqual((unassigned[0]["kind"], unassigned[0]["weeks"][1]), ("none", {"krs": ["1.2"], "status": "TODO"}))
+
+    def test_sprints(self):
+        d = self.data()
+        labels = d["sprints"]["labels"]
+        self.assertEqual([l["dates"] for l in labels][-1], "10.12 — 31.12")  # короткий хвост — в последний спринт
+        self.assertEqual(len(labels), 6)
+        self.assertEqual((labels[0]["w0"], labels[0]["w1"]), (0, 1))
+        row = next(r for r in d["sprints"]["rows"] if r["kr"] == "1.2")
+        self.assertEqual(row["weeks"][0], ["PO"])
+        self.present["sprints"] = [{"name": "Октябрь", "start": "2026-10-01", "end": "2026-10-31"},
+                                   {"name": "Ноябрь — декабрь", "start": "2026-11-01", "end": "2026-12-31"}]
+        self.assertEqual([l["name"] for l in self.data()["sprints"]["labels"]], ["Октябрь", "Ноябрь — декабрь"])
+        self.present["sprint_weeks"] = 3
+        self.present.pop("sprints")
+        self.assertEqual(len(self.data()["sprints"]["labels"]), 4)
 
     def test_skip_and_without_retro(self):
-        self.present["skip"] = ["people", "timeline", "risks", "not_taken", "how", "retro"]
-        kinds = re.findall(r'data-kind="(\w+)"', self.page())
-        self.assertEqual(kinds, ["cover", "goals", "objective", "objective", "objective", "end"])
+        self.present["skip"] = ["retro", "risks", "sprints", "gantt", "asks"]
+        d = self.data()
+        self.assertIsNone(d["retro"])
+        self.assertEqual((d["risks"], d["sprints"]["rows"], d["gantt"], d["asks"]), ([], [], False, []))
         self.present["skip"] = []
         self.scope.pop("retro")
-        self.assertNotIn('data-kind="retro"', self.page())
+        self.assertIsNone(self.data()["retro"])
 
-    def test_timeline_positions(self):
-        bounds = okr_plan.quarter_bounds("2026Q4")
-        self.assertEqual(okr_plan.day_index("2026-10-01", bounds), 0.0)
-        self.assertAlmostEqual(okr_plan.day_index("2026-11-16", bounds), 46 / 92)
-        self.assertEqual(okr_plan.day_index("2027-02-01", bounds), 1.0)
-        self.assertIsNone(okr_plan.day_index("1 ноября", bounds))
+    def test_weeks(self):
+        weeks = okr_plan.quarter_weeks("2026Q4")
+        self.assertEqual((weeks[0], weeks[-1]), ("2026-10-01", "2026-12-24"))
+        self.assertEqual(okr_plan.week_of("2026-12-31", weeks), 12)
+        self.assertEqual(okr_plan.week_of("2026-09-01", weeks), 0)
+        self.assertIsNone(okr_plan.week_of("1 ноября", weeks))
+        self.assertEqual(okr_plan.step_weeks({"end": "2026-10-20"}, weeks), (2, 2))
         self.assertEqual(okr_plan.short_date("2026-10-05"), "05.10")
 
 
@@ -762,7 +806,7 @@ class Robustness(Case):
                         ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
                     # Презентация читает TeamPlanner, Scope и Retro — их порча не должна ронять её сборку.
                     ops.append(lambda: okr_plan.lint(present, final=True))
-                    ops.append(lambda: okr_plan.render(present, os.path.join(self.tmp.name, "p.html")))
+                    ops.append(lambda: okr_plan.present_json(present, os.path.join(self.tmp.name, "d.json")))
                     for op in ops:
                         try:
                             op()
