@@ -4,6 +4,7 @@ import csv
 import importlib.util
 import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -573,6 +574,82 @@ class Jira(Case):
         self.assertIn("epic-epic", activity["Labels"].split())
         self.assertTrue(activity["Summary"].startswith("[ACTIVITY] "))
 
+class Present(Case):
+    """Презентация квартала команде: агент пишет только посыл, остальное — из TeamPlanner, Scope и Retro."""
+
+    def setUp(self):
+        super().setUp()
+        self.tp = fixture("teamplanner-2026Q4.json")
+        self.present = fixture("present-2026Q4.json")
+
+    def put(self, tp_status="принято"):
+        self.write(self.retro, "retro-2026Q3.json")
+        self.write(self.scope, "scope-2026Q4.json")
+        tp = copy.deepcopy(self.tp)
+        tp["status"] = tp_status
+        for o in tp["objectives"]:
+            for k in o["krs"]:
+                for st in k["steps"]:
+                    if not st["who"] and not st["ext"]:
+                        st["ext"] = "partner"
+        self.write(tp, "teamplanner-2026Q4.json")
+        return self.write(self.present, "present-2026Q4.json")
+
+    def page(self):
+        out = os.path.join(self.tmp.name, "present.html")
+        okr_plan.render(self.put(), out)
+        with open(out, encoding="utf-8") as f:
+            return f.read()
+
+    def test_fixture_is_valid(self):
+        self.assertEqual(okr_plan.lint(self.put(), final=True).errors, [])
+        rep = okr_plan.lint(self.put(tp_status="черновик"), final=True)
+        self.assertIn("TeamPlanner не принят — команде показывают принятый план", rep.errors)
+
+    def test_lint_rules(self):
+        self.present.update(quarter="2026Q3", message="", skip=["people", "intro"])
+        self.present["objectives"].append({"id": "9", "message": "x"})
+        rep = okr_plan.lint(self.put(), final=True)
+        for fragment in ("quarter: '2026Q3', а TeamPlanner — за '2026Q4'", "objectives[2]: цели '9' нет",
+                         "skip: 'intro'", "message: нет главной мысли"):
+            self.assertError(rep, fragment)
+        self.present["teamplanner"]["file"] = "nope.json"
+        self.assertError(okr_plan.lint(self.put()), "teamplanner: файл nope.json не найден")
+
+    def test_slides(self):
+        page = self.page()
+        kinds = re.findall(r'<section class="slide[^"]*" data-kind="(\w+)"', page)
+        self.assertEqual(kinds, ["cover", "retro", "goals", "objective", "objective", "objective", "people",
+                                 "timeline", "risks", "not_taken", "how", "end"])
+        self.assertIn("Закрываем биллинг с партнёром", page)
+        self.assertIn("<b>76 %</b><span>итог квартала по PBV</span>", page)
+        self.assertIn('<span class="to">→ KR 1.1</span>', page)
+        self.assertIn("Подписка продаётся и сверяется без ручной работы", page)  # message цели важнее why из Scope
+        self.assertIn("Старый каталог держим только ради поиска", page)         # why из Scope, если message нет
+        self.assertIn("Целей 3 · KR 4 · подзадач 17 · оценка 3 дн", page)
+        self.assertIn("Внешние команды: Биллинг партнёра — KR 1.1", page)
+        self.assertIn('<span class="rk" data-k="риск">риск</span><span class="kid">KR 1.1</span>', page)
+        self.assertIn("<b>2.2</b> Рекомендации в карточке товара", page)
+        self.assertIn("<span>октябрь</span><span>ноябрь</span><span>декабрь</span>", page)
+        self.assertIn('id="next"', page)
+
+    def test_skip_and_without_retro(self):
+        self.present["skip"] = ["people", "timeline", "risks", "not_taken", "how", "retro"]
+        kinds = re.findall(r'data-kind="(\w+)"', self.page())
+        self.assertEqual(kinds, ["cover", "goals", "objective", "objective", "objective", "end"])
+        self.present["skip"] = []
+        self.scope.pop("retro")
+        self.assertNotIn('data-kind="retro"', self.page())
+
+    def test_timeline_positions(self):
+        bounds = okr_plan.quarter_bounds("2026Q4")
+        self.assertEqual(okr_plan.day_index("2026-10-01", bounds), 0.0)
+        self.assertAlmostEqual(okr_plan.day_index("2026-11-16", bounds), 46 / 92)
+        self.assertEqual(okr_plan.day_index("2027-02-01", bounds), 1.0)
+        self.assertIsNone(okr_plan.day_index("1 ноября", bounds))
+        self.assertEqual(okr_plan.short_date("2026-10-05"), "05.10")
+
+
 class Robustness(Case):
     """JSON пишет LLM: любой неверный тип — понятная ошибка, а не трейсбэк."""
 
@@ -653,7 +730,9 @@ class Robustness(Case):
         self.assertTrue(any("не scope (kind='retro')" in w for w in tp.warnings))
 
     def test_wrong_types_never_crash(self):
-        docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json")}
+        docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json",
+                                        "present-2026Q4.json")}
+        present = os.path.join(self.tmp.name, "present-2026Q4.json")
 
         def paths(node, pre=()):
             if pre:
@@ -681,6 +760,9 @@ class Robustness(Case):
                         ops.append(lambda: okr_plan.jira_csv(fp, os.path.join(self.tmp.name, "j.csv")))
                     if name.startswith("scope"):
                         ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
+                    # Презентация читает TeamPlanner, Scope и Retro — их порча не должна ронять её сборку.
+                    ops.append(lambda: okr_plan.lint(present, final=True))
+                    ops.append(lambda: okr_plan.render(present, os.path.join(self.tmp.name, "p.html")))
                     for op in ops:
                         try:
                             op()

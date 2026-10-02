@@ -19,7 +19,7 @@ description: OKR Retro — этап 1 планирования квартала.
 необязательный.
 
 ```
-/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner
+/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner → (/okr-jira) → /okr-present
 ```
 
 ## На выходе

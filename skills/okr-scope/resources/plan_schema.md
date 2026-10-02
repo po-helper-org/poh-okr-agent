@@ -14,7 +14,7 @@ Python 3, без пакетов.
 | Команда | Что делает |
 |---|---|
 | `okr-plan.py lint <file.json> [--final]` | проверяет документ любого вида (`kind`); `--final` — по правилам принятия |
-| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН или TEAMPLANNER |
+| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН, TEAMPLANNER или презентацию квартала (`kind: present`) |
 | `okr-plan.py seed <scope.json> <teamplanner.json> [--force]` | заготовка TeamPlanner из принятого Scope, который проходит `lint --final`; существующий файл не перезаписывает без `--force` |
 | `okr-plan.py csv <teamplanner.json> <out.csv>` | лист TeamPlanner для Google Sheets / Excel |
 | `okr-plan.py jira-ready <teamplanner.json>` | `ГОТОВО К ПЕРЕНОСУ` только для принятого TeamPlanner без ошибок `lint --final` и с `jira_project`; иначе — что мешает |
@@ -43,7 +43,8 @@ Python 3, без пакетов.
 ├── retro-<prev>.json / .html        Этап 1 · /okr-retro
 ├── scope-<quarter>.json / .html     Этапы 2–3 · /okr-scope, /okr-stages
 ├── teamplanner-<quarter>.json / .html / .csv   Этап 4 · /okr-teamplanner
-└── jira-<quarter>.csv                           перенос в JIRA без Atlassian MCP · /okr-jira
+├── jira-<quarter>.csv                           перенос в JIRA без Atlassian MCP · /okr-jira
+└── present-<quarter>.json / .html               презентация команде · /okr-present
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`), `<prev>` — закрываемый (`2026Q3`).
@@ -380,6 +381,50 @@ JSON, и они уходят в CSV. Правки копятся в браузе
 `jira_project` и `lint --final` без ошибок. `jira-csv` — то же в CSV для
 импорта: `Issue Id`, `Parent Id` (история → эпик), `Issue Type` (Epic / Story),
 `Summary`, `Epic Name`, `Labels`, `Description`.
+
+## Презентация — `kind: "present"`
+
+Презентация квартала команде (`/okr-present`). Агент пишет только посыл; факты
+скрипт берёт по цепочке ссылок: презентация → `teamplanner.file` → его
+`scope.file` → `retro.file` этого Scope (каждый файл — рядом с тем, кто на него
+ссылается).
+
+| Поле | Что это |
+|---|---|
+| `quarter`, `team`, `po`, `status`, `updated` | шапка; `team` и `po` пусты — берутся из TeamPlanner |
+| `teamplanner.file` | TeamPlanner этого квартала — обязательно |
+| `message` | главная мысль квартала одним предложением — на титуле |
+| `retro_note` | вывод из прошлого квартала: что поняли и что меняем |
+| `objectives[]` | `id` цели и `message` — «зачем» для команды; нет — берётся `why` из Scope |
+| `how` | ритм работы: синки, где статусы, когда сверяемся |
+| `asks` | что нужно от команды после встречи |
+| `skip` | скрыть слайды: `retro`, `people`, `timeline`, `risks`, `not_taken`, `how` |
+
+### Что выводит скрипт
+
+| Слайд | Правило |
+|---|---|
+| Титул | квартал, команда, `message`, PO и дата |
+| Итоги прошлого квартала | итог по PBV и исходы — как на странице ФАКТ; «Продолжаем» — KR с `next.action: continue` и куда они переходят; `retro_note` |
+| Цели | цели TeamPlanner: «зачем», число KR и типы (Run/Change/Disrupt); итог — целей, KR, подзадач, сумма оценок в днях |
+| Слайд цели | KR по убыванию PBV: тип, `[тег] название`, образ результата (`result` TeamPlanner, иначе Scope), PBV, `owner`, сроки — от раннего начала до позднего конца подзадач, сумма `days` |
+| Кто за что отвечает | люди состава, у которых есть KR (`owner`) или подзадачи (`who`): роль, «отвечает за KR», «делает в KR», число подзадач, сумма оценок; ниже — внешние команды с их KR и число подзадач без исполнителя |
+| Как двигаемся | шкала квартала по месяцам; KR — полоса от раннего начала до позднего конца подзадач, цвет — статус KR (как в TeamPlanner); KR без дат — строкой «сроки уточняются» |
+| Риски и зависимости | `notes.risks` и `notes.dependencies` инициатив Scope, взятых в квартал, и подзадачи внешних команд |
+| Что не берём | инициативы Scope с `in_quarter: false` и отменённые с причиной |
+| Как работаем | `how` и `asks` |
+| Финал | «Вопросы и обсуждение» и имена страниц ПЛАН и TEAMPLANNER |
+
+Слайд без данных не выводится. Слайд 1280×720 масштабируется под окно; стрелки
+и пробел листают, номер — в адресе (`#slide=N`); печать — по слайду на лист.
+
+### Что проверяет `lint`
+
+| Проверка | Уровень |
+|---|---|
+| Структура; формат квартала; `teamplanner.file` указан, читается и проходит `lint`; квартал совпадает с TeamPlanner; цели из `objectives` есть в TeamPlanner; `skip` — из списка | ошибка |
+| TeamPlanner и Scope приняты; есть `message` | гейт |
+| Scope или ретро не читаются (их слайдов не будет); есть ретро, но нет `retro_note` | предупреждение |
 
 ## Комментарии PO для агента
 

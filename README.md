@@ -56,7 +56,9 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
    «Копировать в Sheets» вставляет лист TeamPlanner.
 9. `/okr-jira` переносит TeamPlanner в JIRA: KR — эпики, подзадачи — истории.
    Сначала просит PO подтвердить страницу TeamPlanner, задачи — только после «да».
-10. В середине квартала — экватор, отчёт `.md` + презентация `.pptx`
+10. `/okr-present` собирает презентацию квартала для команды: чем занимаемся,
+   кто за что отвечает, как движемся, риски и что не берём.
+11. В середине квартала — экватор, отчёт `.md` + презентация `.pptx`
    (`/okr-equator`).
 
 ## Планирование квартала
@@ -73,6 +75,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | 3 | `/okr-stages <quarter>` | Необязательно. Условия, риски, зависимости, неопределённости и первые этапы инициатив — на той же странице ПЛАН. Этапы станут заготовкой TeamPlanner | декомпозиция на странице ПЛАН |
 | 4 | `/okr-teamplanner <quarter>` | Каждый KR, взятый в квартал, — операционные этапы полного цикла: `PO, ADR, SA, BA, BE, FE, QA, DOPS, RM` и `EXT[роль]` для внешнего ресурса. У этапа — исполнитель, сроки, статус, образ результата и образ действия. KR с PBV < 5 и `RESEARCH` по умолчанию начинаются с одной подзадачи `[PO] Сбор БФТ-требований`. Техлиды прямо на странице правят подзадачи (тип, название, оценка в днях, исполнитель), добавляют и удаляют KR, оставляют комментарии агенту правым кликом | страница TEAMPLANNER `teamplanner-<quarter>.html` и таблица `.csv` |
 | 5 | `/okr-jira <quarter>` | Перенос в JIRA прямо из TeamPlanner: KR — эпик-enabler (инициатива, закрывается БФТ) или бессрочный эпик (ACTIVITY, поддержка), подзадачи — истории. Нет TeamPlanner — агент его соберёт; есть — просит PO подтвердить и проверяет. Задачи (Atlassian MCP) или CSV для импорта — только после «да» | эпики и истории в JIRA, ключи `jira_key` в TeamPlanner |
+| 6 | `/okr-present <quarter>` | Презентация квартала команде: главная мысль, итоги прошлого квартала, цели и KR, кто за что отвечает, шкала квартала по месяцам, риски, что не берём, ритм работы. Факты — из принятых Scope, TeamPlanner и ретро; агент спрашивает у PO только посыл | презентация `present-<quarter>.html`, PDF — печатью из браузера |
 
 `<quarter>` везде — планируемый квартал (`2026Q4`); ретро закрывает предыдущий.
 Начинать всегда можно с `/okr-retro`: он видит, на каком этапе остановились, и
@@ -152,7 +155,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 | `/okr-debate` | выравнивание внутри `/okr-scope` |
 | `/okr-roadmap` | `/okr-teamplanner` |
 | `/okr-decompose` | `/okr-stages` |
-| `/okr-plan-deck` | `scope-<quarter>.html` + `/okr-teamplanner` |
+| `/okr-plan-deck` | `/okr-present` |
 
 ## Рабочая папка
 
@@ -164,6 +167,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
   plan/teamplanner-<quarter>.json + .html     страница TEAMPLANNER
   plan/teamplanner-<quarter>.csv              лист для Google Sheets
   plan/jira-<quarter>.csv                     импорт в JIRA, если нет Atlassian MCP
+  plan/present-<quarter>.json + .html         презентация квартала команде
   equator/экватор-<quarter>.md
   equator/экватор-<quarter>.pptx
 ```
