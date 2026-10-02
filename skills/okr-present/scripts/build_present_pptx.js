@@ -2,13 +2,14 @@
    тот же брендбук (resources/brandbook.md экватора) и холст 20×11.25in.
    Рассказ от общего к частному:
 
-     Вводная:  титул → результаты прошлого квартала → актуальные риски и проблемы →
+     Вводная:  титул → HERO → результаты прошлого квартала → актуальные риски →
                верхнеуровневый roadmap → инициативы по спринтам (по неделям)
-     Ретро:    разделитель → статус по целям прошлого квартала → по каждой цели:
-               общий статус, что сделали, что осталось, что переносим
-     Планы:    разделитель → обзор предстоящих работ → по каждой цели: инициативы,
-               известные риски, GANTT по сотрудникам
-     Финал:    как работаем, что нужно от команды
+     Ретро:    HERO → статус по целям прошлого квартала → по каждой цели: HERO с
+               общим статусом → что сделали, что осталось, что переносим
+     Планы:    HERO → обзор предстоящих работ → по каждой цели: HERO с цифрами →
+               инициативы, известные риски, GANTT по сотрудникам
+     Финал:    HERO → как работаем, что нужно от команды
+   HERO — визуальная пауза: текст по центру и «Дальше» — о чём пойдёт речь.
 
    Данные (data.json) считает okr-plan.py present — здесь только вёрстка.
    Запуск: node build_present_pptx.js <data.json> <out.pptx>
@@ -279,13 +280,37 @@ function addSprints(pres, d) {
   });
 }
 
-/* ---------- части ---------- */
-function addDivider(pres, part, title, subtitle) {
-  const s = slideBase(pres, C.dark);
-  mono(s, part.toUpperCase(), X, 4.0, W, 0.5, { fontSize: 16, charSpacing: 3 });
-  s.addText(title, { x: X, y: 4.5, w: W, h: 1.6, fontFace: C.fontHead, fontSize: 80, bold: true, color: C.white, margin: 0, fit: "shrink" });
-  s.addText(subtitle, { x: X, y: 6.3, w: W * 0.7, h: 1.0, fontFace: C.fontHead, fontSize: 22, color: C.grayMid, margin: 0, valign: "top" });
+/* ---------- HERO: визуальная пауза — о чём дальше пойдёт речь ---------- */
+function addHero(pres, eyebrow, title, lead, next, dark, stats) {
+  const s = slideBase(pres, dark ? C.dark : C.light);
+  const top = stats ? 2.3 : 3.0;
+  mono(s, eyebrow.toUpperCase(), X, top, W, 0.5, { fontSize: 15, align: "center", charSpacing: 3 });
+  s.addText(title, { x: X + 1, y: top + 0.55, w: W - 2, h: 2.2, fontFace: C.fontHead, fontSize: title.length > 40 ? 52 : 72,
+    bold: true, color: dark ? C.white : C.dark, margin: 0, align: "center", valign: "middle" });
+  let y = top + 2.85;
+  if (lead) {
+    s.addText(lead, { x: X + 2, y, w: W - 4, h: 0.9, fontFace: C.fontHead, fontSize: 20, color: dark ? C.grayMid : C.grayDark,
+      margin: 0, align: "center", valign: "top" });
+    y += 1.05;
+  }
+  if (next && next.length) {
+    const shown = next.slice(0, 5).map((t) => clip(t, 38));
+    const widths = shown.map((t) => 0.6 + t.length * 0.13);
+    const total = widths.reduce((a, b) => a + b, 0) + 0.25 * (shown.length - 1) + 1.4;
+    let x = Math.max(X, (LAYOUT_W - total) / 2);
+    mono(s, "ДАЛЬШЕ", x, y, 1.3, 0.5, { fontSize: 12, charSpacing: 2 });
+    x += 1.4;
+    shown.forEach((t, i) => {
+      s.addShape("roundRect", { x, y, w: widths[i], h: 0.5, rectRadius: 0.25, fill: { color: dark ? C.dark : C.light },
+        line: { color: dark ? C.grayDark : C.dark, width: 1 } });
+      s.addText(t, { x, y, w: widths[i], h: 0.5, fontFace: C.fontHead, fontSize: 14, color: dark ? C.white : C.dark,
+        margin: 0, align: "center", valign: "middle" });
+      x += widths[i] + 0.25;
+    });
+  }
+  if (stats) statLine(s, LAYOUT_H - 2.4, stats);
 }
+
 
 /* ---------- ретро ---------- */
 function addRetroStatus(pres, r) {
@@ -316,12 +341,13 @@ function statLine(s, y, stats) {
   });
 }
 
-function addRetroObjective(pres, o, quarter) {
+function addRetroObjective(pres, o, quarter, afterHero) {
   const ql = quarterLabel(quarter);
-  chunk(o.rows, 5).forEach((rows, p) => {
+  chunk(o.rows, afterHero ? 6 : 5).forEach((rows, p) => {
     const s = slideBase(pres, C.paper);
-    let y = heading(s, `${o.code} — ${o.name}` + (p ? " (продолжение)" : ""), `Часть 1 · ретро ${ql}`);
-    if (!p) {
+    let y = heading(s, (afterHero ? `${o.code} — что сделали, что осталось` : `${o.code} — ${o.name}`) + (p ? " (продолжение)" : ""),
+      `Часть 1 · ретро ${ql}`);
+    if (!p && !afterHero) {
       if (o.goal) {
         s.addText(`Цель: ${o.goal}`, { x: X, y: y - 0.2, w: W, h: 0.5, fontFace: C.fontHead, fontSize: 18, color: C.grayDark, margin: 0 });
         y += 0.45;
@@ -390,11 +416,7 @@ function addPlanOverview(pres, d) {
 function addObjInitiatives(pres, o, d) {
   chunk(o.krs, 6).forEach((krs, p) => {
     const s = slideBase(pres, C.paper);
-    let y = heading(s, `${o.code} — ${o.name}` + (p ? " (продолжение)" : ""), `Часть ${d.retro ? 2 : 1} · планы · инициативы`);
-    if (o.goal && !p) {
-      s.addText(`Цель: ${o.goal}`, { x: X, y: y - 0.2, w: W, h: 0.5, fontFace: C.fontHead, fontSize: 18, color: C.grayDark, margin: 0 });
-      y += 0.55;
-    }
+    const y = heading(s, `${o.code} · инициативы` + (p ? " (продолжение)" : ""), `Часть ${d.retro ? 2 : 1} · планы`);
     const typeText = (k) => [k.category, k.epic === "epic" ? "эпик" : "enabler"].filter(Boolean).join(" · ");
     table(s, [{ title: "KR", w: 0.9 }, { title: "Инициатива", w: 4.6 }, { title: "PBV", w: 0.8 }, { title: "Тип", w: 2.0 },
       { title: "Образ результата", w: 5.1 }, { title: "Отвечает", w: 2.2 }, { title: "Сроки", w: 2.3 }],
@@ -501,6 +523,9 @@ function buildPresentDeck(d) {
   const q = quarterLabel(d.meta.quarter);
   // Вводная — от общего: итоги, риски, roadmap, спринты.
   addTitle(pres, d);
+  addHero(pres, "Вводная", "Картина квартала", "Откуда идём, что мешает и как раскладываем работу по времени.",
+    [].concat(d.retro ? [`Результаты ${quarterLabel(d.retro.quarter)}`] : [], d.risks.length ? ["Актуальные риски"] : [],
+      ["Roadmap"], d.sprints && d.sprints.rows.length ? ["Инициативы по спринтам"] : []), true);
   if (d.retro) addPastResults(pres, d.retro, d.meta.retro_note);
   if (d.risks.length) addRisks(pres, d.risks);
   addRoadmap(pres, d.roadmap, d.meta.quarter);
@@ -508,18 +533,44 @@ function buildPresentDeck(d) {
   // Часть 1 — ретро: общий статус, затем каждая цель.
   if (d.retro) {
     const rq = quarterLabel(d.retro.quarter);
-    addDivider(pres, "Часть 1", `Ретро ${rq}`, "Общий статус и разбор по каждой цели: что сделали, что осталось, что переносим.");
+    addHero(pres, "Часть 1", `Ретро ${rq}`, "Что обещали в прошлом квартале и что из этого вышло.",
+      ["Статус по целям"].concat(d.retro.objectives.map((o) => o.code)), true);
     addRetroStatus(pres, d.retro);
-    d.retro.objectives.forEach((o) => addRetroObjective(pres, o, d.retro.quarter));
+    d.retro.objectives.forEach((o) => {
+      addHero(pres, `Часть 1 · ретро ${rq}`, `${o.code} — ${o.name}`, o.goal ? `Цель: ${o.goal}` : "",
+        ["Что сделали", "Что осталось", "Что переносим"], false, [
+          { label: "ВСЕГО KR", value: o.counts.total, color: C.dark },
+          { label: "ЗАКРЫТО", value: o.counts.done, color: OUTCOME.done.color },
+          { label: "ЧАСТИЧНО", value: o.counts.partial, color: OUTCOME.partial.color },
+          { label: "НЕ СДЕЛАНО", value: o.counts.failed, color: OUTCOME.failed.color },
+          { label: "ОТМЕНЕНО", value: o.counts.dropped, color: OUTCOME.dropped.color },
+          { label: "ИТОГ ПО PBV", value: o.weighted == null ? "—" : `${o.weighted}%`, color: C.accent }]);
+      addRetroObjective(pres, o, d.retro.quarter, true);
+    });
   }
   // Часть 2 — планы: обзор, затем каждая цель.
-  addDivider(pres, `Часть ${d.retro ? 2 : 1}`, `Планы ${q}`, "Обзор предстоящих работ и по каждой цели: инициативы, риски, GANTT по сотрудникам.");
+  addHero(pres, `Часть ${d.retro ? 2 : 1}`, `Планы ${q}`, d.meta.message,
+    ["Обзор предстоящих работ"].concat(d.objectives.map((o) => o.code)), true);
   addPlanOverview(pres, d);
   d.objectives.forEach((o) => {
+    const days = Math.round(o.krs.reduce((a, k) => a + (k.days || 0), 0) * 10) / 10;
+    const open = o.gantt.filter((g) => g.who === "исполнитель не выбран" || g.who === "нет роли в команде").length;
+    addHero(pres, `Часть ${d.retro ? 2 : 1} · планы ${q}`, `${o.code} — ${o.name}`, o.goal ? `Цель: ${o.goal}` : "",
+      ["Инициативы"].concat(o.risks.length ? ["Известные риски"] : [], d.gantt && o.people.length ? ["GANTT по сотрудникам"] : []), false, [
+        { label: "KR", value: o.krs.length, color: C.dark },
+        { label: "ПОДЗАДАЧ", value: o.gantt.length, color: C.dev },
+        { label: "ОЦЕНКА, ДН", value: days || "—", color: C.analysis },
+        { label: "ЛЮДЕЙ", value: o.people.filter((p) => p.kind === "person").length, color: C.statusDone },
+        { label: "БЕЗ ИСПОЛНИТЕЛЯ", value: open, color: C.statusCancelled },
+        { label: "РИСКОВ", value: o.risks.length, color: C.statusHold }]);
     addObjInitiatives(pres, o, d);
     if (o.risks.length) addObjRisks(pres, o, d);
     if (d.gantt) addObjGantt(pres, o, d);
   });
+  if (d.how.length || d.asks.length) {
+    addHero(pres, "Финал", "Как работаем дальше", "", [].concat(d.how.length ? ["Как работаем в квартале"] : [],
+      d.asks.length ? ["Что нужно от команды"] : []), true);
+  }
   if (d.how.length) addHow(pres, d.how);
   if (d.asks.length) addAsks(pres, d.asks);
   return pres;

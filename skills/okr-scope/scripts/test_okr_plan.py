@@ -618,10 +618,32 @@ class Present(Case):
         self.present["teamplanner"]["file"] = "nope.json"
         self.assertError(okr_plan.lint(self.put()), "teamplanner: файл nope.json не найден")
 
-    def test_render_points_to_pptx(self):
-        with self.assertRaises(SystemExit) as e:
-            okr_plan.render(self.put(), os.path.join(self.tmp.name, "x.html"))
-        self.assertIn("build_present_pptx.js", str(e.exception))
+    def test_html_slides_with_hero_pauses(self):
+        out = os.path.join(self.tmp.name, "present.html")
+        okr_plan.render(self.put(), out)
+        with open(out, encoding="utf-8") as f:
+            page = f.read()
+        slides = re.findall(r'<section class="slide ([^"]*)" data-kind="([^"]*)" data-title="([^"]*)"', page)
+        heroes = [t for cls, _, t in slides if "hero" in cls]
+        # HERO-паузы: перед вводной, ретро, каждой целью ретро, планами, каждой целью плана и финалом.
+        self.assertEqual(heroes, ["Картина квартала", "Ретро Q3 2026",
+                                  "OBJ 1 — Продавать подписку на витрине без ручных операций",
+                                  "OBJ 2 — Перевести каталог на новую платформу", "Планы Q4 2026",
+                                  "OBJ 1 — Продавать подписку без ручных операций", "OBJ 2 — Отключить старый каталог",
+                                  "OBJ 3 — Поддержка витрины", "Как работаем дальше"])
+        kinds = [k for _, k, _ in slides]
+        self.assertEqual(kinds[0], "титул")
+        self.assertEqual(kinds, sorted(kinds, key=["титул", "вводная", "ретро", "планы", "финал"].index))
+        titles = [t for _, _, t in slides]
+        for t in ("Результаты Q3 2026", "Актуальные риски и проблемы", "Roadmap Q4 2026", "Инициативы по спринтам",
+                  "Статус по целям Q3 2026", "OBJ 1 — что сделали, что осталось", "Предстоящие работы Q4 2026",
+                  "OBJ 1 · инициативы", "OBJ 1 · известные риски", "OBJ 1 · GANTT по сотрудникам", "Что нужно от команды"):
+            self.assertIn(t, titles)
+        self.assertLess(titles.index("Ретро Q3 2026"), titles.index("Статус по целям Q3 2026"))
+        self.assertLess(titles.index("OBJ 1 — Продавать подписку без ручных операций"), titles.index("OBJ 1 · инициативы"))
+        for marker in ('id="sideTab"', 'id="toc"', 'id="prev"', 'id="next"', 'id="printBtn"', 'id="fullBtn"',
+                       '<span>Дальше</span>', "Закрываем биллинг с партнёром"):
+            self.assertIn(marker, page)
 
     def test_intro_and_parts(self):
         d = self.data()
@@ -807,6 +829,7 @@ class Robustness(Case):
                     # Презентация читает TeamPlanner, Scope и Retro — их порча не должна ронять её сборку.
                     ops.append(lambda: okr_plan.lint(present, final=True))
                     ops.append(lambda: okr_plan.present_json(present, os.path.join(self.tmp.name, "d.json")))
+                    ops.append(lambda: okr_plan.render(present, os.path.join(self.tmp.name, "p.html")))
                     for op in ops:
                         try:
                             op()

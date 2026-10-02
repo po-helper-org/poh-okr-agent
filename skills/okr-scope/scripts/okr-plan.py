@@ -2,8 +2,8 @@
 """Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, презентация команде, CSV.
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
-  okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН или TEAMPLANNER
-  okr-plan.py present <present.json> <data.json>       факты презентации квартала для build_present_pptx.js
+  okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН, TEAMPLANNER или презентация
+  okr-plan.py present <present.json> <data.json>       факты презентации для .pptx (build_present_pptx.js)
   okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
   okr-plan.py jira-ready <teamplanner.json>            можно ли переносить в JIRA: принят, lint --final, проект
@@ -1002,8 +1002,7 @@ def render(path, out):
     elif doc.get("kind") == "teamplanner":
         page_html = render_teamplanner(doc, path)
     elif doc.get("kind") == "present":
-        raise SystemExit("Презентация собирается в .pptx: okr-plan.py present <present.json> <data.json>, "
-                         "затем node skills/okr-present/scripts/build_present_pptx.js <data.json> <out.pptx>")
+        page_html = render_present(doc, path)
     else:
         raise SystemExit("kind: ожидается 'retro', 'scope', 'teamplanner' или 'present'")
     with open(out, "w", encoding="utf-8") as f:
@@ -1877,6 +1876,300 @@ def present_json(path, out):
         json.dump(payload, f, ensure_ascii=False, indent=2)
         f.write("\n")
     return payload
+
+
+# ---------------------------------------------------------------- Презентация: HTML
+
+WORK_TYPES = [("analysis", "аналитика", "аналит.", ("PO", "ADR", "SA", "BA")),
+              ("dev", "разработка", "разраб.", ("BE", "FE", "DOPS")),
+              ("qa", "тесты", "тесты", ("QA",)),
+              ("release", "выкатка", "выкатка", ("RM",)),
+              ("ext", "внешние", "внешн.", ())]
+P_OUTCOME = [("done", "закрыт", "var(--done)"), ("partial", "частично", "var(--progress)"),
+             ("failed", "не сделан", "var(--idle)"), ("dropped", "отменён", "var(--cancel)"),
+             ("unknown", "нет оценки", "#fff")]
+P_STATUS = {"TODO": ("не начато", "var(--idle)"), "IN PROGRESS": ("в работе", "var(--progress)"),
+            "BLOCKED": ("заблокировано", "var(--cancel)"), "DONE": ("готово", "var(--done)")}
+
+
+def work_of(role):
+    role = text(role)
+    if role.startswith("EXT["):
+        return WORK_TYPES[4]
+    return next((w for w in WORK_TYPES if role in w[3]), WORK_TYPES[1])
+
+
+def qlabel(quarter):
+    m = re.match(r"^(\d{4})Q([1-4])$", text(quarter))
+    return f"Q{m.group(2)} {m.group(1)}" if m else text(quarter)
+
+
+def present_html_slides(d):
+    """Слайды презентации: (вид для оглавления, название, класс фона, HTML)."""
+    m, q = d["meta"], qlabel(d["meta"]["quarter"])
+    prev = qlabel(d["retro"]["quarter"]) if d["retro"] else ""
+    plan_part = "Часть 2" if d["retro"] else "Часть 1"
+    out = []
+
+    def add(kind, title, cls, body):
+        out.append((kind, title, cls, body))
+
+    def heading(title, eyebrow=""):
+        size = " longer" if len(title) > 60 else " long" if len(title) > 46 else ""
+        return (f'<div class="eyebrow">{esc(eyebrow)}</div>' if eyebrow else "") + f'<h2 class="{size.strip()}">{esc(title)}</h2>'
+
+    def hero(kind, eyebrow, title, lead, nxt, cls="dark", stats=""):
+        items = "".join(f"<li>{esc(x)}</li>" for x in nxt)
+        add(kind, title, f"{cls} hero", f'<div class="hero-in"><div class="eyebrow">{esc(eyebrow)}</div><h1{" class=long" if len(title) > 40 else ""}>{esc(title)}</h1>'
+            + (f'<p class="lead">{esc(lead)}</p>' if lead else "")
+            + (f'<div class="next"><span>Дальше</span><ol>{items}</ol></div>' if nxt else "") + f"</div>{stats}")
+
+    def legend(items):
+        return '<div class="legend">' + "".join(f'<span><i style="background:{c}"></i>{esc(l)}</span>' for l, c in items) + "</div>"
+
+    def stack(parts):
+        total = sum(v for v, _ in parts) or 1
+        return '<div class="stack">' + "".join(
+            f'<span style="width:{v / total * 100:.2f}%;background:{c}">{v if v / total > 0.06 else ""}</span>'
+            for v, c in parts if v) + "</div>"
+
+    def stats(items):
+        return '<div class="stats">' + "".join(
+            f'<div style="border-color:{c}"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for l, v, c in items) + "</div>"
+
+    def chip(textv, color):
+        return f'<span class="chip" style="background:{color}">{esc(textv)}</span>'
+
+    def week_grid(label_w, rows_html):
+        sprints = (d["sprints"] or {}).get("labels") or []
+        head = '<div></div>' + "".join(
+            f'<div class="sp" style="grid-column:{sp["w0"] + 2} / {sp["w1"] + 3}">{esc(sp["name"])}<i>{esc(sp["dates"])}</i></div>'
+            for sp in sprints if sp["w0"] is not None and sp["w1"] is not None)
+        return (f'<div class="scroll-x"><div class="weeks" style="--label:{label_w}px;--n:{len(d["weeks"])}">'
+                + head + rows_html + "</div></div>")
+
+    # ---- титул
+    add("титул", f"Квартал {q} · {m['team']}", "blue cover",
+        f'<h1>Квартал {esc(q)} · {esc(m["team"])}</h1>'
+        f'<p class="message">{esc(m["message"] or "Чем занимаемся в квартале, кто за что отвечает и как двигаемся.")}</p>'
+        f'<div class="meta">{esc(m["period"])}  ·  PO — {esc(m["po"])}' + (f"  ·  обновлено {esc(m['updated'])}" if m["updated"] else "") + "</div>")
+
+    # ---- вводная
+    intro = (["Результаты " + prev] if d["retro"] else []) + (["Актуальные риски и проблемы"] if d["risks"] else []) \
+        + ["Верхнеуровневый roadmap"] + (["Инициативы по спринтам"] if d["sprints"] and d["sprints"]["rows"] else [])
+    hero("вводная", "Вводная", "Картина квартала", "Откуда идём, что мешает и как раскладываем работу по времени.", intro)
+    if d["retro"]:
+        r = d["retro"]
+        rows = ""
+        for o in r["objectives"] + [{"code": "ИТОГО", "name": "", "counts": r["counts"], "total": True}]:
+            tr = " total-row" if o.get("total") else ""
+            name = o["code"] if o.get("total") else f'{o["code"]} — {o["name"]}'
+            parts = [(o["counts"].get(k, 0), c) for k, _, c in P_OUTCOME]
+            rows += f'<div class="name{tr}">{esc(name)}</div><div class="{tr.strip()}">{stack(parts)}</div><div class="sum{tr}">{o["counts"]["total"]}</div>'
+        note = f'<div class="callout"><b>ВЫВОД</b>{esc(m["retro_note"])}</div>' if m["retro_note"] else ""
+        add("вводная", f"Результаты {prev}", "", heading(f"Результаты {prev}", "Вводная · откуда мы идём")
+            + '<div class="res-top">' + legend([(l, c) for _, l, c in P_OUTCOME[:4]])
+            + f'<div class="big-stat">{esc(str(r["weighted"]) + "%" if r["weighted"] is not None else "—")}<small>ИТОГ ПО PBV</small></div></div>'
+            + f'<div class="bars">{rows}</div><div class="foot">{note}</div>')
+    if d["risks"]:
+        shown = d["risks"][:7]
+        rows = "".join(f'<div class="r"><div class="cat">{esc(x["category"])}' + (f' · KR {esc(x["kr"])}' if x["kr"] else "")
+                       + f'</div><div class="t">{esc(x["title"])}</div><div class="d">{esc(x["detail"])}</div></div>' for x in shown)
+        more = f'<div class="foot"><span class="note">+ ещё {len(d["risks"]) - len(shown)} — в разборе по целям</span></div>' \
+            if len(d["risks"]) > len(shown) else ""
+        add("вводная", "Актуальные риски и проблемы", "dark",
+            heading("Актуальные риски и проблемы", "Вводная") + f'<div class="risk-rows">{rows}</div>{more}')
+    cols = "".join(f'<div class="colcard"><div class="head">{esc(c["code"])} · {esc(c["name"])}</div><ul>'
+                   + "".join(f"<li>{esc(i)}</li>" for i in c["items"] or ["нет KR в квартале"]) + "</ul></div>" for c in d["roadmap"])
+    add("вводная", f"Roadmap {q}", "light", heading(f"Roadmap {q}", "Вводная · верхнеуровнево") + f'<div class="cols">{cols}</div>')
+    if d["sprints"] and d["sprints"]["rows"]:
+        for n, part in enumerate(chunks(d["sprints"]["rows"], 11)):
+            body = ""
+            for row in part:
+                body += (f'<div class="lbl"><span class="o">{esc(row["obj"]).zfill(2)}</span>'
+                         f'<span class="tx">{esc(row["kr"])} {esc(row["title"])}</span></div>')
+                for sp in d["sprints"]["labels"]:
+                    roles = [x for k in range(sp["w0"], sp["w1"] + 1) for x in row["weeks"][k]]
+                    if not roles:
+                        continue
+                    groups = [w for w in WORK_TYPES if any(work_of(x) is w for x in roles)]
+                    label = groups[0][1] if len(groups) == 1 else " + ".join(g[2] for g in groups[:2]) + (" …" if len(groups) > 2 else "")
+                    color = {"analysis": "var(--w-analysis)", "dev": "var(--w-dev)", "qa": "var(--w-qa)",
+                             "release": "var(--w-release)", "ext": "var(--w-ext)"}[groups[0][0]]
+                    body += (f'<div class="cell" style="grid-column:{sp["w0"] + 2} / {sp["w1"] + 3};background:{color}">'
+                             f"{esc(label)}</div>")
+                body += '<div style="grid-column:1 / -1;height:0"></div>'
+            undated = d["sprints"]["undated"] if n == 0 else []
+            title = "Инициативы по спринтам" + (" (продолжение)" if n else "")
+            add("вводная", title, "", heading(title, "Вводная") + week_grid(470, body)
+                + '<div class="foot">' + legend([(w[1], f"var(--w-{w[0]})") for w in WORK_TYPES])
+                + (f'<span class="note">сроки не заданы: {esc("; ".join(undated))}</span>' if undated else "") + "</div>")
+
+    # ---- часть 1: ретро
+    if d["retro"]:
+        r = d["retro"]
+        hero("ретро", "Часть 1", f"Ретро {prev}", "Что обещали в прошлом квартале и что из этого вышло.",
+             ["Статус по целям"] + [f'{o["code"]} — {o["name"]}' for o in r["objectives"]])
+        rows = "".join(
+            f'<tr><td class="k">{esc(o["code"])} — {esc(o["name"])}</td>' + "".join(f'<td class="c">{o["counts"][k]}</td>' for k in
+                                                                                  ("total", "done", "partial", "failed", "dropped"))
+            + f'<td class="c">{esc(str(o["weighted"]) + "%" if o["weighted"] is not None else "—")}</td></tr>' for o in r["objectives"])
+        c = r["counts"]
+        rows += ('<tr><td class="mono">Итого</td>' + f'<td class="c">{c["total"]}</td>'
+                 + "".join(f'<td class="c">{chip(c[k], col)}</td>' for k, _, col in P_OUTCOME[:4])
+                 + f'<td class="c">{esc(str(r["weighted"]) + "%" if r["weighted"] is not None else "—")}</td></tr>')
+        add("ретро", f"Статус по целям {prev}", "light", heading(f"Статус по целям {prev}", f"Часть 1 · ретро {prev}")
+            + '<div class="card-table"><table class="t"><tr><th>Цель</th><th>Всего KR</th><th>Закрыто</th><th>Частично</th>'
+              '<th>Не сделано</th><th>Отменено</th><th>Итог по PBV</th></tr>' + rows + "</table></div>")
+        for o in r["objectives"]:
+            oc = o["counts"]
+            hero("ретро", f"Часть 1 · ретро {prev}", f'{o["code"]} — {o["name"]}', f'Цель: {o["goal"]}' if o["goal"] else "",
+                 ["Что сделали", "Что осталось", "Что переносим"], cls="light",
+                 stats=stats([("всего KR", oc["total"], "var(--dark)"), ("закрыто", oc["done"], "var(--done)"),
+                              ("частично", oc["partial"], "var(--progress)"), ("не сделано", oc["failed"], "var(--idle)"),
+                              ("отменено", oc["dropped"], "var(--cancel)"),
+                              ("итог по PBV", f'{o["weighted"]}%' if o["weighted"] is not None else "—", "var(--accent)")]))
+            outc = {k: (l, col) for k, l, col in P_OUTCOME}
+            for n, part in enumerate(chunks(o["rows"], 5)):
+                rows = "".join(
+                    f'<tr><td class="k">{esc(x["kr"])}</td><td>{esc(x["title"])}</td><td class="c">{esc(dash_text(x["pbv"]))}</td>'
+                    f'<td>{chip(*outc.get(x["outcome"], outc["unknown"]))}<span class="sub">{esc(x["result"].split(" — ", 1)[-1] if " — " in x["result"] else "")}</span></td>'
+                    f'<td class="s">{esc("; ".join(x["done"]) or "—")}</td><td class="s">{esc("; ".join(x["left"]) or "—")}</td>'
+                    f'<td class="s">{esc(x["next"])}</td></tr>' for x in part)
+                title = f'{o["code"]} — что сделали, что осталось' + (" (продолжение)" if n else "")
+                add("ретро", title, "", heading(title, f"Часть 1 · ретро {prev}")
+                    + '<table class="t"><tr><th>KR</th><th>Задача</th><th>PBV</th><th>Итог</th><th>Что сделали</th>'
+                      '<th>Что осталось</th><th>Переносим</th></tr>' + rows + "</table>")
+
+    # ---- часть 2: планы
+    hero("планы", plan_part, f"Планы {q}", m["message"],
+         ["Обзор предстоящих работ"] + [f'{o["code"]} — {o["name"]}' for o in d["objectives"]])
+    rows = ""
+    every = {"krs": [], "gantt": []}
+    for o in d["objectives"] + [None]:
+        oo = o or every
+        if o:
+            every["krs"] += o["krs"]
+            every["gantt"] += o["gantt"]
+        counts = {}
+        for st in oo["gantt"]:
+            counts[work_of(st["role"])[0]] = counts.get(work_of(st["role"])[0], 0) + 1
+        days = round(sum(k["days"] or 0 for k in oo["krs"]), 2)
+        open_ = sum(1 for g in oo["gantt"] if g["who"] in ("исполнитель не выбран", "нет роли в команде"))
+        info = f'KR {len(oo["krs"])} · {len(oo["gantt"])} подз.' + (f" · {num_text(days)} дн" if days else "") + (f" · без исп. {open_}" if open_ else "")
+        tr = "" if o else " total-row"
+        rows += (f'<div class="name{tr}">{esc(o["code"] + " — " + o["name"] if o else "ИТОГО")}</div>'
+                 f'<div class="{tr.strip()}">{stack([(counts.get(w[0], 0), f"var(--w-{w[0]})") for w in WORK_TYPES])}</div>'
+                 f'<div class="sum{tr}" style="white-space:nowrap">{esc(info)}</div>')
+    add("планы", f"Предстоящие работы {q}", "", heading(f"Предстоящие работы {q}", f"{plan_part} · планы · обзор")
+        + legend([(w[1], f"var(--w-{w[0]})") for w in WORK_TYPES])
+        + f'<div class="bars plan" style="margin-top:26px">{rows}</div>'
+        + '<div class="foot"><span class="note">Число подзадач по типам работ. Сроки и исполнители — в GANTT по каждой цели.</span></div>')
+    for o in d["objectives"]:
+        days = round(sum(k["days"] or 0 for k in o["krs"]), 2)
+        open_ = sum(1 for g in o["gantt"] if g["who"] in ("исполнитель не выбран", "нет роли в команде"))
+        nxt = ["Инициативы"] + (["Известные риски"] if o["risks"] else []) + (["GANTT по сотрудникам"] if d["gantt"] and o["people"] else [])
+        hero("планы", f"{plan_part} · планы {q}", f'{o["code"]} — {o["name"]}', f'Цель: {o["goal"]}' if o["goal"] else "", nxt,
+             cls="light", stats=stats([("KR", len(o["krs"]), "var(--dark)"), ("подзадач", len(o["gantt"]), "var(--w-dev)"),
+                                       ("оценка, дн", num_text(days) if days else "—", "var(--w-analysis)"),
+                                       ("людей", sum(1 for p in o["people"] if p["kind"] == "person"), "var(--done)"),
+                                       ("без исполнителя", open_, "var(--cancel)"), ("рисков", len(o["risks"]), "var(--hold)")]))
+        for n, part in enumerate(chunks(o["krs"], 6)):
+            rows = "".join(
+                f'<tr><td class="k">{esc(k["id"])}</td><td><b>{esc(("[" + k["tag"] + "] " if k["tag"] else "") + k["title"])}</b>'
+                + (f'<span class="sub">{chip("из " + prev, "var(--hold)")}</span>' if k["from_retro"] and prev else "")
+                + f'</td><td class="c">{esc(dash_text(k["pbv"]))}</td>'
+                f'<td class="s mono">{esc(" · ".join(x for x in (k["category"], "эпик" if k["epic"] == "epic" else "enabler") if x))}</td>'
+                f'<td class="s">{esc(k["result"] or "—")}</td><td class="s">{esc(k["owner"] or "—")}</td>'
+                f'<td class="s mono">{esc(" — ".join(x for x in (k["start"], k["end"]) if x) or "уточняется")}'
+                + (f'<span class="sub">{num_text(k["days"])} дн</span>' if k["days"] is not None else "") + "</td></tr>" for k in part)
+            title = f'{o["code"]} · инициативы' + (" (продолжение)" if n else "")
+            add("планы", title, "", heading(title, f"{plan_part} · планы {q}")
+                + '<table class="t"><tr><th>KR</th><th>Инициатива</th><th>PBV</th><th>Тип</th><th>Образ результата</th>'
+                  '<th>Отвечает</th><th>Сроки</th></tr>' + rows + "</table>")
+        if o["risks"]:
+            rows = "".join(f'<tr><td class="k">{esc(x["category"])}</td><td class="mono">{esc(x["kr"])}</td><td>{esc(x["title"])}</td>'
+                           f'<td>{esc(x["detail"]) if x["detail"] else "<span class=muted><i>обсудить на встрече</i></span>"}</td></tr>'
+                           for x in o["risks"][:8])
+            add("планы", f'{o["code"]} · известные риски', "", heading(f'{o["code"]} · известные риски', f"{plan_part} · планы {q}")
+                + '<table class="t"><tr><th>Тип</th><th>KR</th><th>Риск</th><th>Что делаем</th></tr>' + rows + "</table>")
+        if d["gantt"] and o["people"]:
+            pages = -(-len(o["people"]) // 12)
+            for n, part in enumerate(chunks(o["people"], -(-len(o["people"]) // pages))):
+                body = ""
+                for pr in part:
+                    warn = " warn" if pr["kind"] == "none" else ""
+                    who = pr["who"].replace("внешний ресурс: ", "внешн. ")
+                    body += (f'<div class="lbl"><span class="role">{esc(", ".join(pr["roles"]))}</span><span class="who{warn} tx">{esc(who)}</span>'
+                             f'<span class="cnt">{pr["steps"]} подз.' + (f' · {num_text(pr["days"])} дн' if pr["days"] else "")
+                             + (f' · без сроков {pr["undated"]}' if pr["undated"] else "") + "</span></div>")
+                    k = 0
+                    while k < len(pr["weeks"]):
+                        c = pr["weeks"][k]
+                        if not c["krs"]:
+                            k += 1
+                            continue
+                        e = k
+                        while e + 1 < len(pr["weeks"]) and pr["weeks"][e + 1]["krs"] == c["krs"] and pr["weeks"][e + 1]["status"] == c["status"]:
+                            e += 1
+                        body += (f'<div class="cell m" style="grid-column:{k + 2} / {e + 3};background:{P_STATUS.get(c["status"], P_STATUS["TODO"])[1]}">'
+                                 f'{esc(" · ".join(c["krs"]))}</div>')
+                        k = e + 1
+                    body += '<div style="grid-column:1 / -1;height:0"></div>'
+                title = f'{o["code"]} · GANTT по сотрудникам' + (" (продолжение)" if n else "")
+                add("планы", title, "", heading(title, f"{plan_part} · планы {q}") + week_grid(520, body)
+                    + '<div class="foot">' + legend([(l, col) for l, col in P_STATUS.values()])
+                    + '<span class="note">в полосе — номера KR цели</span></div>')
+
+    # ---- финал
+    if d["how"] or d["asks"]:
+        hero("финал", "Финал", "Как работаем дальше", "", (["Как работаем в квартале"] if d["how"] else [])
+             + (["Что нужно от команды"] if d["asks"] else []))
+    if d["how"]:
+        add("финал", "Как работаем в квартале", "light", heading("Как работаем в квартале", "Процесс")
+            + '<div class="numbered">' + "".join(f'<div class="r"><span class="n">{i:02d}</span><span>{esc(t)}</span></div>'
+                                                  for i, t in enumerate(d["how"], 1)) + "</div>")
+    if d["asks"]:
+        add("финал", "Что нужно от команды", "dark", heading("Что нужно от команды", "После встречи")
+            + '<div class="numbered">' + "".join(f'<div class="r"><span class="n">{a["num"]}</span><span>{esc(a["title"])}</span></div>'
+                                                  for a in d["asks"]) + "</div>")
+    return out
+
+
+def chunks(items, size):
+    size = max(1, size)
+    return [items[i:i + size] for i in range(0, len(items), size)] or [[]]
+
+
+def dash_text(value):
+    return "—" if value is None or value == "" else str(value)
+
+
+def render_present(doc, source):
+    """Презентация квартала — HTML: слайды из present_payload, навигация как у бизнес-отчёта."""
+    d = present_payload(doc, source)
+    slides = present_html_slides(d)
+    m = d["meta"]
+    title = f"Квартал {qlabel(m['quarter'])} · {m['team']}"
+    body = "\n".join(
+        f'<section class="slide {cls}" data-kind="{esc(kind)}" data-title="{esc(t)}">{inner}'
+        f'<span class="pageno">{n}</span></section>' for n, (kind, t, cls, inner) in enumerate(slides, 1))
+    return ('<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<title>{html.escape(title)}</title>\n'
+            f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
+            f'<style>\n{asset("present.css")}</style>\n</head>\n<body>\n'
+            '<div class="deck" id="deck">\n<header class="bar"><button id="tocBtn" class="feed-only" type="button">Слайды</button>'
+            f'<span class="title">{esc(title)}</span><span class="grow"></span>'
+            '<button id="fullBtn" class="stage-only" type="button" title="Во весь экран (F)">На весь экран</button>'
+            '<button id="printBtn" class="dark" type="button" title="Печать или «Сохранить как PDF»: по слайду на страницу">PDF</button></header>\n'
+            '<div class="body"><button class="side-tab" id="sideTab" type="button" title="Список слайдов">Слайды</button>'
+            '<nav class="toc" id="toc"><h4>Слайды</h4><div id="tocList"></div></nav>\n'
+            f'<div class="feed" id="feed"><div class="slides" id="slides">\n{body}\n</div>'
+            '<div class="nav" id="nav"><button id="prev" type="button" aria-label="Предыдущий слайд" title="Предыдущий (←)">‹</button>'
+            '<span class="count" id="count"></span>'
+            '<button id="next" type="button" aria-label="Следующий слайд" title="Следующий (→)">›</button></div></div></div>\n</div>\n'
+            f'<script>{asset("present.js")}</script>\n</body>\n</html>\n')
 
 
 # ---------------------------------------------------------------- CLI

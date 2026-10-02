@@ -14,8 +14,8 @@ Python 3, без пакетов.
 | Команда | Что делает |
 |---|---|
 | `okr-plan.py lint <file.json> [--final]` | проверяет документ любого вида (`kind`); `--final` — по правилам принятия |
-| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН или TEAMPLANNER |
-| `okr-plan.py present <present.json> <data.json>` | факты презентации квартала для `build_present_pptx.js` (сначала `lint`) |
+| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН, TEAMPLANNER или презентацию квартала (`kind: present`) |
+| `okr-plan.py present <present.json> <data.json>` | факты презентации квартала для `.pptx` — `build_present_pptx.js` (сначала `lint`) |
 | `okr-plan.py seed <scope.json> <teamplanner.json> [--force]` | заготовка TeamPlanner из принятого Scope, который проходит `lint --final`; существующий файл не перезаписывает без `--force` |
 | `okr-plan.py csv <teamplanner.json> <out.csv>` | лист TeamPlanner для Google Sheets / Excel |
 | `okr-plan.py jira-ready <teamplanner.json>` | `ГОТОВО К ПЕРЕНОСУ` только для принятого TeamPlanner без ошибок `lint --final` и с `jira_project`; иначе — что мешает |
@@ -45,7 +45,7 @@ Python 3, без пакетов.
 ├── scope-<quarter>.json / .html     Этапы 2–3 · /okr-scope, /okr-stages
 ├── teamplanner-<quarter>.json / .html / .csv   Этап 4 · /okr-teamplanner
 ├── jira-<quarter>.csv                           перенос в JIRA без Atlassian MCP · /okr-jira
-└── present-<quarter>.json / .data.json / .pptx  презентация команде · /okr-present
+└── present-<quarter>.json / .html (+ .pptx)     презентация команде · /okr-present
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`), `<prev>` — закрываемый (`2026Q3`).
@@ -385,12 +385,19 @@ JSON, и они уходят в CSV. Правки копятся в браузе
 
 ## Презентация — `kind: "present"`
 
-Презентация квартала команде (`/okr-present`) — `.pptx` в формате
-отчёта-экватора. Агент пишет только посыл; факты `okr-plan.py present` берёт
-по цепочке ссылок: презентация → `teamplanner.file` → его `scope.file` →
-`retro.file` этого Scope (каждый файл — рядом с тем, кто на него ссылается) — и
-пишет `data.json`, из которого `skills/okr-present/scripts/build_present_pptx.js`
-рисует слайды.
+Презентация квартала команде (`/okr-present`) в стиле отчёта-экватора. Агент
+пишет только посыл; факты скрипт берёт по цепочке ссылок: презентация →
+`teamplanner.file` → его `scope.file` → `retro.file` этого Scope (каждый файл —
+рядом с тем, кто на него ссылается). `okr-plan.py render` собирает HTML;
+`okr-plan.py present` пишет те же факты в `data.json`, из которого
+`skills/okr-present/scripts/build_present_pptx.js` рисует `.pptx`.
+
+Каждую часть (Вводная, Ретро, Планы, Финал) и каждую цель в ретро и планах
+открывает HERO-слайд: текст по центру и «Дальше» — список следующих слайдов;
+у целей — цифры внизу (исходы KR в ретро; KR, подзадач, оценка, люди, без
+исполнителя, риски — в планах). HTML: панель сверху («На весь экран», «PDF»),
+вкладка «Слайды» с оглавлением слева, «‹ N / M ›» снизу; на узком экране —
+лентой; печать — по слайду 1600×900 на страницу.
 
 | Поле | Что это |
 |---|---|
