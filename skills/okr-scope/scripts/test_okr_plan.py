@@ -575,8 +575,7 @@ class Jira(Case):
         self.assertTrue(activity["Summary"].startswith("[ACTIVITY] "))
 
 class Present(Case):
-    """Презентация квартала команде: агент пишет только посыл, факты считает okr-plan.py present,
-    слайды рисует build_present_pptx.js."""
+    """Презентация квартала команде: агент пишет только посыл, факты и слайды собирает okr-plan.py."""
 
     def setUp(self):
         super().setUp()
@@ -597,7 +596,8 @@ class Present(Case):
         return self.write(self.present, "present-2026Q4.json")
 
     def data(self):
-        return okr_plan.present_json(self.put(), os.path.join(self.tmp.name, "data.json"))
+        path = self.put()
+        return okr_plan.present_payload(okr_plan.load_checked(path, "present"), path)
 
     def test_fixture_is_valid(self):
         self.assertEqual(okr_plan.lint(self.put(), final=True).errors, [])
@@ -625,25 +625,32 @@ class Present(Case):
             page = f.read()
         slides = re.findall(r'<section class="slide ([^"]*)" data-kind="([^"]*)" data-title="([^"]*)"', page)
         heroes = [t for cls, _, t in slides if "hero" in cls]
-        # HERO-паузы: перед вводной, ретро, каждой целью ретро, планами, каждой целью плана и финалом.
+        # HERO-паузы: перед вводной, ретро, каждой целью ретро, планами и каждой целью плана.
         self.assertEqual(heroes, ["Картина квартала", "Ретро Q3 2026",
                                   "OBJ 1 — Продавать подписку на витрине без ручных операций",
                                   "OBJ 2 — Перевести каталог на новую платформу", "Планы Q4 2026",
                                   "OBJ 1 — Продавать подписку без ручных операций", "OBJ 2 — Отключить старый каталог",
-                                  "OBJ 3 — Поддержка витрины", "Как работаем дальше"])
+                                  "OBJ 3 — Поддержка витрины"])
         kinds = [k for _, k, _ in slides]
         self.assertEqual(kinds[0], "титул")
         self.assertEqual(kinds, sorted(kinds, key=["титул", "вводная", "ретро", "планы", "финал"].index))
         titles = [t for _, _, t in slides]
         for t in ("Результаты Q3 2026", "Актуальные риски и проблемы", "Roadmap Q4 2026", "Инициативы по спринтам",
                   "Статус по целям Q3 2026", "OBJ 1 — что сделали, что осталось", "Предстоящие работы Q4 2026",
-                  "OBJ 1 · инициативы", "OBJ 1 · известные риски", "OBJ 1 · GANTT по сотрудникам", "Что нужно от команды"):
+                  "Roadmap квартала 1/2", "Roadmap квартала 2/2", "OBJ 1 · инициативы", "OBJ 1 · известные риски",
+                  "OBJ 1 · GANTT по сотрудникам", "Что нужно от команды"):
             self.assertIn(t, titles)
         self.assertLess(titles.index("Ретро Q3 2026"), titles.index("Статус по целям Q3 2026"))
         self.assertLess(titles.index("OBJ 1 — Продавать подписку без ручных операций"), titles.index("OBJ 1 · инициативы"))
         for marker in ('id="sideTab"', 'id="toc"', 'id="prev"', 'id="next"', 'id="printBtn"', 'id="fullBtn"',
-                       '<span>Дальше</span>', "Закрываем биллинг с партнёром"):
+                       "Закрываем биллинг с партнёром", "Техлид инициативы", 'class="chip"',
+                       'data-tip="1.2 — Семейная подписка на витрине"'):
             self.assertIn(marker, page)
+        self.assertLess(titles.index("Предстоящие работы Q4 2026"), titles.index("Roadmap квартала 1/2"))
+        self.assertLess(titles.index("Roadmap квартала 2/2"), titles.index("OBJ 1 — Продавать подписку без ручных операций"))
+        markup = "".join(re.findall(r'<section class="slide.*?</section>', page, re.S))
+        for gone in ("Дальше", "Вывод", "Как работаем", "Отвечает", "Сроки"):
+            self.assertNotIn(gone, markup)
 
     def test_intro_and_parts(self):
         d = self.data()
@@ -828,7 +835,6 @@ class Robustness(Case):
                         ops.append(lambda: okr_plan.seed(fp, os.path.join(self.tmp.name, "s.json"), force=True))
                     # Презентация читает TeamPlanner, Scope и Retro — их порча не должна ронять её сборку.
                     ops.append(lambda: okr_plan.lint(present, final=True))
-                    ops.append(lambda: okr_plan.present_json(present, os.path.join(self.tmp.name, "d.json")))
                     ops.append(lambda: okr_plan.render(present, os.path.join(self.tmp.name, "p.html")))
                     for op in ops:
                         try:

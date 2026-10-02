@@ -86,11 +86,6 @@ body{ font-family:Arial, "Helvetica Neue", sans-serif; color:var(--dark); backgr
 .hero h1{ font-size:84px; line-height:1.04; letter-spacing:-.03em; margin:6px 0 22px; }
 .hero .lead{ font-size:24px; line-height:1.4; color:var(--gray); margin:0 0 34px; max-width:1100px; }
 .hero.light .lead{ color:var(--gray-dark); }
-.hero .next{ display:flex; gap:22px; align-items:baseline; font-size:19px; }
-.hero .next span{ font-family:var(--mono); font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--gray); }
-.hero .next ol{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; justify-content:center; gap:10px 14px; }
-.hero .next li{ border:1px solid currentColor; border-radius:22px; padding:6px 16px; opacity:.9; }
-.hero.dark .next li{ border-color:var(--gray-dark); }
 .hero .stats{ width:100%; margin:0; }
 .res-top{ display:flex; justify-content:space-between; align-items:flex-start; margin:-6px 0 22px; }
 
@@ -162,6 +157,12 @@ table.t .sub{ display:block; color:var(--gray); font-size:13px; margin-top:4px; 
 .numbered .r:first-child{ border-top:0; }
 .numbered .n{ font-family:var(--mono); color:var(--accent); font-weight:700; }
 
+/* GANTT без заголовка — вся высота под сетку; номер KR в полосе, название — подсказкой. */
+.slide.gantt{ padding-top:44px; }
+.cell[data-tip]{ position:relative; cursor:help; }
+.cell[data-tip]:hover::after{ content:attr(data-tip); position:absolute; left:50%; bottom:calc(100% + 6px); transform:translateX(-50%);
+  background:var(--dark); color:#fff; font-family:Arial, sans-serif; font-size:15px; line-height:1.35; padding:6px 10px; white-space:pre; z-index:2; pointer-events:none; }
+
 /* ---------- узкий экран: лента, слайды по ширине ---------- */
 @media screen and (max-width:899px){
   .slides{ padding:12px 0 40px; gap:14px; }
@@ -169,7 +170,6 @@ table.t .sub{ display:block; color:var(--gray); font-size:13px; margin-top:4px; 
   .slide h2, .slide h2.long, .slide h2.longer{ font-size:26px; margin-bottom:16px; }
   .cover h1, .divider h1, .hero h1, .hero h1.long{ font-size:34px; margin-top:20px; }
   .hero .lead{ font-size:16px; margin-bottom:18px; }
-  .hero .next{ flex-direction:column; align-items:center; gap:8px; font-size:14px; }
   .hero .stats{ margin-top:16px; }
   .res-top{ flex-direction:column; gap:12px; }
   .cover .message{ font-size:18px; }
@@ -182,6 +182,9 @@ table.t .sub{ display:block; color:var(--gray); font-size:13px; margin-top:4px; 
   .cols{ grid-auto-flow:row; }
   .scroll-x{ overflow-x:auto; margin:0 -18px; padding:0 18px; }
   .scroll-x > *{ min-width:900px; }
+  .weeks{ grid-template-columns:200px repeat(var(--n), minmax(64px, 1fr)); }
+  .weeks .lbl{ font-size:14px; }
+  .weeks .lbl .cnt{ display:none; }
   .stats{ grid-template-columns:repeat(3, 1fr); gap:12px; }
   .stats b{ font-size:24px; }
   table.t{ font-size:14px; }

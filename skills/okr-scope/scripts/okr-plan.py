@@ -3,7 +3,6 @@
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
   okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН, TEAMPLANNER или презентация
-  okr-plan.py present <present.json> <data.json>       факты презентации для .pptx (build_present_pptx.js)
   okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
   okr-plan.py jira-ready <teamplanner.json>            можно ли переносить в JIRA: принят, lint --final, проект
@@ -153,10 +152,10 @@ SHAPES = {
     },
     "present": {
         "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V, "teamplanner": {"file": V},
-        "message": T, "retro_note": T, "objectives": [{"id": V, "message": T}],
+        "message": T, "objectives": [{"id": V, "message": T}],
         "risks": [{"category": V, "title": T, "detail": T, "kr": V}],
         "sprints": [{"name": V, "start": V, "end": V}], "sprint_weeks": V,
-        "how": L, "asks": L, "skip": L,
+        "asks": L, "skip": L,
     },
 }
 
@@ -1511,9 +1510,9 @@ def jira_csv(path, out):
 
 # ---------------------------------------------------------------- Презентация квартала команде
 
-# Презентация — .pptx в формате отчёта-экватора (/okr-equator): от общего к частному.
-# Вводная → Ретро по каждой цели → Планы по каждой цели. Здесь считаются все факты
-# (payload), рисует слайды skills/okr-present/scripts/build_present_pptx.js.
+# Презентация — HTML в стиле отчёта-экватора (/okr-equator): от общего к частному.
+# Вводная → Ретро по каждой цели → Планы по каждой цели. Сначала считаются все факты
+# (present_payload), потом из них собираются слайды (present_html_slides).
 PRESENT_SLIDES = {"retro": "часть «Ретро» и «Результаты прошлого»", "risks": "актуальные риски",
                   "sprints": "инициативы по спринтам", "gantt": "GANTT по сотрудникам", "asks": "что нужно от команды"}
 RISK_CATEGORIES = ["Внешнее", "Ресурс", "Срок", "Зависимость", "Организация", "Техническое", "Общее"]
@@ -1757,7 +1756,7 @@ def gantt_people(gantt, n_weeks, tp):
 
 
 def present_payload(doc, path):
-    """Все факты презентации одним JSON — рисует build_present_pptx.js. Агент его не пишет."""
+    """Все факты презентации — из TeamPlanner, Scope и ретро. Агент их не пишет."""
     tp, scope, retro, problems = present_sources(doc, path)
     if not tp:
         raise SystemExit(problems.get("teamplanner", "TeamPlanner не найден"))
@@ -1846,8 +1845,7 @@ def present_payload(doc, path):
         "meta": {"quarter": quarter, "team": team, "po": text(doc.get("po") or tp.get("po")),
                  "message": text(doc.get("message")), "updated": text(doc.get("updated")),
                  "period": " — ".join(short_date(x) for x in bounds) if bounds else "",
-                 "prev_quarter": retro_data["quarter"] if retro_data else "",
-                 "retro_note": text(doc.get("retro_note"))},
+                 "prev_quarter": retro_data["quarter"] if retro_data else ""},
         "months": months_of(quarter),
         "weeks": [short_date(w) for w in weeks],
         "retro": retro_data,
@@ -1860,22 +1858,9 @@ def present_payload(doc, path):
             "rows": [] if "sprints" in skip else sprint_rows, "undated": undated},
         "objectives": objectives,
         "gantt": "gantt" not in skip,
-        "how": [text(x) for x in doc.get("how") or [] if text(x)],
         "asks": asks if "asks" not in skip else [],
     }
 
-
-def present_json(path, out):
-    """okr-plan.py present: факты презентации в JSON для build_present_pptx.js."""
-    doc = load_checked(path, "present")
-    rep = lint(path)
-    if rep.errors:
-        raise SystemExit("Презентация не проходит проверку:\n  " + "\n  ".join(rep.errors))
-    payload = present_payload(doc, path)
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    return payload
 
 
 # ---------------------------------------------------------------- Презентация: HTML
@@ -1888,6 +1873,7 @@ WORK_TYPES = [("analysis", "аналитика", "аналит.", ("PO", "ADR", 
 P_OUTCOME = [("done", "закрыт", "var(--done)"), ("partial", "частично", "var(--progress)"),
              ("failed", "не сделан", "var(--idle)"), ("dropped", "отменён", "var(--cancel)"),
              ("unknown", "нет оценки", "#fff")]
+CATEGORY_COLOR = {"Run": "#EEF1F5", "Change": "#E6F2EA", "Disrupt": "#F6E8F7"}
 P_STATUS = {"TODO": ("не начато", "var(--idle)"), "IN PROGRESS": ("в работе", "var(--progress)"),
             "BLOCKED": ("заблокировано", "var(--cancel)"), "DONE": ("готово", "var(--done)")}
 
@@ -1918,11 +1904,9 @@ def present_html_slides(d):
         size = " longer" if len(title) > 60 else " long" if len(title) > 46 else ""
         return (f'<div class="eyebrow">{esc(eyebrow)}</div>' if eyebrow else "") + f'<h2 class="{size.strip()}">{esc(title)}</h2>'
 
-    def hero(kind, eyebrow, title, lead, nxt, cls="dark", stats=""):
-        items = "".join(f"<li>{esc(x)}</li>" for x in nxt)
+    def hero(kind, eyebrow, title, lead, cls="dark", stats=""):
         add(kind, title, f"{cls} hero", f'<div class="hero-in"><div class="eyebrow">{esc(eyebrow)}</div><h1{" class=long" if len(title) > 40 else ""}>{esc(title)}</h1>'
-            + (f'<p class="lead">{esc(lead)}</p>' if lead else "")
-            + (f'<div class="next"><span>Дальше</span><ol>{items}</ol></div>' if nxt else "") + f"</div>{stats}")
+            + (f'<p class="lead">{esc(lead)}</p>' if lead else "") + f"</div>{stats}")
 
     def legend(items):
         return '<div class="legend">' + "".join(f'<span><i style="background:{c}"></i>{esc(l)}</span>' for l, c in items) + "</div>"
@@ -1940,13 +1924,22 @@ def present_html_slides(d):
     def chip(textv, color):
         return f'<span class="chip" style="background:{color}">{esc(textv)}</span>'
 
-    def week_grid(label_w, rows_html):
-        sprints = (d["sprints"] or {}).get("labels") or []
+    def week_grid(label_w, rows_html, sprints=None, first=0, count=None):
+        """Сетка недель first..first+count-1 с шапкой спринтов; колонка недели k — k - first + 2."""
+        sprints = sprints if sprints is not None else (d["sprints"] or {}).get("labels") or []
+        count = count if count is not None else len(d["weeks"])
         head = '<div></div>' + "".join(
-            f'<div class="sp" style="grid-column:{sp["w0"] + 2} / {sp["w1"] + 3}">{esc(sp["name"])}<i>{esc(sp["dates"])}</i></div>'
+            f'<div class="sp" style="grid-column:{sp["w0"] - first + 2} / {sp["w1"] - first + 3}">{esc(sp["name"])}<i>{esc(sp["dates"])}</i></div>'
             for sp in sprints if sp["w0"] is not None and sp["w1"] is not None)
-        return (f'<div class="scroll-x"><div class="weeks" style="--label:{label_w}px;--n:{len(d["weeks"])}">'
+        return (f'<div class="scroll-x"><div class="weeks" style="--label:{label_w}px;--n:{count}">'
                 + head + rows_html + "</div></div>")
+
+    def work_label(roles):
+        groups = [w for w in WORK_TYPES if any(work_of(x) is w for x in roles)]
+        label = groups[0][1] if len(groups) == 1 else " + ".join(g[2] for g in groups[:2]) + (" …" if len(groups) > 2 else "")
+        return label, f"var(--w-{groups[0][0]})"
+
+    kr_titles = {k["id"]: k["title"] for o in d["objectives"] for k in o["krs"]}
 
     # ---- титул
     add("титул", f"Квартал {q} · {m['team']}", "blue cover",
@@ -1955,9 +1948,7 @@ def present_html_slides(d):
         f'<div class="meta">{esc(m["period"])}  ·  PO — {esc(m["po"])}' + (f"  ·  обновлено {esc(m['updated'])}" if m["updated"] else "") + "</div>")
 
     # ---- вводная
-    intro = (["Результаты " + prev] if d["retro"] else []) + (["Актуальные риски и проблемы"] if d["risks"] else []) \
-        + ["Верхнеуровневый roadmap"] + (["Инициативы по спринтам"] if d["sprints"] and d["sprints"]["rows"] else [])
-    hero("вводная", "Вводная", "Картина квартала", "Откуда идём, что мешает и как раскладываем работу по времени.", intro)
+    hero("вводная", "Вводная", "Картина квартала", "Откуда идём, что мешает и как раскладываем работу по времени.")
     if d["retro"]:
         r = d["retro"]
         rows = ""
@@ -1966,11 +1957,10 @@ def present_html_slides(d):
             name = o["code"] if o.get("total") else f'{o["code"]} — {o["name"]}'
             parts = [(o["counts"].get(k, 0), c) for k, _, c in P_OUTCOME]
             rows += f'<div class="name{tr}">{esc(name)}</div><div class="{tr.strip()}">{stack(parts)}</div><div class="sum{tr}">{o["counts"]["total"]}</div>'
-        note = f'<div class="callout"><b>ВЫВОД</b>{esc(m["retro_note"])}</div>' if m["retro_note"] else ""
-        add("вводная", f"Результаты {prev}", "", heading(f"Результаты {prev}", "Вводная · откуда мы идём")
+        add("вводная", f"Результаты {prev}", "", heading(f"Результаты {prev}")
             + '<div class="res-top">' + legend([(l, c) for _, l, c in P_OUTCOME[:4]])
             + f'<div class="big-stat">{esc(str(r["weighted"]) + "%" if r["weighted"] is not None else "—")}<small>ИТОГ ПО PBV</small></div></div>'
-            + f'<div class="bars">{rows}</div><div class="foot">{note}</div>')
+            + f'<div class="bars">{rows}</div>')
     if d["risks"]:
         shown = d["risks"][:7]
         rows = "".join(f'<div class="r"><div class="cat">{esc(x["category"])}' + (f' · KR {esc(x["kr"])}' if x["kr"] else "")
@@ -1992,10 +1982,7 @@ def present_html_slides(d):
                     roles = [x for k in range(sp["w0"], sp["w1"] + 1) for x in row["weeks"][k]]
                     if not roles:
                         continue
-                    groups = [w for w in WORK_TYPES if any(work_of(x) is w for x in roles)]
-                    label = groups[0][1] if len(groups) == 1 else " + ".join(g[2] for g in groups[:2]) + (" …" if len(groups) > 2 else "")
-                    color = {"analysis": "var(--w-analysis)", "dev": "var(--w-dev)", "qa": "var(--w-qa)",
-                             "release": "var(--w-release)", "ext": "var(--w-ext)"}[groups[0][0]]
+                    label, color = work_label(roles)
                     body += (f'<div class="cell" style="grid-column:{sp["w0"] + 2} / {sp["w1"] + 3};background:{color}">'
                              f"{esc(label)}</div>")
                 body += '<div style="grid-column:1 / -1;height:0"></div>'
@@ -2008,8 +1995,7 @@ def present_html_slides(d):
     # ---- часть 1: ретро
     if d["retro"]:
         r = d["retro"]
-        hero("ретро", "Часть 1", f"Ретро {prev}", "Что обещали в прошлом квартале и что из этого вышло.",
-             ["Статус по целям"] + [f'{o["code"]} — {o["name"]}' for o in r["objectives"]])
+        hero("ретро", "Часть 1", f"Ретро {prev}", "Что обещали в прошлом квартале и что из этого вышло.")
         rows = "".join(
             f'<tr><td class="k">{esc(o["code"])} — {esc(o["name"])}</td>' + "".join(f'<td class="c">{o["counts"][k]}</td>' for k in
                                                                                   ("total", "done", "partial", "failed", "dropped"))
@@ -2024,7 +2010,7 @@ def present_html_slides(d):
         for o in r["objectives"]:
             oc = o["counts"]
             hero("ретро", f"Часть 1 · ретро {prev}", f'{o["code"]} — {o["name"]}', f'Цель: {o["goal"]}' if o["goal"] else "",
-                 ["Что сделали", "Что осталось", "Что переносим"], cls="light",
+                 cls="light",
                  stats=stats([("всего KR", oc["total"], "var(--dark)"), ("закрыто", oc["done"], "var(--done)"),
                               ("частично", oc["partial"], "var(--progress)"), ("не сделано", oc["failed"], "var(--idle)"),
                               ("отменено", oc["dropped"], "var(--cancel)"),
@@ -2042,8 +2028,7 @@ def present_html_slides(d):
                       '<th>Что осталось</th><th>Переносим</th></tr>' + rows + "</table>")
 
     # ---- часть 2: планы
-    hero("планы", plan_part, f"Планы {q}", m["message"],
-         ["Обзор предстоящих работ"] + [f'{o["code"]} — {o["name"]}' for o in d["objectives"]])
+    hero("планы", plan_part, f"Планы {q}", m["message"])
     rows = ""
     every = {"krs": [], "gantt": []}
     for o in d["objectives"] + [None]:
@@ -2054,22 +2039,39 @@ def present_html_slides(d):
         counts = {}
         for st in oo["gantt"]:
             counts[work_of(st["role"])[0]] = counts.get(work_of(st["role"])[0], 0) + 1
-        days = round(sum(k["days"] or 0 for k in oo["krs"]), 2)
-        open_ = sum(1 for g in oo["gantt"] if g["who"] in ("исполнитель не выбран", "нет роли в команде"))
-        info = f'KR {len(oo["krs"])} · {len(oo["gantt"])} подз.' + (f" · {num_text(days)} дн" if days else "") + (f" · без исп. {open_}" if open_ else "")
         tr = "" if o else " total-row"
         rows += (f'<div class="name{tr}">{esc(o["code"] + " — " + o["name"] if o else "ИТОГО")}</div>'
                  f'<div class="{tr.strip()}">{stack([(counts.get(w[0], 0), f"var(--w-{w[0]})") for w in WORK_TYPES])}</div>'
-                 f'<div class="sum{tr}" style="white-space:nowrap">{esc(info)}</div>')
+                 f'<div class="sum{tr}">{len(oo["gantt"])}</div>')
     add("планы", f"Предстоящие работы {q}", "", heading(f"Предстоящие работы {q}", f"{plan_part} · планы · обзор")
         + legend([(w[1], f"var(--w-{w[0]})") for w in WORK_TYPES])
-        + f'<div class="bars plan" style="margin-top:26px">{rows}</div>'
-        + '<div class="foot"><span class="note">Число подзадач по типам работ. Сроки и исполнители — в GANTT по каждой цели.</span></div>')
+        + f'<div class="bars" style="margin-top:26px">{rows}</div>')
+    # Roadmap квартала по неделям — двумя слайдами (первая и вторая половина спринтов), как в экваторе.
+    if d["sprints"] and d["sprints"]["rows"]:
+        labels = d["sprints"]["labels"]
+        half = -(-len(labels) // 2)
+        parts = [p for p in (labels[:half], labels[half:]) if p]
+        for n, sps in enumerate(parts, 1):
+            first, last = sps[0]["w0"], sps[-1]["w1"]
+            body = ""
+            for row in d["sprints"]["rows"]:
+                body += (f'<div class="lbl"><span class="o">{esc(row["obj"]).zfill(2)}</span>'
+                         f'<span class="tx">{esc(row["kr"])} {esc(row["title"])}</span></div>')
+                for k in range(first, last + 1):
+                    if row["weeks"][k]:
+                        label, color = work_label(row["weeks"][k])
+                        body += (f'<div class="cell" style="grid-column:{k - first + 2};background:{color}" '
+                                 f'title="{esc(", ".join(row["weeks"][k]))}">{esc(label)}</div>')
+                body += '<div style="grid-column:1 / -1;height:0"></div>'
+            title = f"Roadmap квартала {n}/{len(parts)}"
+            add("планы", title, "", heading(title, f"{plan_part} · планы · {sps[0]['name']} — {sps[-1]['name']}".lower()
+                                             .replace("часть", "Часть"))
+                + week_grid(470, body, sps, first, last - first + 1)
+                + '<div class="foot">' + legend([(w[1], f"var(--w-{w[0]})") for w in WORK_TYPES]) + "</div>")
     for o in d["objectives"]:
         days = round(sum(k["days"] or 0 for k in o["krs"]), 2)
         open_ = sum(1 for g in o["gantt"] if g["who"] in ("исполнитель не выбран", "нет роли в команде"))
-        nxt = ["Инициативы"] + (["Известные риски"] if o["risks"] else []) + (["GANTT по сотрудникам"] if d["gantt"] and o["people"] else [])
-        hero("планы", f"{plan_part} · планы {q}", f'{o["code"]} — {o["name"]}', f'Цель: {o["goal"]}' if o["goal"] else "", nxt,
+        hero("планы", f"{plan_part} · планы {q}", f'{o["code"]} — {o["name"]}', f'Цель: {o["goal"]}' if o["goal"] else "",
              cls="light", stats=stats([("KR", len(o["krs"]), "var(--dark)"), ("подзадач", len(o["gantt"]), "var(--w-dev)"),
                                        ("оценка, дн", num_text(days) if days else "—", "var(--w-analysis)"),
                                        ("людей", sum(1 for p in o["people"] if p["kind"] == "person"), "var(--done)"),
@@ -2079,14 +2081,12 @@ def present_html_slides(d):
                 f'<tr><td class="k">{esc(k["id"])}</td><td><b>{esc(("[" + k["tag"] + "] " if k["tag"] else "") + k["title"])}</b>'
                 + (f'<span class="sub">{chip("из " + prev, "var(--hold)")}</span>' if k["from_retro"] and prev else "")
                 + f'</td><td class="c">{esc(dash_text(k["pbv"]))}</td>'
-                f'<td class="s mono">{esc(" · ".join(x for x in (k["category"], "эпик" if k["epic"] == "epic" else "enabler") if x))}</td>'
-                f'<td class="s">{esc(k["result"] or "—")}</td><td class="s">{esc(k["owner"] or "—")}</td>'
-                f'<td class="s mono">{esc(" — ".join(x for x in (k["start"], k["end"]) if x) or "уточняется")}'
-                + (f'<span class="sub">{num_text(k["days"])} дн</span>' if k["days"] is not None else "") + "</td></tr>" for k in part)
+                f'<td>{chip(k["category"], CATEGORY_COLOR[k["category"]]) if k["category"] in CATEGORY_COLOR else "—"}</td>'
+                f'<td class="s">{esc(k["result"] or "—")}</td><td class="s">{esc(k["owner"] or "—")}</td></tr>' for k in part)
             title = f'{o["code"]} · инициативы' + (" (продолжение)" if n else "")
             add("планы", title, "", heading(title, f"{plan_part} · планы {q}")
                 + '<table class="t"><tr><th>KR</th><th>Инициатива</th><th>PBV</th><th>Тип</th><th>Образ результата</th>'
-                  '<th>Отвечает</th><th>Сроки</th></tr>' + rows + "</table>")
+                  '<th>Техлид инициативы</th></tr>' + rows + "</table>")
         if o["risks"]:
             rows = "".join(f'<tr><td class="k">{esc(x["category"])}</td><td class="mono">{esc(x["kr"])}</td><td>{esc(x["title"])}</td>'
                            f'<td>{esc(x["detail"]) if x["detail"] else "<span class=muted><i>обсудить на встрече</i></span>"}</td></tr>'
@@ -2112,23 +2112,18 @@ def present_html_slides(d):
                         e = k
                         while e + 1 < len(pr["weeks"]) and pr["weeks"][e + 1]["krs"] == c["krs"] and pr["weeks"][e + 1]["status"] == c["status"]:
                             e += 1
-                        body += (f'<div class="cell m" style="grid-column:{k + 2} / {e + 3};background:{P_STATUS.get(c["status"], P_STATUS["TODO"])[1]}">'
-                                 f'{esc(" · ".join(c["krs"]))}</div>')
+                        tip = "\n".join(f"{x} — {kr_titles.get(x, '')}" for x in c["krs"])
+                        body += (f'<div class="cell m" style="grid-column:{k + 2} / {e + 3};background:{P_STATUS.get(c["status"], P_STATUS["TODO"])[1]}" '
+                                 f'aria-label="{esc(tip)}" data-tip="{esc(tip)}">{esc(" · ".join(c["krs"]))}</div>')
                         k = e + 1
                     body += '<div style="grid-column:1 / -1;height:0"></div>'
+                # Заголовка нет: цель названа на HERO перед ней, всё место — под GANTT.
                 title = f'{o["code"]} · GANTT по сотрудникам' + (" (продолжение)" if n else "")
-                add("планы", title, "", heading(title, f"{plan_part} · планы {q}") + week_grid(520, body)
+                add("планы", title, "gantt", week_grid(520, body)
                     + '<div class="foot">' + legend([(l, col) for l, col in P_STATUS.values()])
-                    + '<span class="note">в полосе — номера KR цели</span></div>')
+                    + '<span class="note">в полосе — номера KR цели, наведите — название</span></div>')
 
     # ---- финал
-    if d["how"] or d["asks"]:
-        hero("финал", "Финал", "Как работаем дальше", "", (["Как работаем в квартале"] if d["how"] else [])
-             + (["Что нужно от команды"] if d["asks"] else []))
-    if d["how"]:
-        add("финал", "Как работаем в квартале", "light", heading("Как работаем в квартале", "Процесс")
-            + '<div class="numbered">' + "".join(f'<div class="r"><span class="n">{i:02d}</span><span>{esc(t)}</span></div>'
-                                                  for i, t in enumerate(d["how"], 1)) + "</div>")
     if d["asks"]:
         add("финал", "Что нужно от команды", "dark", heading("Что нужно от команды", "После встречи")
             + '<div class="numbered">' + "".join(f'<div class="r"><span class="n">{a["num"]}</span><span>{esc(a["title"])}</span></div>'
@@ -2175,7 +2170,7 @@ def render_present(doc, source):
 # ---------------------------------------------------------------- CLI
 
 def main(argv):
-    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-ready", "jira-csv", "present"):
+    if len(argv) < 2 or argv[0] not in ("lint", "render", "seed", "csv", "jira-ready", "jira-csv"):
         print(__doc__.strip(), file=sys.stderr)
         return 2
     cmd, path = argv[0], argv[1]
@@ -2206,11 +2201,6 @@ def main(argv):
     if cmd == "jira-csv":
         count = jira_csv(path, argv[2])
         print(f"Written {argv[2]} ({count} строк)")
-        return 0
-    if cmd == "present":
-        data = present_json(path, argv[2])
-        print(f"Written {argv[2]} (целей {len(data['objectives'])}, рисков {len(data['risks'])}"
-              + (f", ретро {data['retro']['quarter']}" if data["retro"] else "") + ")")
         return 0
     if cmd == "render":
         render(path, argv[2])
