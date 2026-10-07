@@ -9,7 +9,7 @@ description: "TeamPlanner — этап 4 планирования квартал
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`). Пайплайн:
-`/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
+`/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner → (/okr-jira) → /okr-present`.
 
 ## На выходе
 

@@ -1,0 +1,235 @@
+  <!-- 1 · титул -->
+  <section class="slide on" data-title="Планирование квартала за час разговора с ИИ">
+    <div class="cover-layout">
+      <div>
+        <h1>Планирование квартала<br><span class="accent">за час разговора с ИИ</span></h1>
+        <p class="sub">Квартал — огромный и ресурсоёмкий процесс сбора и аналитики данных. Я свёл его к часу голосового разговора с ИИ-помощником: итоги прошлого квартала, планы на следующий, декомпозиция с техлидами.</p>
+        <p class="quote">Не собирать данные, а рассказать квартал.<br>Голосом, за час.</p>
+      </div>
+      <div>
+        <img class="cover-photo" id="coverPhoto" alt="Автор">
+        <a class="site" href="https://aleksishmanov.ru/" target="_blank" rel="noopener"><span>aleksishmanov.ru</span><i>↗</i></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · проблема -->
+  <section class="slide" data-title="Проблема">
+    <div class="eyebrow">ПРОБЛЕМА</div>
+    <h2>Квартал — это огромная работа с данными</h2>
+    <div class="split">
+      <div class="a">
+        <div class="lbl">КАК СЕЙЧАС</div>
+        <div class="t">Сбор и аналитика<br>на каждом шаге</div>
+        <p>Итоги прошлого квартала, планы на следующий, декомпозиция с техлидами — каждый шаг требует свести данные из JIRA, таблиц, документов и чатов, разобрать и оформить. А в следующем квартале форма плана другая — и всё заново.</p>
+      </div>
+      <div class="b">
+        <div class="lbl">КАК МОЖНО</div>
+        <div class="t accent">Час голосом<br>с ИИ-помощником</div>
+        <p>Тот же полный путь — в разговоре. Вы рассказываете, агент раскладывает сказанное по местам, спрашивает, чего не хватает, и собирает страницы для согласования и техлидов.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · корень проблемы -->
+  <section class="slide" data-title="Почему так происходит">
+    <div class="eyebrow">ПОЧЕМУ</div>
+    <h2 class="sm">Корень: данные живут внутри документа</h2>
+    <div class="grid three">
+      <div class="card"><div class="tag">БОЛЬ 1 · СБОР</div><h3>Данные в четырёх местах</h3><p>Задачи в JIRA, цели в таблице, контекст в Google Docs, договорённости в чатах. Свести их — самая долгая часть квартала.</p></div>
+      <div class="card"><div class="tag">БОЛЬ 2 · СОГЛАСОВАНИЕ</div><h3>Правки по кругу</h3><p>Замечания приходят в переписке, каждая правка — новая версия файла. Какая из них актуальная — уже непонятно.</p></div>
+      <div class="card"><div class="tag">БОЛЬ 3 · ПРЕДСТАВЛЕНИЕ</div><h3>Форма съедает данные</h3><p>План перерисовывают под формат руководства, исполнителей ищут в чатах, а итоги прошлого квартала не попадают в новый.</p></div>
+    </div>
+    <p class="foot big">Пока данные склеены с формой, новая форма означает новый сбор.</p>
+  </section>
+
+  <!-- 4 · видение po-helper-org -->
+  <section class="slide" data-title="Видение po-helper-org">
+    <div class="eyebrow">ВИДЕНИЕ · PO-HELPER-ORG</div>
+    <h2 class="sm">Отделить данные от формы</h2>
+    <div class="flow">
+      <div class="card"><div class="tag">ВХОД</div><h3>Слова и выгрузки</h3><p>Рассказ голосом или текстом, выгрузка JIRA, таблица, ссылка на документ, пересланная переписка. Формат и порядок — любые.</p></div>
+      <div class="arr">→</div>
+      <div class="card"><div class="tag">ИИ-АГЕНТ</div><h3>Данные в одной структуре</h3><p>ИИ только раскладывает сказанное по полям. Чего не знает — помечает <span class="unc">[УТОЧНИТЬ]</span>, а не додумывает.</p></div>
+      <div class="arr">→</div>
+      <div class="card blue"><div class="tag blue">СКРИПТ</div><h3>Любая форма</h3><p>Страница, таблица, JIRA, документ — собираются из тех же данных по правилам, одинаково каждый раз.</p></div>
+    </div>
+    <div class="vision">
+      <p><b>po-helper-org</b> — открытые ИИ-агенты под роль PO на этом принципе. <b>poh-okr-agent</b> ведёт квартал: от факта прошлого до плана в нужной форме.</p>
+      <a class="repo-sm" href="https://github.com/po-helper-org" target="_blank" rel="noopener">github.com/po-helper-org ↗</a>
+    </div>
+  </section>
+
+  <!-- 5 · решение: три этапа -->
+  <section class="slide" data-title="Три этапа">
+    <div class="eyebrow">РЕШЕНИЕ</div>
+    <h2 class="sm">Три этапа — одни и те же данные</h2>
+    <div class="grid three">
+      <div class="card"><div class="tag">ЭТАП 1 · РЕТРО</div><h3>Факт прошлого квартала</h3><p>Агент собирает готовность каждого KR из JIRA и ваших слов. Итог — страница ФАКТ.</p><p class="solves">Решает боль 1 — сбор</p></div>
+      <div class="card"><div class="tag">ЭТАП 2 · ПЛАНИРОВАНИЕ</div><h3>План нового квартала</h3><p>Вы рассказываете, что хотите в квартале; агент собирает цели и инициативы, правки — комментариями на странице. Итог — страница ПЛАН.</p><p class="solves">Решает боли 1 и 2</p></div>
+      <div class="card blue"><div class="tag blue">ЭТАП 3 · ПРЕОБРАЗОВАНИЕ</div><h3>Исполнители и любая форма</h3><p>Техлиды расписывают подзадачи и исполнителей на странице TeamPlanner, дальше — JIRA, Sheets или Docs.</p><p class="solves">Решает боль 3</p></div>
+    </div>
+    <p class="foot">KR — ключевой результат цели. PBV — вес инициативы для бизнеса.</p>
+  </section>
+
+  <!-- 6 · ретро: первая итерация -->
+  <section class="slide" data-title="Этап 1. Ретро">
+    <div class="eyebrow">ЭТАП 1 · РЕТРО</div>
+    <h2 class="sm">Факт квартала — без ручного сведения</h2>
+    <div class="duo">
+      <div class="col">
+        <p class="solves">Решает боль 1 — сбор</p>
+        <p class="lead"><b>/okr-retro</b> — приложите что есть: выгрузку JIRA, таблицу OKR, ссылку на документ, голосовое.</p>
+        <p class="lead"><b>Агент заполняет известное:</b> KR и их вес, подзадачи и статусы, что заблокировано.</p>
+        <p class="lead"><b>Не додумывает:</b> готовность, причины и «что дальше» помечены <span class="unc">[УТОЧНИТЬ у PO]</span>.</p>
+        <p class="lead"><b>Итог квартала</b> считает скрипт по правилам — готовность, взвешенная по PBV.</p>
+      </div>
+      <div class="shot"><img src="__IMG:r1-draft__" alt="Первая итерация страницы ФАКТ"></div>
+    </div>
+  </section>
+
+  <!-- 7 · ретро: доработка и итог -->
+  <section class="slide" data-title="Этап 1. Ретро: доработка">
+    <div class="eyebrow">ЭТАП 1 · РЕТРО · ДОРАБОТКА</div>
+    <h2 class="sm">Правки — разговором или комментарием в документе</h2>
+    <div class="duo">
+      <div class="chat">
+        <p class="solves">Решает боль 2 — согласование</p>
+        <div class="msg po"><span class="who">PO</span>1.2 — 60 %. Наша часть готова, стенд партнёра так и не дали. Продолжаем в Q4.</div>
+        <div class="msg"><span class="who">АГЕНТ</span>Обновил 1.2: 60 %, добавил риск «партнёр сдвигает стенд», дальше — KR 1.1 в Q4. Осталось: 2.3.</div>
+        <div class="msg po"><span class="who">PO</span>2.3 сняли 12.08 — приоритет ушёл на биллинг.</div>
+        <div class="msg"><span class="who">АГЕНТ</span>Отметил 2.3 отменённым с причиной. Вопросов нет — можно принимать.</div>
+      </div>
+      <div class="demo">
+        <button class="fs-btn" data-frame="factFrame">На весь экран</button>
+        <iframe id="factFrame" title="Демо страницы ФАКТ" srcdoc="__DEMO:fact__"></iframe>
+      </div>
+    </div>
+    <p class="foot">Живая страница: клик по строке — карточка KR, правый клик — комментарий для агента. Принятый ФАКТ становится входом в план.</p>
+  </section>
+
+  <!-- 8 · планирование: драфт -->
+  <section class="slide" data-title="Этап 2. Планирование">
+    <div class="eyebrow">ЭТАП 2 · ПЛАНИРОВАНИЕ</div>
+    <h2 class="sm">План из одного рассказа PO</h2>
+    <div class="duo">
+      <div class="col">
+        <p class="solves">Решает боли 1 и 2</p>
+        <p class="lead"><b>/okr-scope</b> — расскажите, что хотите увидеть в квартале, голосом или текстом.</p>
+        <p class="lead"><b>Из ретро:</b> переходящие KR уже в плане, всё снятое — с причиной.</p>
+        <p class="lead"><b>Из рассказа:</b> цели, инициативы, образ результата, PBV и тип — Run, Change или Disrupt.</p>
+        <p class="lead"><b>Не решено</b>, берём ли в квартал, — стоит «?». С открытыми вопросами план не принять.</p>
+      </div>
+      <div class="shot"><img src="__IMG:p1-draft__" alt="Первая итерация страницы ПЛАН"></div>
+    </div>
+  </section>
+
+  <!-- 9 · планирование: доработка и итог -->
+  <section class="slide" data-title="Этап 2. Планирование: доработка">
+    <div class="eyebrow">ЭТАП 2 · ПЛАНИРОВАНИЕ · ДОРАБОТКА</div>
+    <h2 class="sm">Уточнили и решили — в том же документе</h2>
+    <div class="duo">
+      <div class="chat">
+        <div class="msg po"><span class="who">PO</span>В семье до 4 участников. Поиск — PBV 6, это исследование. Рекомендации снимаем: нет ёмкости после биллинга.</div>
+        <div class="msg"><span class="who">АГЕНТ</span>Готово: 2.2 отменена с причиной, промокоды остаются в плане, но не в этом квартале. Вопросов нет.</div>
+        <div class="msg po"><span class="who">PO</span><i>выделяет риски в карточке 1.2</i> — «Добавь зависимость от маркетинга: без макетов тарифа FE не стартует».</div>
+      </div>
+      <div class="demo">
+        <button class="fs-btn" data-frame="planFrame">На весь экран</button>
+        <iframe id="planFrame" title="Демо страницы ПЛАН" srcdoc="__DEMO:plan__"></iframe>
+      </div>
+    </div>
+    <p class="foot">Живая страница: клик по строке — карточка с этапами и рисками, выделение мышью — комментарий. Отменённое остаётся зачёркнутым вместе с причиной.</p>
+  </section>
+
+  <!-- 10 · teamplanner -->
+  <section class="slide" data-title="Этап 3. TeamPlanner">
+    <div class="eyebrow">ЭТАП 3 · TEAMPLANNER</div>
+    <h2 class="sm">Исполнители — на странице, а не в переписке</h2>
+    <div class="duo">
+      <div class="col">
+        <p class="solves">Решает боль 3 — представление</p>
+        <ul class="list">
+          <li><span><b>/okr-teamplanner</b> — каждый KR раскладывается на подзадачи полного цикла: PO, аналитика, разработка, тесты, выкатка</span></li>
+          <li><span><b>Техлиды правят сами:</b> тип, название, оценка в днях, исполнитель из состава команды</span></li>
+          <li><span><b>Подсветка</b> — где нет исполнителя или нужной роли в команде</span></li>
+          <li><span><b>Заметки агенту</b> — правым кликом; правки возвращаются файлом</span></li>
+        </ul>
+      </div>
+      <div class="demo">
+        <button class="fs-btn" data-frame="tpFrame">На весь экран</button>
+        <iframe id="tpFrame" title="Демо страницы TeamPlanner" srcdoc="__DEMO:tp__"></iframe>
+      </div>
+    </div>
+    <p class="foot">Живая страница: клик по KR — подзадачи, вкладки слева — цели и состав команды. Правки в демо остаются в этом браузере.</p>
+  </section>
+
+  <!-- 11 · любая форма -->
+  <section class="slide" data-title="Этап 3. Любая форма">
+    <div class="eyebrow">ЭТАП 3 · ЛЮБАЯ ФОРМА</div>
+    <h2 class="sm">Новая форма — новая выгрузка, а не новый сбор</h2>
+    <div class="flow tall">
+      <div class="col">
+        <div class="tag">ДАННЫЕ</div>
+<pre class="code">{ <span class="k">"id"</span>: "1.2",
+  <span class="k">"title"</span>: "Семейная подписка",
+  <span class="k">"steps"</span>: [
+    { <span class="k">"role"</span>: "PO", "title": "Тарифы",
+      <span class="k">"who"</span>: "Иванова Анна",
+      <span class="k">"days"</span>: 3 },
+    { <span class="k">"role"</span>: "BE", "title": "Покупка",
+      <span class="k">"who"</span>: "Кузнецов Артём",
+      <span class="k">"days"</span>: 10 }
+  ] }</pre>
+      </div>
+      <div class="arr">+</div>
+      <div class="col">
+        <div class="tag">ПРОСЬБА РУКОВОДСТВА</div>
+        <div class="msg po wide">Заведи план в JIRA: KR — эпик, подзадачи — истории в нём.</div>
+        <div class="msg po wide">Сделай одну страницу в Google Docs: цель → инициативы → образ результата.</div>
+      </div>
+      <div class="arr">=</div>
+      <div class="col">
+        <div class="tag blue">РЕЗУЛЬТАТ</div>
+        <ul class="list sm">
+          <li><span><b>JIRA</b> — /okr-jira: эпики и истории только после «да» PO; ключи задач пишутся обратно, повтор без дублей</span></li>
+          <li><span><b>Google Sheets</b> — лист TeamPlanner одной кнопкой</span></li>
+          <li><span><b>Google Docs</b> — документ для руководства</span></li>
+          <li><span><b>Любой шаблон</b> — xlsx, Confluence, презентация</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="foot">Сбор и согласование не повторяются. JIRA и Google Docs — через интеграции, подключённые к агенту; существующие задачи агент не меняет.</p>
+  </section>
+
+  <!-- 12 · было → стало -->
+  <section class="slide" data-title="Было и стало">
+    <div class="eyebrow">ЧТО МЕНЯЕТСЯ</div>
+    <h2 class="sm">Было → стало</h2>
+    <table class="ba">
+      <thead><tr><th></th><th>Было</th><th>Стало</th></tr></thead>
+      <tbody>
+        <tr><td>Весь путь</td><td>Ресурсоёмкий сбор и аналитика данных</td><td>Около часа голосового разговора с ИИ-помощником</td></tr>
+        <tr><td>Сбор</td><td>PO днями сводит данные из четырёх мест</td><td>Агент собирает из того, что под рукой; PO отвечает только на <span class="unc">[УТОЧНИТЬ]</span></td></tr>
+        <tr><td>Согласование</td><td>Правки в переписке, версии файлов</td><td>Один документ, комментарии прямо на странице</td></tr>
+        <tr><td>Исполнители</td><td>Ищут в чатах</td><td>Техлиды выбирают на странице TeamPlanner</td></tr>
+        <tr><td>Новая форма</td><td>Сбор заново</td><td>Новая выгрузка из тех же данных</td></tr>
+        <tr><td>Факт → план</td><td>Итоги прошлого квартала отдельно</td><td>Принятый ФАКТ — вход в новый план</td></tr>
+        <tr><td>Принятие</td><td>Открытые вопросы теряются</td><td>План не принять, пока вопросы не закрыты</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 13 · как начать -->
+  <section class="slide install" data-title="Как начать">
+    <div class="eyebrow">КАК НАЧАТЬ</div>
+    <h1>Установите<br><span class="accent">poh-okr-agent</span></h1>
+    <p class="sub">Скажите ИИ-помощнику: «Установи poh-okr-agent в этот репозиторий». Дальше — четыре команды:</p>
+    <ol class="steps start">
+      <li><div><b>/okr-retro</b> <span>— факт прошлого квартала</span></div></li>
+      <li><div><b>/okr-scope</b> <span>— план нового квартала</span></div></li>
+      <li><div><b>/okr-teamplanner</b> <span>— подзадачи и исполнители</span></div></li>
+      <li><div><b>/okr-jira</b> <span>— перенос в JIRA</span></div></li>
+    </ol>
+    <a class="repo" href="https://github.com/po-helper-org/poh-okr-agent" target="_blank" rel="noopener">github.com/po-helper-org/poh-okr-agent ↗</a>
+  </section>

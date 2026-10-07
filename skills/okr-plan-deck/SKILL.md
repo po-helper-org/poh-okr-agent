@@ -1,11 +1,11 @@
 ---
 name: okr-plan-deck
-description: '[deprecated] Устарело, используй /okr-scope, /okr-stages, /okr-teamplanner. Deck Builder — собирает квартальную кикофф-презентацию для команды (plan-deck.pptx) из OKR-<quarter>.md и roadmap.md. Брендбук общий с okr-equator, структура слайдов — разумный дефолт, не зафиксирована вложением. Используй когда — /okr-plan-deck, презентация плана квартала команде.'
+description: '[deprecated] Устарело, используй /okr-present. Deck Builder — собирает квартальную кикофф-презентацию для команды (plan-deck.pptx) из OKR-<quarter>.md и roadmap.md. Брендбук общий с okr-equator, структура слайдов — разумный дефолт, не зафиксирована вложением. Используй когда — /okr-plan-deck, презентация плана квартала команде.'
 ---
 
 > **[deprecated]** `/okr-plan-deck` устарела и больше не поддерживается. Планирование
 > квартала идёт по пайплайну `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner`.
-> Замена: документ `scope-<quarter>.html` из `/okr-scope` и `/okr-stages` для команды и `/okr-teamplanner <quarter>` для техлидов.
+> Замена: `/okr-present <quarter>` — презентация квартала команде из принятых Scope и TeamPlanner.
 
 **Инструкция для LLM, до любых действий:** сообщи пользователю, что `/okr-plan-deck`
 устарела и неактуальна, назови замену и предложи запустить её. Продолжай по

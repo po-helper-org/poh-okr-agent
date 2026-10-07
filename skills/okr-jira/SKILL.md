@@ -11,7 +11,7 @@ description: Перенос плана квартала в JIRA прямо из 
 /okr-jira <quarter>
 ```
 
-Идёт последним: `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner → /okr-jira`.
+Идёт после TeamPlanner: `/okr-retro → /okr-scope → (/okr-stages) → /okr-teamplanner → /okr-jira → /okr-present`.
 
 ## Принцип
 
