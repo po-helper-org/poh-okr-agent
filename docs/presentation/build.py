@@ -8,7 +8,7 @@
   img/full/<имя>.webp  полный размер — только для увеличения по клику;
   img/photo.webp       фото автора.
 Картинки готовит towebp.mjs в out/img и out/full.
-  demo/*.html      живые страницы ФАКТ, ПЛАН, TEAMPLANNER — грузятся, когда открыт
+  demo/*.html      живые страницы ФАКТ, ПЛАН, TEAMPLANNER и презентация квартала — грузятся, когда открыт
                    их слайд или соседний, с индикатором загрузки.
 """
 import base64
@@ -210,7 +210,7 @@ slides = re.sub(r"__IMG:([\w-]+)__", lambda m: img(m.group(1)), slides)
 # В демо TeamPlanner сразу раскрыт первый KR — иначе в рамке слайда одни заголовки.
 OPEN_FIRST = "<script>var k=document.querySelector('details.kr');if(k)k.setAttribute('open','')</script></body>"
 LOADER = '<div class="demo-loader"><span class="spin"></span>Загружаем живое демо…</div>'
-for name, src in (("fact", "fact.html"), ("plan", "plan.html"), ("tp", "teamplanner.html")):
+for name, src in (("fact", "fact.html"), ("plan", "plan.html"), ("tp", "teamplanner.html"), ("present", "present.html")):
     if f"__DEMO:{name}__" not in slides:
         continue
     page_html = open(src, encoding="utf-8").read()

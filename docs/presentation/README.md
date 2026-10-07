@@ -7,9 +7,9 @@
 
 | Файл | Что это |
 |---|---|
-| `slides.html` | текст и разметка слайдов; `__IMG:<имя>__` и `__DEMO:<fact\|plan\|tp>__` — места для скриншотов и живых демо |
+| `slides.html` | текст и разметка слайдов; `__IMG:<имя>__` и `__DEMO:<fact\|plan\|tp\|present>__` — места для скриншотов и живых демо |
 | `build.py` | сборка `index.html` по шаблону `sprint-under-manager/index.html` из `slides-catalog`: стили, фото, оверлеи; картинки и демо — отдельными файлами рядом |
-| `retro-2026Q3.json`, `scope-2026Q4.json`, `teamplanner-2026Q4.json` | данные живых демо (фикстуры `okr-plan.py` с оценками в днях и KR 2.1 с одной подзадачей БФТ) |
+| `retro-2026Q3.json`, `scope-2026Q4.json`, `teamplanner-2026Q4.json`, `present-2026Q4.json` | данные живых демо (фикстуры `okr-plan.py` с оценками в днях и KR 2.1 с одной подзадачей БФТ) |
 | `make_drafts.py` | первые итерации ФАКТ и ПЛАН для слайдов «первая итерация» |
 | `shots2.mjs` | скриншоты первых итераций `r1-draft.jpg`, `p1-draft.jpg` |
 | `towebp.mjs` | скриншоты → WebP: под размер слайда (`out/img`) и полный (`out/full`) |
@@ -25,7 +25,7 @@ C=<путь к slides-catalog>
 
 python3 make_drafts.py
 for p in "retro-2026Q3 fact" "retro-draft fact-draft" "scope-2026Q4 plan" "scope-draft plan-draft" \
-         "teamplanner-2026Q4 teamplanner"; do set -- $p; python3 $P render $1.json $2.html; done
+         "teamplanner-2026Q4 teamplanner" "present-2026Q4 present"; do set -- $p; python3 $P render $1.json $2.html; done
 
 node shots2.mjs "$PWD" "$CH"
 node towebp.mjs "$PWD" "$CH" img 1100 0.72 r1-draft.jpg p1-draft.jpg
