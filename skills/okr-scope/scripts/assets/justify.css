@@ -1,0 +1,74 @@
+/* Обоснование инициативы (/okr-justify): короткая презентация для решения «брать или нет».
+   Каркас, цвета и шрифты — present.css; здесь только слайды обоснования. По одной мысли
+   на слайд и крупно: слайды читают с экрана. Вёрстку не правят в HTML — её собирает
+   okr-plan.py из JSON. */
+.eyebrow.on-blue{ color:#DDE4FF; }
+.steps{ display:flex; flex-direction:column; margin:auto 0; }
+.steps .r{ display:grid; grid-template-columns:90px 1fr; align-items:center; padding:26px 0; border-top:1px solid var(--idle); font-size:38px; line-height:1.25; }
+.steps .r:first-child{ border-top:0; }
+.steps .n{ font-family:var(--mono); font-size:22px; font-weight:700; color:var(--accent); width:56px; height:56px; border:2px solid var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.metrics{ display:grid; grid-template-columns:repeat(var(--n, 3), 1fr); gap:24px; margin-top:auto; margin-bottom:auto; }
+.metric{ background:var(--white); border-radius:16px; padding:30px 32px; display:flex; flex-direction:column; gap:14px; }
+.metric .name{ font-size:28px; font-weight:700; }
+.metric .now{ font-family:var(--mono); font-size:22px; color:var(--gray); }
+.metric .target{ font-family:var(--mono); font-size:56px; font-weight:700; line-height:1; color:var(--accent); }
+.metric .target small{ font-size:18px; font-weight:400; color:var(--gray); margin-left:8px; }
+.metric .how{ margin-top:auto; font-family:var(--mono); font-size:14px; letter-spacing:.06em; text-transform:uppercase; color:var(--gray); }
+table.t.big{ font-size:26px; }
+.mid{ margin-top:auto; margin-bottom:auto; }
+table.t.big th{ font-size:15px; }
+table.t.big td{ padding:26px 14px; }
+table.t td.asis{ color:var(--gray); }
+table.t td.tobe{ font-weight:700; }
+.square{ display:grid; grid-template-columns:60px 1fr 1fr; grid-template-rows:auto 1fr 1fr; gap:14px; flex:1; min-height:0; }
+.square .ax{ font-family:var(--mono); font-size:15px; letter-spacing:.14em; text-transform:uppercase; color:var(--gray-dark); display:flex; align-items:center; justify-content:center; }
+.square .ax.row{ writing-mode:vertical-rl; transform:rotate(180deg); }
+.quad{ border-radius:16px; padding:24px 30px; }
+.quad .tag{ font-family:var(--mono); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+.quad h3{ font-size:28px; margin:4px 0 14px; }
+.quad ul{ margin:0; padding-left:28px; font-size:27px; line-height:1.45; }
+.quad[data-k="do_will"]{ background:var(--done); }
+.quad[data-k="skip_will"]{ background:var(--cancel); }
+.quad[data-k="do_wont"]{ background:var(--hold); }
+.quad[data-k="skip_wont"]{ background:var(--idle); }
+.effort{ display:grid; grid-template-columns:repeat(4, 1fr); gap:24px; margin:0 0 26px; }
+.effort div{ border-top:3px solid var(--idle); padding-top:10px; }
+.effort b{ display:block; font-family:var(--mono); font-size:52px; line-height:1.1; }
+.effort span{ font-family:var(--mono); font-size:13px; letter-spacing:.08em; color:var(--gray-dark); text-transform:uppercase; }
+.effort .total{ border-color:var(--accent); }
+.effort .total b{ color:var(--accent); }
+.colcard .task{ display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:baseline; font-size:23px; padding:0 0 18px; }
+.colcard .task .role{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--gray-dark); }
+.colcard .task .d{ font-family:var(--mono); color:var(--gray-dark); }
+.colcard ol{ margin:0; padding-left:24px; }
+.colcard ol li{ font-size:23px; line-height:1.35; padding:0 0 16px; }
+.colcard{ background:var(--light); }
+.slide.light .colcard{ background:var(--white); }
+.lvl{ display:inline-block; font-family:var(--mono); font-size:14px; letter-spacing:.06em; text-transform:uppercase; border-radius:6px; padding:3px 10px; color:var(--dark); }
+.lvl[data-v="высокий"]{ background:var(--cancel); } .lvl[data-v="средний"]{ background:var(--hold); } .lvl[data-v="низкий"]{ background:var(--progress); }
+.risk-rows{ margin:auto 0; }
+.risk-rows .r{ grid-template-columns:200px 1fr 1fr; align-items:baseline; padding:34px 0; }
+.risk-rows .t{ font-size:30px; } .risk-rows .d{ font-size:24px; }
+.verdict{ display:inline-block; font-family:var(--mono); font-size:20px; letter-spacing:.12em; text-transform:uppercase; padding:10px 22px; border-radius:30px; margin:0 0 40px; }
+.verdict[data-v="yes"]{ background:var(--done); color:var(--dark); }
+.verdict[data-v="no"]{ background:var(--cancel); color:var(--dark); }
+.verdict[data-v="open"]{ border:1px dashed var(--gray); color:var(--gray); }
+.hero .stats{ grid-template-columns:repeat(var(--n, 4), 1fr); text-align:left; }
+.slide.dark .stats div{ border-color:var(--gray-dark); }
+.slide.dark .stats span{ color:var(--gray); }
+.cols.fit{ flex:0 0 auto; margin:auto 0; }
+
+@media screen and (max-width:899px){
+  .steps .r{ font-size:18px; grid-template-columns:52px 1fr; padding:12px 0; }
+  .steps .n{ width:36px; height:36px; font-size:15px; }
+  .metrics, .effort{ grid-template-columns:1fr; gap:12px; }
+  .metric .target{ font-size:36px; }
+  .square{ grid-template-columns:1fr; }
+  .square .ax{ display:none; }
+  .quad ul{ font-size:16px; } .quad h3{ font-size:18px; }
+  table.t.big{ font-size:15px; } table.t.big td{ padding:10px 6px; }
+  .colcard .task, .colcard ol li{ font-size:16px; }
+  .effort b{ font-size:32px; }
+  .risk-rows .t{ font-size:18px; } .risk-rows .d{ font-size:15px; }
+  .hero .stats{ grid-template-columns:repeat(2, 1fr); }
+}
