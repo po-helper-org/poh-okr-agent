@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, презентация команде, CSV.
+"""Данные планирования квартала: проверка, HTML-экраны Retro/Scope/TeamPlanner, презентация команде,
+обоснование инициативы, CSV.
 
   okr-plan.py lint <file.json> [--final] [--retro <retro.json>]
-  okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН, TEAMPLANNER или презентация
+  okr-plan.py render <file.json> <out.html>            страница ФАКТ, ПЛАН, TEAMPLANNER, презентация или обоснование
   okr-plan.py seed <scope.json> <teamplanner.json> [--force]   заготовка TeamPlanner из принятого Scope
   okr-plan.py csv <teamplanner.json> <out.csv>        таблица для Google Sheets / Excel
   okr-plan.py jira-ready <teamplanner.json>            можно ли переносить в JIRA: принят, lint --final, проект
@@ -157,6 +158,19 @@ SHAPES = {
         "sprints": [{"name": V, "start": V, "end": V}], "sprint_weeks": V,
         "asks": L, "skip": L,
     },
+    "justify": {
+        "kind": V, "quarter": V, "team": V, "po": V, "status": V, "updated": V,
+        "kr": V, "scope": {"file": V},
+        "initiative": {"id": V, "title": V, "category": V, "pbv": V, "objective": V},
+        "specific": T, "deadline": V, "demo": L,
+        "metrics": [{"name": V, "now": V, "target": V, "unit": V, "how": T}],
+        "changes": [{"actor": V, "scenario": T, "asis": T, "tobe": T}],
+        "consequences": {"do_will": L, "skip_will": L, "do_wont": L, "skip_wont": L},
+        "research": L, "research_days": V,
+        "dev": [{"role": V, "title": T, "days": V}], "delivery": [{"role": V, "title": T, "days": V}],
+        "risks": [{"title": T, "level": V, "action": T}],
+        "question": V, "recommendation": V, "open_questions": L,
+    },
 }
 
 
@@ -170,7 +184,7 @@ def shape_errors(doc, spec=None, where=""):
         kind = doc.get("kind")
         spec = SHAPES.get(kind) if isinstance(kind, str) else None
         if spec is None:
-            return ["kind: ожидается 'retro', 'scope' или 'teamplanner'"]
+            return ["kind: ожидается 'retro', 'scope', 'teamplanner', 'present' или 'justify'"]
     names = {str: "строка", int: "число", float: "число", bool: "true/false", list: "список", dict: "объект"}
     got = lambda v: names.get(type(v), type(v).__name__)
     out = []
@@ -642,8 +656,10 @@ def lint(path, final=False, retro_path=None):
         lint_teamplanner(doc, rep, path)
     elif kind == "present":
         lint_present(doc, rep, path)
+    elif kind == "justify":
+        lint_justify(doc, rep, path)
     else:
-        rep.error("kind: ожидается 'retro', 'scope', 'teamplanner' или 'present'")
+        rep.error("kind: ожидается 'retro', 'scope', 'teamplanner', 'present' или 'justify'")
     return rep
 
 
@@ -1002,8 +1018,10 @@ def render(path, out):
         page_html = render_teamplanner(doc, path)
     elif doc.get("kind") == "present":
         page_html = render_present(doc, path)
+    elif doc.get("kind") == "justify":
+        page_html = render_justify(doc, path)
     else:
-        raise SystemExit("kind: ожидается 'retro', 'scope', 'teamplanner' или 'present'")
+        raise SystemExit("kind: ожидается 'retro', 'scope', 'teamplanner', 'present' или 'justify'")
     with open(out, "w", encoding="utf-8") as f:
         f.write(page_html)
 
@@ -2143,9 +2161,13 @@ def dash_text(value):
 def render_present(doc, source):
     """Презентация квартала — HTML: слайды из present_payload, навигация как у бизнес-отчёта."""
     d = present_payload(doc, source)
-    slides = present_html_slides(d)
     m = d["meta"]
-    title = f"Квартал {qlabel(m['quarter'])} · {m['team']}"
+    return deck_page(f"Квартал {qlabel(m['quarter'])} · {m['team']}", source, present_html_slides(d))
+
+
+def deck_page(title, source, slides, css=""):
+    """Каркас слайдов (презентация квартала, обоснование): панель, оглавление, «‹ N / M ›»,
+    на телефоне — лента, печать — по слайду на страницу. slides: (вид, название, класс, html)."""
     body = "\n".join(
         f'<section class="slide {cls}" data-kind="{esc(kind)}" data-title="{esc(t)}">{inner}'
         f'<span class="pageno">{n}</span></section>' for n, (kind, t, cls, inner) in enumerate(slides, 1))
@@ -2153,7 +2175,7 @@ def render_present(doc, source):
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<title>{html.escape(title)}</title>\n'
             f'<!-- Собрано okr-plan.py из {html.escape(os.path.basename(source))}. Правки — в JSON, страница пересобирается. -->\n'
-            f'<style>\n{asset("present.css")}</style>\n</head>\n<body>\n'
+            f'<style>\n{asset("present.css")}{asset(css) if css else ""}</style>\n</head>\n<body>\n'
             '<div class="deck" id="deck">\n<header class="bar"><button id="tocBtn" class="feed-only" type="button">Слайды</button>'
             f'<span class="title">{esc(title)}</span><span class="grow"></span>'
             '<button id="fullBtn" class="stage-only" type="button" title="Во весь экран (F)">На весь экран</button>'
@@ -2165,6 +2187,230 @@ def render_present(doc, source):
             '<span class="count" id="count"></span>'
             '<button id="next" type="button" aria-label="Следующий слайд" title="Следующий (→)">›</button></div></div></div>\n</div>\n'
             f'<script>{asset("present.js")}</script>\n</body>\n</html>\n')
+
+
+# ---------------------------------------------------------------- Обоснование инициативы
+
+# Короткая презентация для бизнеса «брать или нет»: SMART (HowToDemo и метрики),
+# изменения в системе, квадрат последствий, ресурсоёмкость и риски, решение.
+# Название, тип, PBV и цель — из Scope по kr; остальное пишет агент со слов PO.
+JUSTIFY_LEVELS = ["высокий", "средний", "низкий"]
+JUSTIFY_VERDICTS = ["брать", "не брать"]
+JUSTIFY_SQUARE = [("do_will", "Будет, если сделаем", "выгоды"),
+                  ("skip_will", "Будет, если не сделаем", "цена бездействия"),
+                  ("do_wont", "Не будет, если сделаем", "чем жертвуем"),
+                  ("skip_wont", "Не будет, если не сделаем", "что упускаем")]
+# Слайд читают с экрана: больше пунктов — мелкий шрифт и потерянная мысль.
+JUSTIFY_LIMITS = {"demo": (5, "шагов HowToDemo"), "metrics": (4, "метрик"), "changes": (6, "строк изменений"),
+                  "research": (4, "вопросов к исследованию"), "dev": (6, "задач разработки"),
+                  "delivery": (5, "задач delivery"), "risks": (4, "рисков")}
+
+
+def justify_initiative(doc, path):
+    """(инициатива, проблема): {id, title, category, pbv, objective, team, cancelled}.
+    С kr и scope.file — из Scope; без них — из initiative самого документа."""
+    ref = text((doc.get("scope") or {}).get("file"))
+    if not ref:
+        ini = doc.get("initiative") or {}
+        return {"id": text(ini.get("id") or doc.get("kr")), "title": text(ini.get("title")),
+                "category": text(ini.get("category")), "pbv": ini.get("pbv"),
+                "objective": text(ini.get("objective")), "team": text(doc.get("team")), "cancelled": False}, None
+    scope, problem = load_linked(os.path.join(os.path.dirname(os.path.abspath(path)), ref), "scope")
+    if problem:
+        return None, f"scope: файл {ref} {problem}"
+    kid = text(doc.get("kr"))
+    for obj in scope.get("objectives") or []:
+        for ini in obj.get("initiatives") or []:
+            if text(ini.get("id")) == kid:
+                return {"id": kid, "title": text(ini.get("title")), "category": category_of(ini), "pbv": ini.get("pbv"),
+                        "objective": f"OBJ {text(obj.get('id'))} — {text(obj.get('title'))}",
+                        "team": text(doc.get("team") or scope.get("team")), "po": text(doc.get("po") or scope.get("po")),
+                        "quarter": text(scope.get("quarter")), "cancelled": cancelled(ini)}, None
+    return None, f"kr: инициативы {kid!r} нет в Scope {ref}"
+
+
+def lint_justify(doc, rep, path):
+    quarter = text(doc.get("quarter"))
+    if not QUARTER_RE.match(quarter):
+        rep.error(f"quarter: ожидается формат ГГГГQn, получено {doc.get('quarter')!r}")
+    ini, problem = justify_initiative(doc, path)
+    if problem:
+        rep.error(problem)
+    elif not text((doc.get("scope") or {}).get("file")):
+        if not ini["title"]:
+            rep.error("initiative.title: нет названия — или укажи kr и scope.file, тогда оно возьмётся из Scope")
+        if ini["pbv"] is not None:
+            check_pbv(ini, "initiative", rep, False)
+        if ini["category"] and ini["category"] not in CATEGORIES[1:]:
+            rep.error(f"initiative.category: одно из {CATEGORIES[1:]}")
+    else:
+        if ini.get("quarter") != quarter:
+            rep.error(f"quarter: {quarter!r}, а Scope — за {ini.get('quarter')!r}")
+        if ini["cancelled"]:
+            rep.warn(f"KR {ini['id']} в Scope отменена — обоснование, скорее всего, не нужно")
+        if doc.get("initiative"):
+            rep.warn("initiative: при kr и scope.file название, тип, PBV и цель берутся из Scope — блок не используется")
+    if not text(doc.get("specific")):
+        rep.gate("specific: нет постановки — что делаем, одним предложением")
+    if not doc.get("demo"):
+        rep.gate("demo: нет сценария HowToDemo — как проверим результат")
+    if not doc.get("metrics"):
+        rep.gate("metrics: нет метрик, на которые влияем")
+    for n, m in enumerate(doc.get("metrics") or [], 1):
+        if not text(m.get("name")) or not text(m.get("target")):
+            rep.error(f"metrics[{n}]: нужны name и target — что меряем и к чему идём")
+    for n, c in enumerate(doc.get("changes") or [], 1):
+        if not text(c.get("actor")) or not text(c.get("tobe")):
+            rep.error(f"changes[{n}]: нужны actor и tobe — кто заметит и что станет")
+    cons = doc.get("consequences") or {}
+    empty = [title for key, title, _ in JUSTIFY_SQUARE if not cons.get(key)]
+    if empty:
+        rep.gate("consequences: пусто — " + ", ".join(t.lower() for t in empty))
+    for key in ("dev", "delivery"):
+        for n, t in enumerate(doc.get(key) or [], 1):
+            if not text(t.get("title")):
+                rep.error(f"{key}[{n}]: нет title")
+            if t.get("days") is not None and not is_days(t.get("days")):
+                rep.error(f"{key}[{n}]: days — число дней ≥ 0, получено {t.get('days')!r}")
+    if not (doc.get("dev") or doc.get("delivery")):
+        rep.gate("dev, delivery: нет задач — ресурсоёмкость не оценена")
+    if doc.get("research_days") is not None and not is_days(doc.get("research_days")):
+        rep.error(f"research_days: число дней ≥ 0, получено {doc.get('research_days')!r}")
+    for n, r in enumerate(doc.get("risks") or [], 1):
+        if not text(r.get("title")):
+            rep.error(f"risks[{n}]: нет title — в чём риск")
+        if text(r.get("level")) and text(r.get("level")) not in JUSTIFY_LEVELS:
+            rep.error(f"risks[{n}]: level — одно из {JUSTIFY_LEVELS}")
+    verdict = text(doc.get("recommendation"))
+    if verdict and verdict not in JUSTIFY_VERDICTS:
+        rep.error(f"recommendation: одно из {JUSTIFY_VERDICTS} или пусто, пока PO не решил")
+    if not verdict:
+        rep.gate("recommendation: PO не дал рекомендацию — брать или не брать")
+    for key, (limit, what) in JUSTIFY_LIMITS.items():
+        if len(doc.get(key) or []) > limit:
+            rep.warn(f"{key}: {len(doc[key])} {what} — слайд перегружен, оставь до {limit} главных")
+    for key, title, _ in JUSTIFY_SQUARE:
+        if len(cons.get(key) or []) > 4:
+            rep.warn(f"consequences.{key}: больше 4 пунктов — «{title.lower()}» не уместится крупно")
+    unsure = len(UNSURE_RE.findall(json.dumps(doc, ensure_ascii=False)))
+    if unsure:
+        rep.gate(f"[УТОЧНИТЬ]: осталось {unsure} — бизнес решает по проверенным цифрам")
+
+
+def justify_days(tasks):
+    return sum(t.get("days") for t in tasks if is_days(t.get("days")))
+
+
+def justify_slides(doc, ini):
+    sid = f'KR {ini["id"]} · {qlabel(text(doc.get("quarter")))}' if ini["id"] else qlabel(text(doc.get("quarter")))
+    slides = []
+
+    def add(title, cls, inner):
+        slides.append(("обоснование", title, cls, inner))
+
+    def head(eyebrow, title):
+        return f'<div class="eyebrow">{esc(eyebrow)}</div><h2>{esc(title)}</h2>'
+
+    meta = " · ".join(x for x in (ini["category"], f'PBV {ini["pbv"]}' if is_int(ini["pbv"]) else "", ini["objective"],
+                                  ini["team"], f'срок {text(doc.get("deadline"))}' if text(doc.get("deadline")) else "") if x)
+    add(ini["title"] or "Обоснование", "blue cover",
+        f'<div class="eyebrow on-blue">Обоснование инициативы · {esc(sid)}</div><h1{" class=long" if len(ini["title"]) > 40 else ""}>'
+        f'{esc_unc(ini["title"])}</h1>' + (f'<p class="message">{esc_unc(doc.get("specific"))}</p>' if text(doc.get("specific")) else "")
+        + f'<div class="meta">{esc(meta)}</div>')
+
+    if doc.get("demo"):
+        add("Как проверим результат", "",
+            head("SMART · HowToDemo", "Как проверим результат") + '<div class="steps">'
+            + "".join(f'<div class="r"><span class="n">{i}</span><span>{esc_unc(s)}</span></div>'
+                      for i, s in enumerate(doc["demo"], 1)) + "</div>")
+
+    metrics = doc.get("metrics") or []
+    if metrics:
+        add("На какие метрики влияем", "light",
+            head("SMART · метрики", "На какие метрики влияем")
+            + f'<div class="metrics" style="--n:{min(len(metrics), 4)}">' + "".join(
+                f'<div class="metric"><div class="name">{esc_unc(m.get("name"))}</div>'
+                f'<div class="now">сейчас {esc_unc(m.get("now")) or "—"}</div>'
+                f'<div class="target">{esc_unc(m.get("target"))}'
+                + (f'<small>{esc(m.get("unit"))}</small>' if text(m.get("unit")) else "") + "</div>"
+                + (f'<div class="how">{esc(m.get("how"))}</div>' if text(m.get("how")) else "") + "</div>"
+                for m in metrics) + "</div>")
+
+    if doc.get("changes"):
+        rows = "".join(f'<tr><td class="k">{esc_unc(c.get("actor"))}</td><td>{esc_unc(c.get("scenario"))}</td>'
+                       f'<td class="asis">{esc_unc(c.get("asis")) or "—"}</td><td class="tobe">{esc_unc(c.get("tobe"))}</td></tr>'
+                       for c in doc["changes"])
+        add("Что меняется в системе", "",
+            head("Изменения", "Что меняется в системе")
+            + f'<div class="scroll-x mid"><table class="t big"><thead><tr><th>Кто</th><th>Сценарий</th><th>Сейчас</th><th>Станет</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div>')
+
+    cons = doc.get("consequences") or {}
+    if any(cons.get(k) for k, _, _ in JUSTIFY_SQUARE):
+        q = {k: f'<div class="quad" data-k="{k}"><span class="tag">{g}</span><h3>{t}</h3><ul>'
+                + "".join(f"<li>{esc_unc(x)}</li>" for x in cons.get(k) or []) + "</ul></div>" for k, t, g in JUSTIFY_SQUARE}
+        add("Квадрат последствий", "light",
+            head("Последствия", "Что будет, если сделаем — и если нет")
+            + '<div class="square"><div></div><div class="ax">Сделаем</div><div class="ax">Не сделаем</div>'
+            f'<div class="ax row">Будет</div>{q["do_will"]}{q["skip_will"]}'
+            f'<div class="ax row">Не будет</div>{q["do_wont"]}{q["skip_wont"]}</div>')
+
+    dev, dlv = doc.get("dev") or [], doc.get("delivery") or []
+    rd = doc.get("research_days") if is_days(doc.get("research_days")) else 0
+    total = rd + justify_days(dev) + justify_days(dlv)
+    if dev or dlv or doc.get("research"):
+        def tasks(items):
+            return "".join(f'<div class="task"><span class="role">{esc(t.get("role"))}</span><span>{esc_unc(t.get("title"))}</span>'
+                           f'<span class="d">{num_text(t["days"]) if is_days(t.get("days")) else "—"}</span></div>' for t in items)
+        cards = []
+        if doc.get("research"):
+            cards.append('<div class="colcard"><div class="head">Вопросы к исследованию</div><ol>'
+                         + "".join(f"<li>{esc_unc(x)}</li>" for x in doc["research"]) + "</ol></div>")
+        if dev:
+            cards.append(f'<div class="colcard"><div class="head">Разработка</div>{tasks(dev)}</div>')
+        if dlv:
+            cards.append(f'<div class="colcard"><div class="head">Delivery</div>{tasks(dlv)}</div>')
+        add("Во что обойдётся", "",
+            head("Ресурсоёмкость", "Во что обойдётся")
+            + f'<div class="effort"><div><b>{num_text(rd)}</b><span>дней исследования</span></div>'
+            f'<div><b>{num_text(justify_days(dev))}</b><span>дней разработки</span></div>'
+            f'<div><b>{num_text(justify_days(dlv))}</b><span>дней delivery</span></div>'
+            f'<div class="total"><b>{num_text(total)}</b><span>чел.-дней всего</span></div></div>'
+            f'<div class="cols fit">{"".join(cards)}</div>')
+
+    if doc.get("risks"):
+        add("Риски", "dark",
+            head("Ресурсоёмкость · риски", "Что может пойти не так") + '<div class="risk-rows">' + "".join(
+                f'<div class="r"><span>' + (f'<span class="lvl" data-v="{esc(r.get("level"))}">{esc(r.get("level"))}</span>'
+                                            if text(r.get("level")) else "") + "</span>"
+                f'<span class="t">{esc_unc(r.get("title"))}</span><span class="d">{esc_unc(r.get("action")) or "что делаем — обсудить"}</span></div>'
+                for r in doc["risks"]) + "</div>")
+
+    verdict = text(doc.get("recommendation"))
+    mark, label = {"брать": ("yes", "Рекомендация PO — брать"),
+                   "не брать": ("no", "Рекомендация PO — не брать")}.get(verdict, ("open", "Рекомендация — не решено"))
+    question = text(doc.get("question")) or f"Берём в {qlabel(text(doc.get('quarter')))}?"
+    roles = sorted({text(t.get("role")) for t in dev + dlv if text(t.get("role"))})
+    stats = [(num_text(total), "чел.-дней")] if total else []
+    if roles:
+        stats.append((str(len(roles)), "ролей · " + ", ".join(roles)))
+    stats += [(text(m.get("target")), text(m.get("name"))) for m in metrics[:4 - len(stats)]]
+    asks = [x for x in doc.get("open_questions") or [] if text(x)]
+    add("Решение", "dark hero",
+        f'<div class="hero-in"><div class="eyebrow">Решение · {esc(sid)}</div><h1>{esc_unc(question)}</h1>'
+        f'<span class="verdict" data-v="{mark}">{label}</span>'
+        + (f'<p class="lead">Открыто: {"; ".join(esc_unc(x) for x in asks)}</p>' if asks else "") + "</div>"
+        + (f'<div class="stats" style="--n:{len(stats)}">' + "".join(f"<div><b>{esc_unc(v)}</b><span>{esc(l)}</span></div>"
+                                                                  for v, l in stats) + "</div>" if stats else ""))
+    return slides
+
+
+def render_justify(doc, source):
+    """Обоснование инициативы — слайды на каркасе презентации квартала."""
+    ini, problem = justify_initiative(doc, source)
+    if problem:
+        raise SystemExit(f"{source}: {problem}")
+    return deck_page(f"Обоснование · {ini['title'] or ini['id']}", source, justify_slides(doc, ini), "justify.css")
 
 
 # ---------------------------------------------------------------- CLI

@@ -723,6 +723,94 @@ class Present(Case):
         self.assertEqual(okr_plan.short_date("2026-10-05"), "05.10")
 
 
+class Justify(Case):
+    """Обоснование инициативы: агент пишет SMART, изменения, последствия и оценку;
+    название, тип, PBV и цель — из Scope; слайды собирает okr-plan.py."""
+
+    def setUp(self):
+        super().setUp()
+        self.doc = fixture("justify-2026Q4-1.3.json")
+
+    def put(self, doc=None):
+        self.write(self.scope, "scope-2026Q4.json")
+        return self.write(doc or self.doc, "justify-2026Q4-1.3.json")
+
+    def page(self, doc=None):
+        out = os.path.join(self.tmp.name, "justify.html")
+        okr_plan.render(self.put(doc), out)
+        with open(out, encoding="utf-8") as f:
+            return f.read()
+
+    def test_fixture_is_valid(self):
+        rep = okr_plan.lint(self.put(), final=True)
+        self.assertEqual((rep.errors, rep.warnings), ([], []))
+
+    def test_lint_rules(self):
+        d = self.doc
+        d.update(quarter="2027Q1", recommendation="может быть", research_days=-1)
+        d["metrics"].append({"name": "NPS"})
+        d["dev"][0]["days"] = "много"
+        d["risks"][0]["level"] = "критичный"
+        d["changes"].append({"actor": "Склад"})
+        rep = okr_plan.lint(self.put())
+        for fragment in ("quarter: '2027Q1', а Scope — за '2026Q4'", "recommendation: одно из",
+                         "research_days: число дней ≥ 0", "metrics[4]: нужны name и target",
+                         "dev[1]: days — число дней ≥ 0", "risks[1]: level — одно из", "changes[4]: нужны actor и tobe"):
+            self.assertError(rep, fragment)
+        d["kr"] = "7.7"
+        self.assertError(okr_plan.lint(self.put()), "kr: инициативы '7.7' нет в Scope")
+        d["scope"]["file"] = "nope.json"
+        self.assertError(okr_plan.lint(self.put()), "scope: файл nope.json не найден")
+
+    def test_gates_and_overload(self):
+        d = self.doc
+        for key in ("specific", "demo", "metrics", "dev", "delivery", "recommendation"):
+            d.pop(key)
+        d["consequences"]["skip_wont"] = []
+        d["risks"] = [{"title": f"Риск {n}", "level": "низкий"} for n in range(6)]
+        d["changes"][0]["tobe"] = "Поле для промокода [УТОЧНИТЬ у дизайна]"
+        rep = okr_plan.lint(self.put())
+        self.assertEqual(rep.errors, [])
+        for fragment in ("specific: нет постановки", "demo: нет сценария HowToDemo", "metrics: нет метрик",
+                         "dev, delivery: нет задач", "recommendation: PO не дал рекомендацию",
+                         "consequences: пусто — не будет, если не сделаем", "[УТОЧНИТЬ]: осталось 1"):
+            self.assertTrue(any(fragment in w for w in rep.warnings), fragment)
+        self.assertTrue(any("risks: 6 рисков — слайд перегружен" in w for w in rep.warnings))
+        final = okr_plan.lint(self.put(), final=True)
+        self.assertError(final, "recommendation: PO не дал рекомендацию")
+        self.assertFalse(any("перегружен" in e for e in final.errors))
+
+    def test_slides_take_facts_from_scope(self):
+        page = self.page()
+        slides = re.findall(r'<section class="slide ([^"]*)" data-kind="обоснование" data-title="([^"]*)"', page)
+        self.assertEqual([t for _, t in slides], ["Промокоды на подписку", "Как проверим результат", "На какие метрики влияем",
+                                                  "Что меняется в системе", "Квадрат последствий", "Во что обойдётся",
+                                                  "Риски", "Решение"])
+        self.assertEqual((slides[0][0], slides[-1][0]), ("blue cover", "dark hero"))
+        for marker in ("PBV 4 · OBJ 1 — Продавать подписку без ручных операций · Витрина · срок до 18.12.2026",
+                       "Обоснование инициативы · KR 1.3 · Q4 2026", "Берём промокоды в Q4 2026?",
+                       'data-v="no">Рекомендация PO — не брать', "Будет, если не сделаем", "цена бездействия",
+                       "<b>2</b><span>дней исследования", "<b>20</b><span>дней разработки",
+                       "<b>23</b><span>чел.-дней всего", "ролей · BE, FE, QA, RM", 'id="sideTab"', 'id="printBtn"'):
+            self.assertIn(marker, page)
+
+    def test_without_scope_and_empty_parts(self):
+        d = {"kind": "justify", "quarter": "2026Q4", "initiative": {"id": "9.1", "title": "Переезд базы", "pbv": 7,
+                                                                     "category": "Change"},
+             "specific": "Переносим базу.", "demo": ["Сервис работает на новой базе"]}
+        self.assertEqual(okr_plan.lint(self.put(d)).errors, [])
+        page = self.page(d)
+        titles = re.findall(r'data-kind="обоснование" data-title="([^"]*)"', page)
+        self.assertEqual(titles, ["Переезд базы", "Как проверим результат", "Решение"])
+        self.assertIn("Change · PBV 7", page)
+        self.assertIn("Берём в Q4 2026?", page)
+        self.assertIn('data-v="open">Рекомендация — не решено', page)
+        d["initiative"] = {"pbv": 12, "category": "Big"}
+        rep = okr_plan.lint(self.put(d))
+        for fragment in ("initiative.title: нет названия", "PBV — целое 1..9", "initiative.category: одно из"):
+            self.assertError(rep, fragment)
+
+
 class Robustness(Case):
     """JSON пишет LLM: любой неверный тип — понятная ошибка, а не трейсбэк."""
 
@@ -804,8 +892,14 @@ class Robustness(Case):
 
     def test_wrong_types_never_crash(self):
         docs = {n: fixture(n) for n in ("retro-2026Q3.json", "scope-2026Q4.json", "teamplanner-2026Q4.json",
-                                        "present-2026Q4.json")}
+                                        "present-2026Q4.json", "justify-2026Q4-1.3.json")}
+        # Обоснование без Scope: название, тип и PBV — в самом документе.
+        free = copy.deepcopy(docs["justify-2026Q4-1.3.json"])
+        free.pop("scope")
+        free["initiative"] = {"id": "9.1", "title": "Вне Scope", "category": "Run", "pbv": 5, "objective": "OBJ 9"}
+        docs["justify-free.json"] = free
         present = os.path.join(self.tmp.name, "present-2026Q4.json")
+        justify = os.path.join(self.tmp.name, "justify-2026Q4-1.3.json")
 
         def paths(node, pre=()):
             if pre:
@@ -836,6 +930,9 @@ class Robustness(Case):
                     # Презентация читает TeamPlanner, Scope и Retro — их порча не должна ронять её сборку.
                     ops.append(lambda: okr_plan.lint(present, final=True))
                     ops.append(lambda: okr_plan.render(present, os.path.join(self.tmp.name, "p.html")))
+                    # Обоснование читает Scope — его порча тоже не должна ронять сборку.
+                    ops.append(lambda: okr_plan.lint(justify, final=True))
+                    ops.append(lambda: okr_plan.render(justify, os.path.join(self.tmp.name, "j.html")))
                     for op in ops:
                         try:
                             op()

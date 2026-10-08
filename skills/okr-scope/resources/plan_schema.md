@@ -14,7 +14,7 @@ Python 3, без пакетов.
 | Команда | Что делает |
 |---|---|
 | `okr-plan.py lint <file.json> [--final]` | проверяет документ любого вида (`kind`); `--final` — по правилам принятия |
-| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН, TEAMPLANNER или презентацию квартала (`kind: present`) |
+| `okr-plan.py render <file.json> <out.html>` | собирает страницу ФАКТ, ПЛАН, TEAMPLANNER, презентацию квартала (`kind: present`) или обоснование инициативы (`kind: justify`) |
 | `okr-plan.py seed <scope.json> <teamplanner.json> [--force]` | заготовка TeamPlanner из принятого Scope, который проходит `lint --final`; существующий файл не перезаписывает без `--force` |
 | `okr-plan.py csv <teamplanner.json> <out.csv>` | лист TeamPlanner для Google Sheets / Excel |
 | `okr-plan.py jira-ready <teamplanner.json>` | `ГОТОВО К ПЕРЕНОСУ` только для принятого TeamPlanner без ошибок `lint --final` и с `jira_project`; иначе — что мешает |
@@ -37,6 +37,8 @@ Python 3, без пакетов.
 Страницы ФАКТ и ПЛАН собираются в одной вёрстке: `scripts/assets/page.css`
 и `page.js` — общие, `fact.css` и `scope.css` — своё у каждой. TEAMPLANNER —
 та же `page.css` плюс свой редактор `teamplanner.js` / `teamplanner.css`.
+Презентация квартала и обоснование инициативы — слайды на общем каркасе
+`present.css` / `present.js`; у обоснования свои слайды в `justify.css`.
 
 ```
 .okr/<quarter>/plan/
@@ -44,7 +46,8 @@ Python 3, без пакетов.
 ├── scope-<quarter>.json / .html     Этапы 2–3 · /okr-scope, /okr-stages
 ├── teamplanner-<quarter>.json / .html / .csv   Этап 4 · /okr-teamplanner
 ├── jira-<quarter>.csv                           перенос в JIRA без Atlassian MCP · /okr-jira
-└── present-<quarter>.json / .html             презентация команде · /okr-present
+├── present-<quarter>.json / .html             презентация команде · /okr-present
+└── justify-<quarter>-<KR>.json / .html         обоснование инициативы для бизнеса · /okr-justify
 ```
 
 `<quarter>` — планируемый квартал (`2026Q4`), `<prev>` — закрываемый (`2026Q3`).
@@ -431,6 +434,67 @@ JSON, и они уходят в CSV. Правки копятся в браузе
 | Структура; формат квартала; `teamplanner.file` указан, читается и проходит `lint`; квартал совпадает с TeamPlanner; цели из `objectives` и KR из `risks` есть в TeamPlanner; у риска есть `title`, `category` — из списка; `skip` — из списка; `sprints` — даты, начало не позже конца; `sprint_weeks` — 1–6 | ошибка |
 | TeamPlanner и Scope приняты; есть `message` | гейт |
 | Scope или ретро не читаются (их слайдов не будет); спринтов больше 8 | предупреждение |
+
+## Обоснование инициативы — `kind: "justify"`
+
+Короткая презентация для бизнеса «брать или нет» по одной инициативе
+(`/okr-justify`). Название, тип, PBV, цель и команда — из Scope по `kr` (файл
+`scope.file` рядом с обоснованием). Инициативы в Scope нет — их пишут в блоке
+`initiative`. Остальное пишет агент со слов PO. `okr-plan.py render` собирает
+слайды на каркасе презентации квартала.
+
+```json
+{"kind": "justify", "quarter": "2026Q4", "status": "черновик", "updated": "2026-10-08",
+ "kr": "1.3", "scope": {"file": "scope-2026Q4.json"},
+ "specific": "Маркетинг сам выпускает промокоды…", "deadline": "до 18.12.2026",
+ "demo": ["Маркетолог в админке создаёт промокод", "…"],
+ "metrics": [{"name": "Новые подписки в месяц", "now": "1 900", "target": "+15 %", "unit": "", "how": "отчёт по кодам"}],
+ "changes": [{"actor": "Маркетинг", "scenario": "Акции на подписку", "asis": "Задача в разработку", "tobe": "Сам в админке"}],
+ "consequences": {"do_will": ["…"], "skip_will": ["…"], "do_wont": ["…"], "skip_wont": ["…"]},
+ "research": ["Как бесплатный месяц проходит через биллинг"], "research_days": 2,
+ "dev": [{"role": "BE", "title": "Промокоды и правила применения", "days": 8}],
+ "delivery": [{"role": "RM", "title": "Выкатка за флагом", "days": 1}],
+ "risks": [{"title": "BE нужен на семейной подписке", "level": "высокий", "action": "Брать после её запуска"}],
+ "question": "Берём промокоды в Q4 2026?", "recommendation": "не брать", "open_questions": ["…"]}
+```
+
+| Поле | Что это |
+|---|---|
+| `kr`, `scope.file` | инициатива в Scope; из неё — название, `category`, PBV, цель, команда и PO |
+| `initiative` | только без Scope: `id`, `title`, `category`, `pbv`, `objective` |
+| `specific`, `deadline` | SMART: что делаем одним предложением и срок — на титуле |
+| `demo` | HowToDemo — шаги, которыми результат показывают вживую |
+| `metrics[]` | метрики, на которые влияем: `name`, `now`, `target`, `unit`, `how` — как меряем |
+| `changes[]` | что меняется в системе: `actor` — кто заметит, `scenario`, `asis`, `tobe` |
+| `consequences` | квадрат: `do_will` — будет, если сделаем (выгоды); `skip_will` — будет, если не сделаем (цена бездействия); `do_wont` — не будет, если сделаем (чем жертвуем); `skip_wont` — не будет, если не сделаем (что упускаем) |
+| `research`, `research_days` | вопросы к исследованию и сколько дней на него |
+| `dev[]`, `delivery[]` | задачи разработки и delivery: `role`, `title`, `days` |
+| `risks[]` | `title`, `level` (`высокий`, `средний`, `низкий`), `action` — что делаем |
+| `question`, `recommendation` | вопрос к бизнесу (по умолчанию «Берём в Q<n> <год>?») и рекомендация PO: `брать`, `не брать` или пусто |
+| `open_questions` | что ещё не известно — на слайде решения |
+
+### Что выводит скрипт
+
+| Слайд | Правило |
+|---|---|
+| Титул | название из Scope (или `initiative`), `specific`; тип · PBV · цель · команда · срок |
+| Как проверим результат | `demo` нумерованными шагами |
+| На какие метрики влияем | карточка на метрику: «сейчас …», цель крупно, как меряем |
+| Что меняется в системе | таблица: кто, сценарий, сейчас, станет |
+| Квадрат последствий | столбцы — сделаем / не сделаем, строки — будет / не будет |
+| Во что обойдётся | дни исследования, разработки (сумма `dev.days`), delivery (сумма `delivery.days`) и всего; вопросы, задачи с ролью и днями |
+| Риски | уровень, риск, что делаем; без `action` — «что делаем — обсудить» |
+| Решение | `question`, рекомендация, `open_questions`; цифры: чел.-дней, роли, цели первых метрик |
+
+Слайд без данных не выводится.
+
+### Что проверяет `lint`
+
+| Проверка | Уровень |
+|---|---|
+| Структура; формат квартала; Scope читается, в нём есть `kr`, квартал совпадает; без Scope — есть `initiative.title`, PBV 1..9, `category` из списка; у метрики `name` и `target`; у изменения `actor` и `tobe`; у задачи `title`, `days` — число ≥ 0; `research_days` — число ≥ 0; у риска `title`, `level` из списка; `recommendation` — `брать`, `не брать` или пусто | ошибка |
+| Есть `specific`, `demo`, `metrics`, задачи `dev` или `delivery`, все четыре клетки квадрата, `recommendation`; не осталось `[УТОЧНИТЬ]` | гейт |
+| Перегруженный слайд: `demo` > 5, `metrics` > 4, `changes` > 6, `research` > 4, `dev` > 6, `delivery` > 5, `risks` > 4, клетка квадрата > 4; инициатива в Scope отменена; `initiative` при `kr` и `scope.file` не используется | предупреждение |
 
 ## Комментарии PO для агента
 
