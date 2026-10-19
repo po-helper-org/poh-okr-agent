@@ -24,8 +24,8 @@ test('ресурсы с косой чертой не режутся по вто�
 })
 
 test('ответственные разбираются', () => {
-  const plan = parsePlan('teams: GDS\ntechLeads: Иванов\nexecutors: Петров, Сидоров')
-  assert.equal(plan.teams, 'GDS')
+  const plan = parsePlan('teams: TeamA\ntechLeads: Иванов\nexecutors: Петров, Сидоров')
+  assert.equal(plan.teams, 'TeamA')
   assert.equal(plan.techLeads, 'Иванов')
   assert.equal(plan.executors, 'Петров, Сидоров')
 })
@@ -45,7 +45,7 @@ test('план переживает круг записи и чтения', () =
   const plan = emptyPlan()
   plan.stages.research = { sprint: 0, resources: '1 аналитик' }
   plan.stages.dev = { sprint: 2, resources: '' }
-  plan.teams = 'GDS'
+  plan.teams = 'TeamA'
   assert.deepEqual(parsePlan(formatPlan(plan)), plan)
 })
 

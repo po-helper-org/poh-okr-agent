@@ -60,7 +60,7 @@ CLI, а здесь речь о трёх видах одной сущности �
 
 ```sh
 # договорённость со сроком, привязанная к KR PO-42
-backlog task create "Ромашкин пришлёт список эпиков" \
+backlog task create "Иванов пришлёт список эпиков" \
   --type potask --labels okr-kind:control,okr-kr:PO-42 --dep PO-42 \
   --due-date 2026-09-15 --priority high
 ```

@@ -17,7 +17,7 @@ echo -e "${BLUE}Какой IDE-агент?${NC}"
 echo "  1) Claude Code   (.claude/)"
 echo "  2) Codex         (.agents/)"
 echo "  3) Cline         (.clinerules/)"
-echo "  4) DevX (МТС)    (.clinerules/)"
+echo "  4) DevX    (.clinerules/)"
 echo "  5) Universal     (.agents/)"
 if [ -r /dev/tty ]; then
   # Файл /dev/tty есть, но терминала может не быть (CI, контейнер): ошибку

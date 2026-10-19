@@ -1491,7 +1491,7 @@ def jira_ready(path):
         problems.append("TeamPlanner не принят — покажи страницу PO и дождись явного «да» "
                         "(после него status: \"принято\")")
     if not text(doc.get("jira_project")):
-        problems.append("jira_project: не указан проект JIRA (ключ, например VIT)")
+        problems.append("jira_project: не указан проект JIRA (ключ, например DEMO)")
     problems += lint(path, final=True).errors
     return problems
 
