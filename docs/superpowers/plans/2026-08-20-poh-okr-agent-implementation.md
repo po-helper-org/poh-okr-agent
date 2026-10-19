@@ -173,7 +173,7 @@ runtime-зависимостей.
 
 **Через терминал:**
 ```bash
-curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
 ```
 Скрипт спросит IDE-агента (Claude Code / Codex / Cline / DevX / Universal) и
 синкнет команды и навыки в нужный корень. После установки запусти
@@ -182,7 +182,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 ## Для ИИ-помощника (bootstrap)
 
 Если пользователь просит «Установи okr-agent»: (1) запусти
-`curl -ksSL <repo>/install.sh | bash` или склонируй и запусти `install.sh`,
+`curl -sSL <repo>/install.sh | bash` или склонируй и запусти `install.sh`,
 выбрав IDE-агента пользователя; (2) после синка сразу запусти `/okr-index`
 для первичной аналитики воркспейса; (3) покажи `MANIFEST.md` и предложи
 `/okr-context <quarter>`.
