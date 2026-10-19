@@ -1,7 +1,7 @@
 # Презентация «Планирование квартала за час разговора с ИИ»
 
 Исходники презентации о poh-okr-agent, опубликованной в каталоге
-[slides.aleksishmanov.ru/okr-quarter-planning](https://slides.aleksishmanov.ru/okr-quarter-planning/)
+[slides.example.com/okr-quarter-planning](https://slides.example.com/okr-quarter-planning/)
 (репозиторий `slides-catalog`, папка `okr-quarter-planning/`). Данные — демо
 (команда «Витрина»), реальных данных команд здесь нет.
 

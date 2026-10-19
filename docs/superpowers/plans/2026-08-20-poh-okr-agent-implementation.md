@@ -105,11 +105,11 @@ Markdown (commands, skills, templates, config).
 или помечается `UNAVAILABLE` в `MANIFEST.md`.
 
 ## team
-Название команды/инициативы для шапок отчётов (напр. `GDS`). Пусто →
+Название команды/инициативы для шапок отчётов (напр. `TeamA`). Пусто →
 берётся из `/okr-index`, если определимо, иначе `[УТОЧНИТЬ]`.
 
 ## po_name
-Имя PO для шапок документов (напр. `Ишманов Алексей`).
+Имя PO для шапок документов (напр. `Петров Иван`).
 
 ## tracker_projects
 Коды проектов трекера через запятую (напр. `ACME, SHOP`). Пусто →
@@ -131,7 +131,7 @@ Markdown (commands, skills, templates, config).
 
 ## leadership_stakeholders
 Кому адресован раздел «Что нужно от руководителей» в экваторе (через
-запятую, напр. `Д. Зорихин, ГД`). Пусто → раздел собирается без адресата,
+запятую, напр. `И. Петров, ГД`). Пусто → раздел собирается без адресата,
 PO дополняет вручную.
 
 ## quarter_start_month
@@ -304,7 +304,7 @@ echo -e "${BLUE}Какой IDE-агент?${NC}"
 echo "  1) Claude Code   (.claude/)"
 echo "  2) Codex         (.agents/)"
 echo "  3) Cline         (.clinerules/)"
-echo "  4) DevX (МТС)    (.clinerules/)"
+echo "  4) DevX    (.clinerules/)"
 echo "  5) Universal     (.agents/)"
 if [ -r /dev/tty ]; then
   read -rp "Выбор [1]: " choice < /dev/tty 2>/dev/null || choice=""
@@ -1537,16 +1537,16 @@ mkdir -p skills/okr-equator/scripts/fixtures
 ```json
 {
   "meta": {
-    "team": "GDS",
+    "team": "TeamA",
     "po": "Тестовый PO",
     "period1": "01.07 — 17.08",
     "period2": "19.08 — 30.09",
     "quarterLabel": "Q3 2026",
-    "scopeNote": "GDS · Live · UMC"
+    "scopeNote": "TeamA · TeamB · UnitA"
   },
   "summaryFunnel": {
     "objectives": [
-      {"name": "OBJ 1 — Отделение от БАЗИС", "total": 7, "done": 1, "inProgress": 5, "notStarted": 1, "cancelled": 0},
+      {"name": "OBJ 1 — Отделение от LegacyCore", "total": 7, "done": 1, "inProgress": 5, "notStarted": 1, "cancelled": 0},
       {"name": "OBJ 2 — Развитие витрины", "total": 15, "done": 4, "inProgress": 2, "notStarted": 3, "cancelled": 6}
     ],
     "total": {"total": 22, "done": 5, "inProgress": 7, "notStarted": 4, "cancelled": 6}
@@ -1764,16 +1764,16 @@ into the existing JSON object, alongside `meta` and `summaryFunnel`):
     {"category": "Ресурс", "title": "Аналитики перегружены", "detail": "Временный перегруз из-за крупных задач."}
   ],
   "roadmapGrid": {
-    "columns": ["OBJ 1 · БАЗИС", "OBJ 2 · ВИТРИНА"],
+    "columns": ["OBJ 1 · LegacyCore", "OBJ 2 · ВИТРИНА"],
     "items": [
-      ["Dataflow TC → UMC, пилот", "Заказы TicketsCloud 24.08"],
+      ["Dataflow PX → UnitA, пилот", "Заказы PartnerX 24.08"],
       ["FAQ на LLM — PoC на проде"]
     ]
   },
   "sprints": {
     "sprintLabels": ["Спринт 1\n19.08–01.09", "Спринт 2\n02.09–15.09", "Спринт 3\n16.09–30.09"],
     "rows": [
-      {"objective": "O1", "title": "Заказы и возвраты TicketsCloud", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
+      {"objective": "O1", "title": "Заказы и возвраты PartnerX", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
       {"objective": "O2", "title": "FAQ на LLM — PoC", "stagesPerSprint": [["аналитика"], ["бек", "приёмка"], []]}
     ]
   }
@@ -1943,13 +1943,13 @@ Add to `skills/okr-equator/scripts/fixtures/sample-equator-data.json`:
   "objectives": [
     {
       "code": "OBJ 1",
-      "name": "Отделение витрины Ticketland от БАЗИС",
-      "goalQuote": "«Недоступность БАЗИС не останавливает Ticketland»",
+      "name": "Отделение витрины Acme Tickets от LegacyCore",
+      "goalQuote": "«Недоступность LegacyCore не останавливает Acme Tickets»",
       "stageFunnel": {"total": 7, "waiting": 1, "research": 3, "analysis": 0, "dev": 2, "debug": 0, "done": 1, "cancelled": 0},
-      "part2Plan": {"inProgress": ["1.1 Dataflow TC → UMC → web_db", "1.2 Заказы TicketsCloud"], "waiting": ["1.5 extapi_go B2B"], "new": []},
+      "part2Plan": {"inProgress": ["1.1 Dataflow PX → UnitA → store_db", "1.2 Заказы PartnerX"], "waiting": ["1.5 api_go B2B"], "new": []},
       "part1Table": [
         {"status": "выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
-        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
+        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UnitA", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
       ],
       "newTasks": [],
       "risks": [
@@ -2202,13 +2202,13 @@ unchanged from Task 14, a second added), and add `leadershipAsks`:
   "objectives": [
     {
       "code": "OBJ 1",
-      "name": "Отделение витрины Ticketland от БАЗИС",
-      "goalQuote": "«Недоступность БАЗИС не останавливает Ticketland»",
+      "name": "Отделение витрины Acme Tickets от LegacyCore",
+      "goalQuote": "«Недоступность LegacyCore не останавливает Acme Tickets»",
       "stageFunnel": {"total": 7, "waiting": 1, "research": 3, "analysis": 0, "dev": 2, "debug": 0, "done": 1, "cancelled": 0},
-      "part2Plan": {"inProgress": ["1.1 Dataflow TC → UMC → web_db", "1.2 Заказы TicketsCloud"], "waiting": ["1.5 extapi_go B2B"], "new": []},
+      "part2Plan": {"inProgress": ["1.1 Dataflow PX → UnitA → store_db", "1.2 Заказы PartnerX"], "waiting": ["1.5 api_go B2B"], "new": []},
       "part1Table": [
         {"status": "выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
-        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
+        {"status": "в работе", "kr": "1.1", "task": "Продажа TC через UnitA", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
       ],
       "newTasks": [],
       "risks": [
@@ -2220,7 +2220,7 @@ unchanged from Task 14, a second added), and add `leadershipAsks`:
       "name": "Развитие витрины",
       "goalQuote": "",
       "stageFunnel": {"total": 15, "waiting": 5, "research": 0, "analysis": 0, "dev": 1, "debug": 1, "done": 3, "cancelled": 5},
-      "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 VibeApp/Музыка"], "new": ["AI-Harness — пилот"]},
+      "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 AppV/Музыка"], "new": ["AI-Harness — пилот"]},
       "part1Table": [
         {"status": "выполнено", "kr": "2.4", "task": "RELEASE КИНО", "pbv": 9, "done": "Закрыт 23-24.07", "left": "—"}
       ],
@@ -2612,9 +2612,9 @@ if (require.main === module) {
 mkdir -p skills/okr-plan-deck/scripts/fixtures
 cat > skills/okr-plan-deck/scripts/fixtures/sample-plan-data.json <<'JSON'
 {
-  "meta": {"team": "GDS", "quarterLabel": "Q3 2026"},
-  "objectives": [{"code": "OBJ 1", "name": "Отделение от БАЗИС"}, {"code": "OBJ 2", "name": "Развитие витрины"}],
-  "sprintPlan": [{"label": "Спринт 1", "focus": "Заказы TicketsCloud, dataflow пилот"}],
+  "meta": {"team": "TeamA", "quarterLabel": "Q3 2026"},
+  "objectives": [{"code": "OBJ 1", "name": "Отделение от LegacyCore"}, {"code": "OBJ 2", "name": "Развитие витрины"}],
+  "sprintPlan": [{"label": "Спринт 1", "focus": "Заказы PartnerX, dataflow пилот"}],
   "entryRisks": ["Kafka от TC не готова к 24.08"]
 }
 JSON

@@ -537,13 +537,13 @@ class Jira(Case):
     def test_key_and_project_format(self):
         self.tp["jira_project"] = "vit"
         kr = self.tp["objectives"][0]["krs"][0]
-        kr["jira_key"] = "VIT 1"
+        kr["jira_key"] = "DEMO 1"
         kr["steps"][0]["jira_key"] = "vit-2"
         rep = okr_plan.lint(self.put())
         for fragment in ("jira_project: ключ проекта JIRA", "KR 1.1: jira_key — ключ JIRA",
                          "KR 1.1, этап 1: jira_key — ключ JIRA"):
             self.assertError(rep, fragment)
-        kr["jira_key"], kr["steps"][0]["jira_key"], self.tp["jira_project"] = "VIT-1", "VIT-2", "VIT"
+        kr["jira_key"], kr["steps"][0]["jira_key"], self.tp["jira_project"] = "DEMO-1", "DEMO-2", "DEMO"
         self.assertEqual(okr_plan.lint(self.put()).errors, [])
 
     def test_ready_only_for_accepted_teamplanner(self):

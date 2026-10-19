@@ -232,15 +232,15 @@ head = f"""<!DOCTYPE html>
 <!-- Превью ссылки. Краулеры не выполняют JS, поэтому блок статический.
      Живёт в шаблоне, а не дописывается руками: иначе теряется при пересборке. -->
 <meta name="description" content="{DESC}">
-<link rel="canonical" href="https://slides.aleksishmanov.ru/{ID}/">
+<link rel="canonical" href="https://slides.example.com/{ID}/">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="article">
-<meta property="og:site_name" content="Каталог презентаций · Алексей Ишманов">
+<meta property="og:site_name" content="Каталог презентаций">
 <meta property="og:locale" content="ru_RU">
-<meta property="og:url" content="https://slides.aleksishmanov.ru/{ID}/">
+<meta property="og:url" content="https://slides.example.com/{ID}/">
 <meta property="og:title" content="{TITLE}">
 <meta property="og:description" content="{DESC}">
-<meta property="og:image" content="https://slides.aleksishmanov.ru/{ID}/cover.png">
+<meta property="og:image" content="https://slides.example.com/{ID}/cover.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="720">
@@ -248,7 +248,7 @@ head = f"""<!DOCTYPE html>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{TITLE}">
 <meta name="twitter:description" content="{DESC}">
-<meta name="twitter:image" content="https://slides.aleksishmanov.ru/{ID}/cover.png">
+<meta name="twitter:image" content="https://slides.example.com/{ID}/cover.png">
 <meta name="twitter:image:alt" content="Первый слайд презентации «{TITLE}»">
 """
 overlays = ref[ref.index('<div id="lb">'):ref.index("<script>")]

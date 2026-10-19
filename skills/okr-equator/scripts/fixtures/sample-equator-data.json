@@ -1,15 +1,15 @@
 {
   "meta": {
-    "team": "GDS",
+    "team": "TeamA",
     "po": "Тестовый PO",
     "period1": "01.07 — 17.08",
     "period2": "19.08 — 30.09",
     "quarterLabel": "Q3 2026",
-    "scopeNote": "GDS · Live · UMC"
+    "scopeNote": "TeamA · TeamB · UnitA"
   },
   "summaryFunnel": {
     "objectives": [
-      {"name": "OBJ 1 — Отделение от БАЗИС", "total": 7, "done": 1, "inProgress": 5, "notStarted": 1, "cancelled": 0},
+      {"name": "OBJ 1 — Отделение от LegacyCore", "total": 7, "done": 1, "inProgress": 5, "notStarted": 1, "cancelled": 0},
       {"name": "OBJ 2 — Развитие витрины", "total": 15, "done": 4, "inProgress": 2, "notStarted": 3, "cancelled": 6}
     ],
     "total": {"total": 22, "done": 5, "inProgress": 7, "notStarted": 4, "cancelled": 6}
@@ -19,29 +19,29 @@
     {"category": "Ресурс", "title": "Аналитики перегружены", "detail": "Временный перегруз из-за крупных задач."}
   ],
   "roadmapGrid": {
-    "columns": ["OBJ 1 · БАЗИС", "OBJ 2 · ВИТРИНА"],
+    "columns": ["OBJ 1 · LegacyCore", "OBJ 2 · ВИТРИНА"],
     "items": [
-      ["Dataflow TC → UMC, пилот", "Заказы TicketsCloud 24.08"],
+      ["Dataflow PX → UnitA, пилот", "Заказы PartnerX 24.08"],
       ["FAQ на LLM — PoC на проде"]
     ]
   },
   "sprints": {
     "sprintLabels": ["Спринт 1\n19.08–01.09", "Спринт 2\n02.09–15.09", "Спринт 3\n16.09–30.09"],
     "rows": [
-      {"objective": "O1", "title": "Заказы и возвраты TicketsCloud", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
+      {"objective": "O1", "title": "Заказы и возвраты PartnerX", "stagesPerSprint": [["бек", "приёмка"], ["бек"], []]},
       {"objective": "O2", "title": "FAQ на LLM — PoC", "stagesPerSprint": [["аналитика"], ["бек", "приёмка"], []]}
     ]
   },
   "objectives": [
     {
       "code": "OBJ 1",
-      "name": "Отделение витрины Ticketland от БАЗИС",
-      "goalQuote": "«Недоступность БАЗИС не останавливает Ticketland»",
+      "name": "Отделение витрины Acme Tickets от LegacyCore",
+      "goalQuote": "«Недоступность LegacyCore не останавливает Acme Tickets»",
       "stageFunnel": {"total": 7, "waiting": 1, "research": 3, "analysis": 0, "dev": 2, "debug": 0, "done": 1, "cancelled": 0},
-      "part2Plan": {"inProgress": ["1.1 Dataflow TC → UMC → web_db", "1.2 Заказы TicketsCloud"], "waiting": ["1.5 extapi_go B2B"], "new": []},
+      "part2Plan": {"inProgress": ["1.1 Dataflow PX → UnitA → store_db", "1.2 Заказы PartnerX"], "waiting": ["1.5 api_go B2B"], "new": []},
       "part1Table": [
         {"status": "Выполнено", "kr": "1.1.E1", "task": "Дизайн дедубликации", "pbv": 9, "done": "Артефакт готов", "left": "—"},
-        {"status": "В работе", "kr": "1.1", "task": "Продажа TC через UMC", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
+        {"status": "В работе", "kr": "1.1", "task": "Продажа TC через UnitA", "pbv": 9, "done": "Аналитика", "left": "Разработка"}
       ],
       "newTasks": [],
       "risks": [
@@ -53,7 +53,7 @@
       "name": "Развитие витрины",
       "goalQuote": "",
       "stageFunnel": {"total": 15, "waiting": 5, "research": 0, "analysis": 0, "dev": 1, "debug": 1, "done": 3, "cancelled": 5},
-      "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 VibeApp/Музыка"], "new": ["AI-Harness — пилот"]},
+      "part2Plan": {"inProgress": ["2.5 Email-рестораны"], "waiting": ["2.7 AppV/Музыка"], "new": ["AI-Harness — пилот"]},
       "part1Table": [
         {"status": "Выполнено", "kr": "2.4", "task": "RELEASE КИНО", "pbv": 9, "done": "Закрыт 23-24.07", "left": "—"}
       ],

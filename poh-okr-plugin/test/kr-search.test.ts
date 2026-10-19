@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { MAX_RESULTS, normalize, searchKeyResults, swapLayout } from '../src/kr-search.js'
 
 const KRS = [
-  { id: 'PO-42', title: 'Дизайн дедубликации каталога web_db' },
-  { id: 'PO-43', title: 'Продажа мероприятий ТС на витрине TL через UMC минуя БАЗИС (виджет ТС)' },
-  { id: 'PO-44', title: 'Заказы и возвраты в ЛК TL от TicketsCloud' },
-  { id: 'PO-51', title: 'Каталог кино на витрину через UMC минуя MRS.backend&uat_db' },
+  { id: 'PO-42', title: 'Дизайн дедубликации каталога store_db' },
+  { id: 'PO-43', title: 'Продажа мероприятий ТС на витрине TL через UnitA минуя LegacyCore (виджет ТС)' },
+  { id: 'PO-44', title: 'Заказы и возвраты в ЛК AT от PartnerX' },
+  { id: 'PO-51', title: 'Каталог кино на витрину через UnitA минуя UnitB.backend&stage_db' },
   { id: 'PO-53', title: '[FEAT] КИНО ранжирование в афише и поиске' },
   { id: 'PO-57', title: 'RELEASE КИНО: выкатить в Production фичу с поиском' },
   { id: 'PO-88', title: 'Новый ключевой результат' },
