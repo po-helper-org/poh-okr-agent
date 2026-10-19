@@ -112,7 +112,7 @@ Markdown (commands, skills, templates, config).
 Имя PO для шапок документов (напр. `Ишманов Алексей`).
 
 ## tracker_projects
-Коды проектов трекера через запятую (напр. `GDSLV, TLND`). Пусто →
+Коды проектов трекера через запятую (напр. `ACME, SHOP`). Пусто →
 живой статус в `/okr-equator` не подтягивается, всё — ручной ввод PO.
 
 ## wiki_space
@@ -173,7 +173,7 @@ runtime-зависимостей.
 
 **Через терминал:**
 ```bash
-curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/install.sh | bash
 ```
 Скрипт спросит IDE-агента (Claude Code / Codex / Cline / DevX / Universal) и
 синкнет команды и навыки в нужный корень. После установки запусти
@@ -182,7 +182,7 @@ curl -ksSL https://raw.githubusercontent.com/po-helper-org/poh-okr-agent/main/in
 ## Для ИИ-помощника (bootstrap)
 
 Если пользователь просит «Установи okr-agent»: (1) запусти
-`curl -ksSL <repo>/install.sh | bash` или склонируй и запусти `install.sh`,
+`curl -sSL <repo>/install.sh | bash` или склонируй и запусти `install.sh`,
 выбрав IDE-агента пользователя; (2) после синка сразу запусти `/okr-index`
 для первичной аналитики воркспейса; (3) покажи `MANIFEST.md` и предложи
 `/okr-context <quarter>`.
@@ -357,10 +357,10 @@ Run:
 ```bash
 chmod +x install.sh
 mkdir -p /tmp/okr-install-smoke && cd /tmp/okr-install-smoke
-echo "1" | bash /Users/aleksishmanov/projects/poh-org/poh-okr-agent/install.sh
+echo "1" | bash /path/to/poh-okr-agent/install.sh
 ls .claude/commands | head -3
 ls .claude/skills
-cd /Users/aleksishmanov/projects/poh-org/poh-okr-agent
+cd /path/to/poh-okr-agent
 ```
 Expected: `install.sh` errors cleanly at this point in the plan because
 `commands/` and `skills/` don't exist yet in this repo — **this step is a
@@ -2762,11 +2762,11 @@ Expected: `---`
 
 ```bash
 rm -rf /tmp/okr-install-smoke && mkdir -p /tmp/okr-install-smoke && cd /tmp/okr-install-smoke
-echo "1" | bash /Users/aleksishmanov/projects/poh-org/poh-okr-agent/install.sh
+echo "1" | bash /path/to/poh-okr-agent/install.sh
 ls .claude/commands
 ls .claude/skills
 head -5 .claude/skills/okr-equator/SKILL.md
-cd /Users/aleksishmanov/projects/poh-org/poh-okr-agent
+cd /path/to/poh-okr-agent
 rm -rf /tmp/okr-install-smoke
 ```
 Expected: `.claude/commands` lists all 9 `okr-*.md` files; `.claude/skills`
@@ -2787,8 +2787,8 @@ git commit -m "Add okr-validate command"
 ## Task 19: Update poh-strategy-agents (branch + PR)
 
 **Files:**
-- Modify: `/Users/aleksishmanov/projects/poh-org/poh-strategy-agents/VISION.md`
-- Modify: `/Users/aleksishmanov/projects/poh-org/poh-strategy-agents/README.md`
+- Modify: `/path/to/poh-strategy-agents/VISION.md`
+- Modify: `/path/to/poh-strategy-agents/README.md`
 
 **Interfaces:**
 - No code interfaces — documentation-only edit reflecting the design's
@@ -2797,7 +2797,7 @@ git commit -m "Add okr-validate command"
 - [ ] **Step 1: Create a branch**
 
 ```bash
-cd /Users/aleksishmanov/projects/poh-org/poh-strategy-agents
+cd /path/to/poh-strategy-agents
 git status
 git checkout -b hand-off-okr-roadmap-to-poh-okr-agent
 ```
@@ -2907,7 +2907,7 @@ EOF
 ## Task 20: Update .github manifest (branch + PR)
 
 **Files:**
-- Modify: `/Users/aleksishmanov/projects/poh-org/.github/profile/README.md`
+- Modify: `/path/to/.github/profile/README.md`
 
 **Interfaces:**
 - No code interfaces — manifest table edit.
@@ -2915,7 +2915,7 @@ EOF
 - [ ] **Step 1: Create a branch**
 
 ```bash
-cd /Users/aleksishmanov/projects/poh-org/.github
+cd /path/to/.github
 git status
 git checkout -b add-poh-okr-agent-to-manifest
 ```
@@ -2974,7 +2974,7 @@ EOF
 - [ ] **Step 1: Final local check before publishing**
 
 ```bash
-cd /Users/aleksishmanov/projects/poh-org/poh-okr-agent
+cd /path/to/poh-okr-agent
 git status
 git log --oneline
 find . -not -path './.git*' -not -path './docs/superpowers*' -type f | sort
