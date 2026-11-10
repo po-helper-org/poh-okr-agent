@@ -3,7 +3,7 @@ title: Roadmap цели — md как трекер, граф линтером, �
 date: 2026-11-10
 kind: feature
 area: okr-roadmap-viz
-prs: []
+prs: [18]
 adr: []
 tags: [roadmap, backlog.md, детерминированная сборка, комментарии, агент]
 ---
