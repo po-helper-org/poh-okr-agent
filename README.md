@@ -142,6 +142,7 @@ PO. Название, тип и PBV — из Scope; итог — `justify-<quart
 
 | Команда | Роль | Артефакт |
 |---|---|---|
+| `/okr-roadmap-viz <slug>` | Roadmap Visualizer | `.okr/roadmap/<slug>/roadmap.md` + `backlog/` → `roadmap.html` |
 | `/okr-index` | Context Builder | `.okr/index/` |
 | `/okr-equator <quarter>` | Equator Reporter | `.okr/<quarter>/equator/экватор-<quarter>.md` + `.pptx` |
 | `/okr-validate <path>` | Validator | структурный отчёт линтера экватора |
@@ -150,6 +151,30 @@ PO. Название, тип и PBV — из Scope; итог — `justify-<quart
 форматом вызова и отчёта, процесс живёт в `skills/<команда>/SKILL.md`. Так
 пайплайн доступен и там, где слэш-команд нет, а есть только каталог навыков —
 например в DeepSeek Harness, куда его подключает `poh-okr-plugin`.
+
+## Roadmap цели — `/okr-roadmap-viz`
+
+Визуальный roadmap одной цели: бесконечная шкала по неделям, треки строками, свой трек
+разложен на этапы и задачи с вехами, блокерами, зависимостями и целевыми состояниями;
+экспорт в `.xlsx` для отчётов. Собирается в три шага, и только первый делает LLM:
+
+1. **Декомпозиция.** Агент превращает наработки (выгрузка GanttPRO, таблицы, заметки,
+   Scope и TeamPlanner, Jira, разговор с PO) в md: паспорт `roadmap.md` и задачи
+   `backlog/*.md` — по файлу на задачу, в формате [Backlog.md](https://github.com/MrLesk/Backlog.md).
+   Это и декомпозиция, и внутренний трекер: агент дальше работает только с этими файлами.
+2. **Проверка и граф.** `roadmap.py lint` проверяет ссылки, циклы (в том числе через
+   этапы), порядок дат по зависимостям и считает номера 3.7.1 → `roadmap.json`.
+3. **Визуализация.** `roadmap.py build` детерминированно собирает один `roadmap.html` по
+   шаблону: одинаковые md — байт в байт одинаковая страница.
+
+Наверху страницы — панель комментариев: правый клик по любому элементу карты (задача,
+этап, трек, роль, целевое состояние, неделя) — комментарий агенту. Комментарии копятся
+в браузере; «Скопировать промпт» отдаёт их одним сообщением вместе с правками, сделанными
+на странице мышью. Агент переносит всё в md и пересобирает страницу.
+
+Формат — `skills/okr-roadmap-viz/resources/format.md`, эталон —
+`skills/okr-roadmap-viz/scripts/fixtures/sample/`. Самотест:
+`python3 -m unittest discover -s <корень установки>/skills/okr-roadmap-viz/scripts`.
 
 ## Устаревшие команды
 
@@ -179,6 +204,10 @@ PO. Название, тип и PBV — из Scope; итог — `justify-<quart
   plan/present-<quarter>.json + .html         презентация квартала команде
   equator/экватор-<quarter>.md
   equator/экватор-<quarter>.pptx
+.okr/roadmap/<slug>/
+  roadmap.md                                  паспорт roadmap цели
+  backlog/*.md                                задачи своего трека
+  roadmap.json + roadmap.html                 граф и страница — собирает скрипт
 ```
 
 ## Проверка структуры экватора
