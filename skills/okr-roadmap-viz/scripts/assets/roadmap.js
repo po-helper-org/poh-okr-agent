@@ -262,7 +262,7 @@
       msOf(view.n).sort(function (a, b) { return eff(a).s < eff(b).s ? -1 : 1; }).forEach(function (m) {
         var e = eff(m), x = xOf(e.s), ln = el('i', 'mln ' + SCLS[e.st]), tier = 0; ln.style.left = x - 1 + 'px'; ov.appendChild(ln);
         var wx = (wk(e.s) - lo) * WPX + 1; xs.forEach(function (px) { if (px === wx) tier++; }); xs.push(wx);
-        ov.appendChild(msLabel(m, wx, WPX - 2, 8 + tier * 212));
+        ov.appendChild(msDiamond(m, x, 8 + tier * 20));
       });
     }
     return ov;
@@ -281,13 +281,13 @@
     b.addEventListener('click', function (ev) { ev.stopPropagation(); openDrawer(m.id); }); b.addEventListener('keydown', function (ev) { ev.stopPropagation(); });
     return b;
   }
-  function msCol(m) {
-    var e = eff(m), c = el('button', 'mcol ' + SCLS[e.st] + (sel === m.id ? ' on' : '')); c.type = 'button'; c.dataset.ms = m.id;
-    c.style.left = (wk(e.s) - lo) * WPX + 1 + 'px'; c.title = m.title + '\n' + fmt(e.s) + ' · ' + e.st;
-    c.appendChild(el('i', 'dot')); c.appendChild(el('span', 'tx', clip(shortOf(m), 44)));
-    c.addEventListener('click', function (ev) { ev.stopPropagation(); openDrawer(m.id); }); c.addEventListener('keydown', function (ev) { ev.stopPropagation(); });
-    return c;
+  function msDiamond(m, x, top) {
+    var e = eff(m), b = el('button', 'mdm ' + SCLS[e.st] + (sel === m.id ? ' on' : '')); b.type = 'button'; b.dataset.ms = m.id;
+    b.style.left = x - 8 + 'px'; b.style.top = top + 'px'; b.title = m.title + '\n' + fmt(e.s) + ' · ' + e.st; b.setAttribute('aria-label', b.title);
+    b.addEventListener('click', function (ev) { ev.stopPropagation(); openDrawer(m.id); }); b.addEventListener('keydown', function (ev) { ev.stopPropagation(); });
+    return b;
   }
+  function msCol(m) { return msDiamond(m, xOf(eff(m).s), 10); }
   function addBtn(title, fn) {
     var b = el('button', 'addb'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title); b.appendChild(svg(ICON.plus));
     b.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); }); return b;

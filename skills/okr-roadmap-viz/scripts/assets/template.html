@@ -247,6 +247,8 @@ svg.deps { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none
 .lb { position: absolute; z-index: 1; pointer-events: auto; max-height: 208px; display: flex; flex-direction: column-reverse; align-items: center; gap: 6px; padding: 6px 4px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--raised); color: var(--ink); cursor: pointer; font: inherit; }
 .lb:hover, .lb.on { border-color: var(--ink); }
 .lb { box-sizing: border-box; padding: 6px 0; } .lb span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; line-height: 16px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 0; max-width: 100%; }
+.mdm { position: absolute; z-index: 3; pointer-events: auto; width: 16px; height: 16px; padding: 0; border: 2px solid var(--surface); background: var(--c); transform: rotate(45deg); cursor: pointer; box-shadow: 0 0 0 1px var(--c); }
+.mdm:hover, .mdm:focus-visible, .mdm.on { outline: 2px solid var(--ink); outline-offset: 2px; }
 .mln { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--c); opacity: .55; }
 .dot.big { width: 12px; height: 12px; margin-top: 4px; }
 .mk { position: absolute; z-index: 2; top: calc(50% - 10px); width: 20px; height: 20px; border-radius: 50%; background: var(--c); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--c); touch-action: none; cursor: grab; }
