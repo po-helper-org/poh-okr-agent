@@ -142,6 +142,18 @@ class LintErrors(Case):
         self.assertTrue(any('не позже, чем закончится' in w for w in rep.warnings))
 
 
+    def test_milestone_same_day_is_ok(self):
+        # веха task-5 стоит в день окончания task-4 — это не нарушение
+        self.edit(self.task('task-4'), 'end: 2026-12-03', 'end: 2026-12-04')
+        rm, rep = roadmap.load(self.dir)
+        self.assertEqual(rep.warnings, [])
+
+    def test_risk_not_numbered(self):
+        self.edit(self.task('task-9'), 'title: Витрина абонементов на сайте', 'title: РИСК: витрина не успеет')
+        rm, _ = roadmap.load(self.dir)
+        self.assertNotIn('task-9', rm['num'])
+
+
 class Build(Case):
     def build(self, out):
         code, _ = quiet(roadmap.main, ['roadmap.py', 'build', self.dir, '-o', out])

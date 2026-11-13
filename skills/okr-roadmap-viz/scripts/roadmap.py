@@ -38,7 +38,7 @@ DEFAULT_ROLES = [
     ('BE', 'Backend', '#8a4fd1'), ('FE', 'Frontend', '#17a2b8'),
     ('DEVOPS', 'DevOps', '#d9622b'), ('DELIVERY', 'Delivery', '#c0407a'),
 ]
-UNNUMBERED = re.compile(r'^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛИЯЕТ)', re.I)
+UNNUMBERED = re.compile(r'^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛИЯЕТ|РИСК)', re.I)
 REF = re.compile(r'\{#([^}]+)\}')
 ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.\-]*$')
 RESERVED_ID = re.compile(r'^(m\d+_-?\d+|mg-?\d+)$')
@@ -638,7 +638,9 @@ def check_dates(rm, rep):
             continue
         for d in t['deps']:
             pe = pred_end(rm, d)
-            if pe and t['start'] <= pe:
+            # веха может стоять в день окончания предшественника; задача — только после
+            same_day = t['type'] == 'ms' or (not d.startswith('stage:') and rm['by'][d]['type'] == 'ms')
+            if pe and (t['start'] < pe if same_day else t['start'] <= pe):
                 rep.warn(t['file'], f'start {t["start"]} не позже, чем закончится {label(rm, d)} ({pe}) — на странице подсветится нарушение')
 
 

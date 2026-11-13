@@ -59,7 +59,7 @@
     });
     relayout();
   }
-  function numbered(x) { var e = eff(x); return e.ty !== 'bl' && !/^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛИЯЕТ)/i.test(x.name); }
+  function numbered(x) { var e = eff(x); return e.ty !== 'bl' && !/^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛИЯЕТ|РИСК)/i.test(x.name); }
   function ordered(key, def) {
     var st = orders[key] || [], set = {}, out = []; def.forEach(function (d) { set[d] = 1; });
     st.forEach(function (d) { if (set[d] === 1) { out.push(d); set[d] = 2; } }); def.forEach(function (d) { if (set[d] === 1) out.push(d); }); return out;
@@ -152,7 +152,7 @@
   function affects(ref, id) { return ref === id || (ref.indexOf('S:') === 0 && ITEM[id] && ITEM[id].stage === ref.slice(2)); }
   function needShift(d) {
     var e = eff(d), need = 0; if (!e.s) return 0;
-    e.dep.forEach(function (r) { var pe = predEnd(r); if (pe) { var min = iso(ms(pe) + DAY); if (e.s < min) need = Math.max(need, Math.round((ms(min) - ms(e.s)) / DAY)); } });
+    e.dep.forEach(function (r) { var pe = predEnd(r); if (pe) { var min = iso(ms(pe) + (sameDay(d, r) ? 0 : DAY)); if (e.s < min) need = Math.max(need, Math.round((ms(min) - ms(e.s)) / DAY)); } });
     return need;
   }
   function shift(d, days) { var e = eff(d), n = cur(d); n.s = iso(ms(e.s) + days * DAY); n.e = e.e ? iso(ms(e.e) + days * DAY) : ''; if (n.d) n.d = syncTokens(n.d, { s: n.s, e: n.e, single: e.ty === 'ms' || e.ty === 'bl' }); put(d, n); save(d.id); }
@@ -166,7 +166,10 @@
       var need = needShift(d); if (need > 0) { shift(d, need); moved.push(d.id); cascade(d.id, seen, moved); }
     });
   }
-  function violated(d) { var e = eff(d); return !!e.s && e.dep.some(function (r) { var pe = predEnd(r); return pe && e.s <= pe; }); }
+  // a milestone may sit on the day its predecessor ends; a task starts the day after
+  function sameDay(d, r) { if (eff(d).ty === 'ms') return true; var p = r.indexOf('S:') === 0 ? null : ITEM[r]; return !!(p && eff(p).ty === 'ms'); }
+  function late(d, r, s, pe) { return !!(pe && s && (sameDay(d, r) ? s < pe : s <= pe)); }
+  function violated(d) { var e = eff(d); return !!e.s && e.dep.some(function (r) { return late(d, r, e.s, predEnd(r)); }); }
   function reach(ref, target, seen) {
     var ids = ref.indexOf('S:') === 0 ? stageOf(ref.slice(2)).map(function (x) { return x.id; }) : [ref];
     return ids.some(function (id) {
@@ -450,7 +453,7 @@
     }
     e.dep.forEach(function (ref) {
       var pe = predEnd(ref); if (!pe) return;
-      var bad = !!(e.s && e.s <= pe), d = el('button', 'dm' + (bad ? ' bad' : '')); d.type = 'button';
+      var bad = late(it, ref, e.s, pe), d = el('button', 'dm' + (bad ? ' bad' : '')); d.type = 'button';
       d.style.left = xOf(pe) - 11 + 'px'; d.setAttribute('aria-label', 'Старт после завершения: ' + predLabel(ref) + ', до ' + fmt(pe));
       d.title = 'Старт только после завершения: ' + predLabel(ref) + '\nдо ' + fmt(pe) + (bad ? '\nСрок задачи пересекается с предшественником' : '');
       d.appendChild(el('i', 'tri', '!'));
@@ -523,7 +526,7 @@
       st.dep.forEach(function (ref) {
         var pb = ref.indexOf('S:') === 0 ? rollOf(ref.slice(2)) : (ITEM[ref] ? barOf(ref) : null); if (!pb) return;
         var pr = pb.getBoundingClientRect(), below = tr.top > pr.top, x1 = pb.classList.contains('mk') ? pr.left + pr.width / 2 - ir.left : pr.right - ir.left - 8, y1 = (below ? pr.bottom : pr.top) - ir.top, x2 = tr.left - ir.left, y2 = tr.top + tr.height / 2 - ir.top;
-        var pe = predEnd(ref), e = eff(d), bad = !!(pe && e.s && e.s <= pe), cls = bad ? 'bad' : '', path = document.createElementNS(ns, 'path'), poly = document.createElementNS(ns, 'polygon'), dd;
+        var pe = predEnd(ref), e = eff(d), bad = late(d, ref, e.s, pe), cls = bad ? 'bad' : '', path = document.createElementNS(ns, 'path'), poly = document.createElementNS(ns, 'polygon'), dd;
         if (x2 >= x1 + 8) dd = 'M' + x1 + ' ' + y1 + 'V' + y2 + 'H' + x2;
         else { var ym = ((below ? pr.bottom : pr.top) + (below ? tr.top : tr.bottom)) / 2 - ir.top; dd = 'M' + x1 + ' ' + y1 + 'V' + ym + 'H' + (x2 - 8) + 'V' + y2 + 'H' + x2; }
         path.setAttribute('d', dd); if (cls) path.setAttribute('class', cls);
@@ -963,7 +966,7 @@
       var pe = predEnd(ref), b = el('div', 'lnk static'), nm;
       if (ref.indexOf('S:') === 0) { nm = el('b', '', predLabel(ref)); nm.title = ref.slice(2); } else { var p = ITEM[ref]; nm = el('b', '', predLabel(ref)); nm.title = p.title; nm.style.cursor = 'pointer'; nm.addEventListener('click', function () { gotoItem(ref); }); }
       b.appendChild(nm);
-      var bad = pe && e.s && e.s <= pe;
+      var bad = late(it, ref, e.s, pe);
       b.appendChild(el('i', bad ? 'warn' : '', pe ? 'до ' + fmtS(pe) + (bad ? ' · конфликт' : '') : 'без срока'));
       if (bad) { var fix = el('button', 'btn', 'Сдвинуть'); fix.type = 'button'; fix.title = 'Начать на следующий день после завершения'; fix.addEventListener('click', function () { var d = needShift(it); if (d > 0) { shift(it, d); var mv = []; cascade(it.id, {}, mv); render(); syncDrawer(); } }); b.appendChild(fix); }
       var rm = el('button', 'rm'); rm.type = 'button'; rm.title = 'Убрать зависимость'; rm.setAttribute('aria-label', 'Убрать зависимость'); rm.appendChild(svg(ICON.x)); rm.addEventListener('click', function () { rmDep(it, ref); }); b.appendChild(rm);
@@ -1367,7 +1370,7 @@
         if (sp && e.ty && sp[0] >= wLo && sp[0] <= wHi) s2.set(r, C0 + sp[0] - wLo, e.ty === 'ms' ? '◆' : '○', X.style(e.ty === 'ms' ? { color: 'FFFFFF', fill: SHEX[e.st], h: 'center', v: 'center', b: 1 } : { color: e.st === 'Выполнено' ? '15803D' : 'DC2626', fill: cellBg(sp[0]) || undefined, h: 'center', v: 'center', b: 1, sz: 12 }));
         e.dep.forEach(function (ref) {
           var pe = predEnd(ref); if (!pe) return; var w = wk(pe); if (w < wLo || w > wHi) return;
-          var inside = sp && e.ty !== 'bl' && w >= sp[0] && w <= sp[1], badd = !!(e.s && e.s <= pe);
+          var inside = sp && e.ty !== 'bl' && w >= sp[0] && w <= sp[1], badd = late(it, ref, e.s, pe);
           s2.set(r, C0 + w - wLo, '▲', X.style({ color: inside ? 'FFFFFF' : badd ? 'DC2626' : 'B45309', fill: inside ? SHEX[e.st] : (cellBg(w) || undefined), h: 'center', v: 'center', b: 1 }));
         });
         s2.row(r, 0, g.stage ? Math.min(7, lv) : (lv ? Math.min(7, lv) : 0)); r++;
