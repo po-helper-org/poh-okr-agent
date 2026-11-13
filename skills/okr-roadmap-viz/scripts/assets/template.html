@@ -251,6 +251,14 @@ svg.deps { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none
 .dot.big { width: 12px; height: 12px; margin-top: 4px; }
 .mk { position: absolute; z-index: 2; top: calc(50% - 10px); width: 20px; height: 20px; border-radius: 50%; background: var(--c); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--c); touch-action: none; cursor: grab; }
 .mk:active { cursor: grabbing; }
+.row.fh.none .stx b { color: var(--muted); font-weight: 400; }
+.cp { position: absolute; z-index: 3; top: calc(50% - 7px); width: 14px; height: 14px; padding: 0; border: 2px solid var(--surface); background: var(--ink); transform: rotate(45deg); cursor: pointer; box-shadow: 0 0 0 1px var(--ink); }
+.cp.s-done { background: var(--s-done); box-shadow: 0 0 0 1px var(--s-done); }
+.cp.bl { background: var(--surface); border: 2px dashed var(--s-block); box-shadow: none; }
+.cp.bl.s-done { border-color: var(--s-done); opacity: .6; }
+.cpd { position: absolute; z-index: 3; width: 40px; background: var(--surface); border-radius: 3px; top: calc(50% + 9px); text-align: center; font: 400 10px/12px var(--mono); color: var(--ink-2); pointer-events: none; }
+.cpd.up { top: calc(50% - 21px); }
+.cp:hover, .cp:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .mk.on { outline: 2px solid var(--ink); outline-offset: 2px; }
 .mk.bl { top: calc(50% - 7px); width: 14px; height: 14px; background: transparent; border: 2px dashed var(--c); box-shadow: none; --c: var(--s-block); }
 .mk.bl.s-done { --c: var(--s-done); opacity: .6; }

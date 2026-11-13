@@ -9,4 +9,5 @@ start: 2027-01-25
 end: 2027-02-05
 dependencies: [task-6]
 short: Витрина
+feature: 2
 ---

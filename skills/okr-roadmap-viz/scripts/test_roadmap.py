@@ -153,6 +153,18 @@ class LintErrors(Case):
         rm, _ = roadmap.load(self.dir)
         self.assertNotIn('task-9', rm['num'])
 
+    def test_features(self):
+        rm, rep = roadmap.load(self.dir)
+        self.assertEqual(rep.errors, [])
+        self.assertEqual(rm['feat_by']['1.2']['parent'], '1')
+        self.assertEqual(rm['by']['task-7']['eff_feature'], '1.1')   # inherited from parent task-6
+        self.assertEqual(rm['by']['task-8']['eff_feature'], '1.2')   # own value wins over the parent's
+        self.assertEqual(rm['by']['task-1']['eff_feature'], '')
+
+    def test_unknown_feature(self):
+        self.edit(self.task('task-9'), 'feature: 2', 'feature: 9.9')
+        self.assertIn('feature «9.9»', self.errors())
+
 
 class Build(Case):
     def build(self, out):

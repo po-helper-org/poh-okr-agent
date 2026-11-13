@@ -9,4 +9,5 @@ start: 2026-12-07
 end: 2027-01-22
 dependencies: [stage:analytics]
 assignee: Команда Core
+feature: 1.1
 ---

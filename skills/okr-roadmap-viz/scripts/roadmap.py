@@ -42,11 +42,12 @@ UNNUMBERED = re.compile(r'^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛ�
 REF = re.compile(r'\{#([^}]+)\}')
 ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.\-]*$')
 RESERVED_ID = re.compile(r'^(m\d+_-?\d+|mg-?\d+)$')
+FEAT_RE = re.compile(r'^\d+(\.\d+)*$')
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 TASK_KEYS = {'id', 'title', 'status', 'role', 'type', 'stage', 'parent', 'parent_task_id', 'ordinal',
              'start', 'start_date', 'end', 'end_date', 'due_date', 'date', 'progress', 'dependencies',
              'customer', 'assignee', 'approver', 'short', 'labels', 'created_date', 'updated_date',
-             'milestone', 'priority', 'reporter'}
+             'milestone', 'priority', 'reporter', 'feature'}
 
 
 class Report:
@@ -221,7 +222,7 @@ def parse_track(head, sec, where, rep):
     w = f'{where}: Трек {n}'
     if not name:
         rep.err(w, 'нет названия')
-    tr = {'n': n, 'name': name, 'own': False, 'num': '', 'result': '', 'plan': {}, 'states': [], 'stages': []}
+    tr = {'n': n, 'name': name, 'own': False, 'num': '', 'result': '', 'plan': {}, 'states': [], 'stages': [], 'features': []}
     parts = sections(sec, 3)
     for b in bullets(parts[0][1]):
         k, _, v = b.partition(':')
@@ -266,6 +267,14 @@ def parse_track(head, sec, where, rep):
                     rep.err(w, f'Этапы: строка «- <id>: <название>», «{b}»')
                     continue
                 tr['stages'].append({'id': sid, 'title': title})
+        elif hl.startswith('фичи'):
+            for b in bullets(body):
+                code, _, title = b.partition(':')
+                code, title = code.strip().strip('`'), title.strip()
+                if not FEAT_RE.match(code) or not title:
+                    rep.err(w, f'Фичи: строка «- <код>: <название>», код — 1.2.3, «{b}»')
+                    continue
+                tr['features'].append({'code': code, 'title': title})
         else:
             rep.warn(w, f'подраздел «{h3}» сборкой не используется')
     return tr
@@ -304,6 +313,7 @@ def parse_task(path, rel, rep):
     t['role'] = (fm.get('role') or '').strip()
     t['stage'] = (fm.get('stage') or '').strip()
     t['parent'] = (fm.get('parent') or fm.get('parent_task_id') or '').strip()
+    t['feature'] = str(fm.get('feature') or '').strip()
     o = str(fm.get('ordinal') or '').strip()
     t['ordinal'] = None
     if o:
@@ -419,6 +429,8 @@ def check(rm, rep):
                 rep.err(W, f'Трек {tr["n"]}: План по ролям — нет роли {role} в «## Роли»')
         if tr['stages'] and not tr['own']:
             rep.err(W, f'Трек {tr["n"]}: этапы бывают только у своего трека (- свой: да)')
+        if tr['features'] and not tr['own']:
+            rep.err(W, f'Трек {tr["n"]}: фичи бывают только у своего трека (- свой: да)')
     own = [t for t in rm['tracks'] if t['own']]
     if len(own) > 1:
         rep.err(W, 'свой трек — один: треки ' + ', '.join(str(t['n']) for t in own))
@@ -435,6 +447,21 @@ def check(rm, rep):
         stages[s['id']] = s
         titles.add(s['title'])
     rm['stage_by'] = stages
+    feats = {}
+    for f in (rm['own'] or {}).get('features', []):
+        if f['code'] in feats:
+            rep.err(W, f'Фичи: код {f["code"]} дважды')
+        feats[f['code']] = f
+    for f in feats.values():
+        parts = f['code'].split('.')
+        f['parent'] = next(('.'.join(parts[:k]) for k in range(len(parts) - 1, 0, -1) if '.'.join(parts[:k]) in feats), '')
+        f['depth'] = 0
+    for f in feats.values():
+        p = f['parent']
+        while p:
+            f['depth'] += 1
+            p = feats[p]['parent']
+    rm['feat_by'] = feats
 
     by = {}
     for t in rm['tasks']:
@@ -453,6 +480,9 @@ def check(rm, rep):
         if t['stage'] and t['stage'] not in stages:
             rep.err(w, f'stage «{t["stage"]}» нет в «### Этапы» своего трека')
             t['stage'] = ''
+        if t['feature'] and t['feature'] not in feats:
+            rep.err(w, f'feature «{t["feature"]}» нет в «### Фичи» своего трека')
+            t['feature'] = ''
         if t['parent'] and t['parent'] not in by:
             rep.err(w, f'parent «{t["parent"]}» — нет такой задачи')
             t['parent'] = ''
@@ -484,6 +514,10 @@ def check(rm, rep):
         if t['parent'] and t['stage'] and t['stage'] != s:
             rep.warn(t['file'], f'stage «{t["stage"]}» не совпадает с этапом родителя «{s}» — берётся этап родителя')
         t['eff_stage'] = s
+    def root_feat(t, d=0):
+        return t['feature'] or (root_feat(by[t['parent']], d + 1) if t['parent'] and d < 50 else '')
+    for t in rm['tasks']:
+        t['eff_feature'] = root_feat(t)
     order_and_number(rm, rep)
     check_deps(rm, rep)
     check_dates(rm, rep)
@@ -677,6 +711,7 @@ def payload(rm, folder):
             'status': t['status'], 'pct': f'{t["progress"]}%' if t['progress'] is not None else '',
             'role': t['role'], 'stage': stitle.get(t['eff_stage']),
             'parent': None, 'pref': t['parent'], 'ty': t['type'], 'num0': rm['num'].get(tid, ''),
+            'ft': t['feature'],
         })
         state[tid] = {
             's': t['start'].isoformat() if t['start'] else '', 'e': t['end'].isoformat() if t['end'] else '',
@@ -707,6 +742,8 @@ def payload(rm, folder):
                    for g in rm['global']],
         'holiday': hol,
         'stageIds': {v: k for k, v in stitle.items()},
+        'features': [{'code': f['code'], 'title': f['title'], 'parent': f['parent'], 'depth': f['depth']}
+                     for f in (own or {}).get('features', [])],
     }
     roots = ['S:' + stitle[x[2:]] if x.startswith('S:') else x for x in rm['root_order']]
     seed = {'state': state, 'customs': {}, 'moves': {}, 'orders': {'R': roots} if roots else {}, 'cmts': cmts}
@@ -722,7 +759,7 @@ def graph(rm):
     for tid in rm['order']:
         t = rm['by'][tid]
         out.append({'id': tid, 'num': rm['num'].get(tid, ''), 'file': t['file'], 'title': t['title'],
-                    'parent': t['parent'], 'stage': t['eff_stage'], 'type': t['type'] or 'task',
+                    'parent': t['parent'], 'stage': t['eff_stage'], 'feature': t['eff_feature'], 'type': t['type'] or 'task',
                     'status': t['status'], 'role': t['role'],
                     'start': t['start'].isoformat() if t['start'] else '',
                     'end': t['end'].isoformat() if t['end'] else '',
@@ -766,6 +803,13 @@ def cmd_lint(folder, quiet=False):
         edges = sum(len(t['deps']) for t in rm['tasks'])
         print(f'Принято: треков {len(rm["tracks"])}, этапов {len(stages)}, задач {len(rm["tasks"])} '
               f'(со сроками {dated}), зависимостей {edges}, предупреждений {len(rep.warnings)}.')
+        feats = rm.get('feat_by') or {}
+        if feats:
+            used = {t['eff_feature'] for t in rm['tasks'] if t['eff_feature']}
+            covered = {c for c in feats if any(u == c or u.startswith(c + '.') for u in used)}
+            print(f'Фичи: {len(feats)}, без задач {len(feats) - len(covered)}'
+                  + (' — ' + ', '.join(sorted(set(feats) - covered, key=natural)) if len(feats) > len(covered) else '')
+                  + f'; задач вне фич {sum(1 for t in rm["tasks"] if not t["eff_feature"])}.')
         print(f'Граф: {os.path.join(folder, "roadmap.json")}')
     return rm, rep
 
