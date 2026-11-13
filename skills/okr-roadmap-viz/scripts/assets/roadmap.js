@@ -194,7 +194,7 @@
 
   // ---------- range ----------
   function ensureRange() { STAT.forEach(function (it) { var sp = span(it); if (sp) { lo = Math.min(lo, sp[0] - 4); hi = Math.max(hi, sp[1] + 14); } }); items.forEach(function (it) { var sp = span(it); if (sp) { lo = Math.min(lo, sp[0] - 4); hi = Math.max(hi, sp[1] + 14); } }); }
-  function lw() { var n = window.innerWidth < 700; return view.t === 'ov' ? (n ? 200 : 320) : (n ? 240 : 380); }
+  function lw() { var n = window.innerWidth < 700; return view.t === 'ov' ? (n ? 200 : 320) : (n ? 260 : 640); }
   function wInfo(i) { var d = new Date(weekMon(i) + 6 * DAY), m = d.getUTCMonth(), y = d.getUTCFullYear(); return { m: y * 12 + m, q: y * 4 + Math.floor(m / 3) }; }
   function weekInQ(i) { var q = wInfo(i).q, j = i; while (wInfo(j - 1).q === q) j--; return i - j + 1; }
   function curTrack() { return TRACKS.filter(function (t) { return t.n === view.n; })[0] || TRACKS[0]; }
@@ -349,6 +349,7 @@
     lc.appendChild(el('div', 'lab', 'Результат трека')); lc.appendChild(el('div', 'restext', t.result || 'Не указан'));
     if (!t.own) lc.appendChild(el('div', 'empty', 'Подробной декомпозиции у этого трека пока нет. Показан план по ролям из roadmap.'));
     res.appendChild(lc); res.appendChild(el('div', 'tc')); inn.appendChild(res);
+    if (t.own) inn.appendChild(tableHead());
     if (t.own && grp === 'stage') { buildStages(inn); return; }
     if (t.own && grp === 'feat') { buildFeats(inn); return; }
     ROLES.forEach(function (role) {
@@ -395,9 +396,8 @@
         var rh = el('div', 'row sh'), l = el('div', 'lc'), tc = el('div', 'tc'), btn = el('button', 'stbtn');
         rh.dataset.stage = g.stage;
         btn.type = 'button'; btn.setAttribute('aria-expanded', String(isOpen)); btn.appendChild(svg(isOpen ? ICON.down : ICON.right, 'chev'));
-        var tx = el('div', 'stx'), bt = el('b', '', stageTitle(g.stage)); bt.title = stageTitle(g.stage); tx.appendChild(bt);
-        tx.appendChild(el('span', '', plural(n) + ' · ' + done + ' выполнено' + (block ? ' · ' + block + ' заблокировано' : '') + ' · ' + pct + '%'));
-        btn.appendChild(tx); btn.addEventListener('click', function () { open[key] = !isOpen; render(); });
+        var sn = SNUM[g.stage] || '', stt = stageTitle(g.stage).slice(sn ? sn.length + 1 : 0);
+        btn.appendChild(groupCells(sn, stt, real, plural(n) + ' · ' + done + ' выполнено' + (block ? ' · ' + block + ' заблокировано' : '') + ' · ' + pct + '%')); btn.addEventListener('click', function () { open[key] = !isOpen; render(); });
         l.appendChild(btn); l.appendChild(addBtn('Добавить задачу в этап', function () { startAdd({ stage: g.stage }); })); l.appendChild(addGrip('stage', g.stage)); rh.appendChild(l);
         if (a != null) {
           var r = el('div', 'roll'); r.style.left = (a - lo) * WPX + 2 + 'px'; r.style.width = (b - a + 1) * WPX - 4 + 'px'; r.title = 'Сводка по этапу: ' + pct + '%';
@@ -416,6 +416,45 @@
     });
   }
 
+  // ---------- left column as a table: number · title · role · start · finish · status ----------
+  function stDot(st) { var d = el('i', 'sd ' + SCLS[st] + (st === 'В работе' || st === 'Открыт' ? ' ring' : '')); d.title = st; return d; }
+  function overdue(en, st) { return !!en && st !== 'Выполнено' && en < iso(todayMs); }
+  function cellDate(v, late, warn) { var c = el('span', 'cd' + (late ? ' late' : '') + (warn ? ' warn' : ''), v ? fmtS(v) : '—'); if (v) c.title = fmt(v); return c; }
+  function bareTitle(it) { var t = it.title, n = NUM[it.id]; if (n && t.indexOf(n) === 0) t = t.slice(n.length); return t.replace(/^[\s!\-]+/, ''); }
+  function tableCells(it, e, msT, blT, kids) {
+    var g = el('div', 'tr6'), n = el('span', 'cn'), t = el('span', 'ct'), r = el('span', 'cr'), rl = RBY[e.role] || { color: '', name: e.role };
+    var pre = /^[\s!\-]*(БЛОКАТОР|ВОПРОС|ЖДЕМ|ВЛИЯЕТ|РИСК)/i.exec(it.name || ''), tag = blT || (pre && /^БЛОКАТОР$/i.test(pre[1])) ? 'БЛОК' : pre ? pre[1].toUpperCase() : '';
+    if (tag && !NUM[it.id]) n.appendChild(el('em', 'bdg ' + (tag === 'БЛОК' ? 'bl' : 'q'), tag)); else n.textContent = NUM[it.id] || '';
+    if (msT && !blT) t.appendChild(el('em', 'bdg', 'ВЕХА'));
+    var b = el('b', '', bareTitle(it)); t.appendChild(b);
+    var info = [it.title, e.st + (e.p && !msT ? ' · ' + e.p + '%' : '')];
+    if (kids.length) info.push(pl(kids.length, ['подзадача', 'подзадачи', 'подзадач']));
+    if (e.as) info.push('Исполнитель: ' + e.as);
+    if (e.dep.length) info.push('После: ' + e.dep.map(function (d) { return predLabel(d) + (predEnd(d) ? ' (до ' + fmtS(predEnd(d)) + ')' : ''); }).join('; '));
+    var ncm = cmOf(it.id).length; if (ncm) { info.push(ncm + ' комм.'); t.appendChild(el('span', 'ccm', String(ncm))); }
+    t.title = info.join('\n');
+    var q = el('i', 'sq'); q.style.background = rl.color; r.appendChild(q); r.appendChild(document.createTextNode(rl.name)); r.title = rl.sub || '';
+    var en = msT ? e.s : (e.e || e.s), bad = violated(it);
+    g.appendChild(n); g.appendChild(t); g.appendChild(r);
+    g.appendChild(cellDate(e.s, false, bad)); g.appendChild(cellDate(en, overdue(en, e.st), false)); g.appendChild(stDot(e.st));
+    if (bad) g.title = 'Конфликт срока: старт раньше финиша предшественника';
+    return g;
+  }
+  function groupCells(num, title, list, extra) {
+    var a = '', z = '', sts = {}, g = el('div', 'tr6 grp');
+    list.forEach(function (x) { var e = eff(x); sts[e.st] = (sts[e.st] || 0) + 1; if (e.s && (!a || e.s < a)) a = e.s; var en = e.e || e.s; if (en && en > z) z = en; });
+    var st = !list.length ? 'Открыт' : sts['Выполнено'] === list.length ? 'Выполнено' : sts['В работе'] ? 'В работе' : sts['Заблокировано'] ? 'Заблокировано' : 'Открыт';
+    g.appendChild(el('span', 'cn', num)); var t = el('span', 'ct'), b = el('b', '', title); t.appendChild(b); t.title = title + (extra ? '\n' + extra : ''); g.appendChild(t);
+    g.appendChild(el('span', 'cr', ''));
+    g.appendChild(cellDate(a, false, false)); g.appendChild(cellDate(z, overdue(z, st), false)); g.appendChild(stDot(st));
+    return g;
+  }
+  function tableHead() {
+    var row = el('div', 'row thd'), lc = el('div', 'lc'), g = el('div', 'tr6');
+    ['', 'Задача', 'Роль', 'Старт', 'Финиш', ''].forEach(function (h, k) { g.appendChild(el('span', ['cn', 'ct', 'cr', 'cd', 'cd', 'sd0'][k], h)); });
+    lc.appendChild(g); row.appendChild(lc); row.appendChild(el('div', 'tc')); return row;
+  }
+
   // ---------- features: the same tasks along the feature tree, with key dates ----------
   function ftOf(x) { var n = 0; while (x && n < 40) { if (x.ft && FBY[x.ft]) return x.ft; x = x.pid ? ITEM[x.pid] : null; n++; } return ''; }
   function featKids(code) { return FEATS.filter(function (f) { return f.parent === code; }); }
@@ -429,11 +468,11 @@
     var a = null, b = null, end = '', done = 0;
     sub.forEach(function (x) { var sp = span(x), e = eff(x); if (e.st === 'Выполнено') done++; if (!sp) return; a = a == null ? sp[0] : Math.min(a, sp[0]); b = b == null ? sp[1] : Math.max(b, sp[1]); var en = e.e || e.s; if (en > end) end = en; });
     var rh = el('div', 'row sh fh' + (sub.length ? '' : ' none')), l = el('div', 'lc'), tc = el('div', 'tc'), btn = el('button', 'stbtn');
-    rh.dataset.feat = code || '_none'; l.style.paddingLeft = 8 + depth * 16 + 'px';
+    rh.dataset.feat = code || '_none'; l.style.setProperty('--ind', depth * 16 + 'px');
     btn.type = 'button'; btn.setAttribute('aria-expanded', String(isOpen)); btn.appendChild(svg(isOpen ? ICON.down : ICON.right, 'chev'));
-    var tx = el('div', 'stx'), nm = f ? f.code + ' ' + f.title : 'Вне декомпозиции фич', bt = el('b', '', nm); bt.title = nm; tx.appendChild(bt);
+    var nm = f ? f.code + ' ' + f.title : 'Вне декомпозиции фич';
     var meta = !sub.length ? 'не спланировано' : plural(work.length) + (cps.length ? ' · ' + pl(cps.length, ['контрольная точка', 'контрольные точки', 'контрольных точек']) : '') + (end ? ' · финиш ' + fmt(end) : ' · без сроков');
-    tx.appendChild(el('span', '', meta)); btn.appendChild(tx);
+    btn.appendChild(groupCells(f ? f.code : '', f ? f.title : 'Вне декомпозиции фич', sub, meta));
     btn.addEventListener('click', function () { open[key] = !isOpen; render(); }); l.appendChild(btn); rh.appendChild(l);
     if (a != null) {
       var r = el('div', 'roll'); r.style.left = (a - lo) * WPX + 2 + 'px'; r.style.width = (b - a + 1) * WPX - 4 + 'px';
@@ -465,17 +504,7 @@
       tg.title = closed ? 'Развернуть подзадачи' : 'Свернуть подзадачи'; tg.setAttribute('aria-label', tg.title); tg.appendChild(svg(closed ? ICON.right : ICON.down));
       tg.addEventListener('click', function (ev) { ev.stopPropagation(); open['t:' + it.id] = closed; render(); }); lc.appendChild(tg);
     }
-    var tt = el('div', 'tt ' + SCLS[e.st]); tt.appendChild(el('i', 'dot' + (msT && !blT ? ' big' : ''))); var b = el('b', '', it.short); b.title = it.title; tt.appendChild(b); lc.appendChild(tt);
-    var parts = [e.st]; parts.push(e.s ? fmtS(e.s) + (e.e ? ' → ' + fmtS(e.e) : '') : 'без даты'); if (e.p && !msT) parts.push(e.p + '%'); if (msT) parts.unshift(blT ? 'Блокатор' : 'Целевое состояние');
-    if (kids.length) parts.push(pl(kids.length, ['подзадача', 'подзадачи', 'подзадач']));
-    if (e.as) parts.push(clip(e.as, 22));
-    var ncm = cmOf(it.id).length; if (ncm) parts.push(ncm + ' комм.');
-    var tm = el('div', 'tm');
-    if (lvl != null) { var rl = RBY[e.role], q = el('i', 'sq'); q.style.background = rl.color; tm.appendChild(q); parts.unshift(rl.name); }
-    if (e.dep.length) parts.push('после ' + (e.dep.length === 1 ? clip(predLabel(e.dep[0]), 24) + (predEnd(e.dep[0]) ? ' (до ' + fmtS(predEnd(e.dep[0])) + ')' : '') : e.dep.length));
-    tm.appendChild(document.createTextNode(parts.join(' · ')));
-    if (violated(it)) tm.appendChild(el('span', 'warn', ' · конфликт срока'));
-    lc.appendChild(tm);
+    lc.appendChild(tableCells(it, e, msT, blT, kids));
     if (lvl != null && grp !== 'feat') {
       lc.appendChild(addGrip('item', it.id));
       lc.addEventListener('keydown', function (ev) { if (ev.altKey && ev.key.indexOf('Arrow') === 0) { ev.preventDefault(); keyMove(it.id, ev.key); } });
