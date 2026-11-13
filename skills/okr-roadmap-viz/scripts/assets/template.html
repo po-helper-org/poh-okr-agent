@@ -159,6 +159,15 @@ button { font: inherit; color: inherit; }
 .x:hover { background: var(--raised); color: var(--ink); } .x svg { width: 16px; height: 16px; }
 .dbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 16px 8px; }
 .pane { display: none; } .pane.on { display: block; }
+.plist { display: grid; border-top: 1px solid var(--line); }
+.prow { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); gap: 8px; }
+.prow .pk { color: var(--muted); font-size: 13px; }
+.psel, .pdate { width: 100%; height: 30px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.psel:hover, .pdate:hover, .psel:focus-visible, .pdate:focus-visible { border-color: var(--line-strong); background: var(--raised); outline: none; }
+.pdate { font-variant-numeric: tabular-nums; } .pdate.bad { border-color: var(--s-block); }
+.pdate::-webkit-calendar-picker-indicator { opacity: .6; cursor: pointer; }
+.pclr { margin-top: 4px; padding: 4px 0; font-size: 12px; }
+.list.work { margin-bottom: 8px; }
 .sec { margin-top: 16px; } .sec:first-child { margin-top: 0; }
 .lab { color: var(--muted); font-size: 12px; line-height: 16px; margin-bottom: 4px; }
 .sec > .lab { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }

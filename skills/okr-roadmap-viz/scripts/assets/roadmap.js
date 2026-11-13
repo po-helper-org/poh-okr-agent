@@ -859,7 +859,8 @@
     });
   }
   var dTitle = el('div', 'dtitle'), dSub = el('div', 'dsub'), panes = {}, navB = {}, stBtns = {}, roBtns = {};
-  var inS = el('input'), inE = el('input'), range = el('input'), big = el('span', 'big'), inName = el('input'), inCu = el('input'), inAs = el('input'), inAp = el('input'), ta = el('textarea');
+  var selTy = el('select'), selSt = el('select'), selRo = el('select'), selDur = el('select'), selP = el('select'), boxWork = el('div', 'list work'), workIn = el('input', 'newin'), workSec;
+  var inS = el('input'), inE = el('input'), inName = el('input'), inCu = el('input'), inAs = el('input'), inAp = el('input'), ta = el('textarea');
   var metaEl = el('dl', 'meta'), delBtn = el('button', 'btn danger', 'Удалить подзадачу'), nameFld, depSel = el('select', 'sel'), newIn = el('input', 'newin');
   var nb = el('div', 'nb'), chipBar = el('div', 'nchips'), pills = {}, newBl = el('input', 'newin'), typeSec, roleSec, dateSec, dateLab, fS, fE, two0, chipsEl, progSec, clrBtn, snFld, descFld, peopleSec, tyBtns = {}, inSn = el('input');
   var boxParent = el('div', 'list'), boxDeps = el('div', 'list'), boxNext = el('div', 'list'), boxKids = el('div', 'list'), boxRefs = el('div', 'list');
@@ -871,56 +872,43 @@
     var x = el('button', 'x'); x.type = 'button'; x.setAttribute('aria-label', 'Закрыть'); x.appendChild(svg(ICON.x)); x.addEventListener('click', closeDrawer); head.appendChild(x);
     var body = el('div', 'dbody');
     ['plan', 'desc', 'cm', 'links'].forEach(function (k) { var p = el('div', 'pane' + (k === 'desc' ? ' col' : '')); panes[k] = p; body.appendChild(p); });
-    // --- planning
-    var s0 = section('Тип'), g0 = el('div', 'seg c3 tall'); typeSec = s0;
-    [['t', 'Задача'], ['ms', 'Целевое состояние'], ['bl', 'Блокатор']].forEach(function (q) {
-      var b = el('button', '', q[1]); b.type = 'button';
-      b.addEventListener('click', function () { var it = cur1(); if (!it || it.stat) return; var n = cur(it); n.ty = q[0]; if (q[0] !== 't') n.e = ''; if (q[0] === 'bl' && !eff(it).s) n.s = iso(weekMon(todayIdx + 1) + 4 * DAY); commit(it, n); });
-      g0.appendChild(b); tyBtns[q[0]] = b;
+    // --- planning: compact property list + work breakdown
+    var plist = el('div', 'plist');
+    function prow(lbl, ctrl) { var r = el('label', 'prow'), k = el('span', 'pk', lbl); r.appendChild(k); r.appendChild(ctrl); plist.appendChild(r); return r; }
+    function opts(sel, list) { sel.textContent = ''; list.forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; sel.appendChild(x); }); }
+    selTy.className = selSt.className = selRo.className = selDur.className = selP.className = 'psel';
+    opts(selTy, [['t', 'Задача'], ['ms', 'Целевое состояние'], ['bl', 'Блокатор']]);
+    selTy.addEventListener('change', function () { var it = cur1(); if (!it || it.stat) return; var n = cur(it), v = selTy.value; n.ty = v; if (v !== 't') n.e = ''; if (v === 'bl' && !eff(it).s) n.s = iso(weekMon(todayIdx + 1) + 4 * DAY); commit(it, n); });
+    opts(selSt, STATUS.map(function (q) { return [q[0], q[0]]; }));
+    selSt.addEventListener('change', function () { var it = cur1(); if (!it) return; var n = cur(it), v = selSt.value; n.st = v; if (v === 'Выполнено') n.p = 100; else if (n.p === 100) n.p = null; commit(it, n); });
+    opts(selRo, ROLES.map(function (r) { return [r.key, r.key + (r.sub ? ' · ' + r.sub : '')]; }));
+    selRo.addEventListener('change', function () { var it = cur1(); if (!it) return; var n = cur(it); n.r = selRo.value; commit(it, n); });
+    inS.type = 'date'; inE.type = 'date'; inS.className = inE.className = 'pdate';
+    typeSec = prow('Тип', selTy); prow('Статус', selSt); roleSec = prow('Роль', selRo);
+    fS = prow('Старт', inS); fE = prow('Финиш', inE); chipsEl = prow('Длительность', selDur); progSec = prow('Выполнено', selP);
+    selDur.addEventListener('change', function () {
+      var it = cur1(), v = selDur.value; if (!it || !v) return; var n = cur(it), s = n.s || eff(it).s || iso(weekMon(todayIdx)), sm = ms(s), en;
+      if (v === 'm') { var d = new Date(sm); d.setUTCMonth(d.getUTCMonth() + 1); en = d.getTime() - DAY; } else en = sm + (7 * +v - 1) * DAY;
+      n.s = s; n.e = iso(en); commit(it, n);
     });
-    s0.appendChild(g0); panes.plan.appendChild(s0);
-    var s1 = section('Статус'), g1 = el('div', 'seg c2');
-    STATUS.forEach(function (s) {
-      var b = el('button'); b.type = 'button'; b.appendChild(el('i', 'dot ' + s[1])); b.appendChild(document.createTextNode(s[0]));
-      b.addEventListener('click', function () { var it = cur1(); if (!it) return; var n = cur(it); n.st = s[0]; if (s[0] === 'Выполнено') n.p = 100; else if (n.p === 100) n.p = null; commit(it, n); });
-      g1.appendChild(b); stBtns[s[0]] = b;
-    });
-    s1.appendChild(g1); panes.plan.appendChild(s1);
-    var s2 = section('Роль'), g2 = el('div', 'seg c3');
-    ROLES.forEach(function (r) {
-      var b = el('button'); b.type = 'button'; b.title = r.sub; var q = el('i', 'sq'); q.style.background = r.color; b.appendChild(q); b.appendChild(document.createTextNode(r.name));
-      b.addEventListener('click', function () { var it = cur1(); if (!it) return; var n = cur(it); n.r = r.key; commit(it, n); });
-      g2.appendChild(b); roBtns[r.key] = b;
-    });
-    s2.appendChild(g2); panes.plan.appendChild(s2); roleSec = s2;
-    var s3 = section('Сроки'), two = el('div', 'two'), clr = el('button', 'btn link', 'Сбросить'); clr.type = 'button';
-    s3.firstChild.appendChild(clr); dateSec = s3; dateLab = s3.firstChild; clrBtn = clr; two0 = two;
-    inS.type = 'date'; inE.type = 'date'; fS = field('Начало', inS); fE = field('Окончание', inE); two.appendChild(fS); two.appendChild(fE); s3.appendChild(two);
-    var ch = el('div', 'chips');
-    [['1 неделя', 1], ['2 недели', 2], ['3 недели', 3], ['1 месяц', 0]].forEach(function (p) {
-      var b = el('button', 'btn', p[0]); b.type = 'button';
-      b.addEventListener('click', function () {
-        var it = cur1(); if (!it) return; var n = cur(it), s = n.s || iso(weekMon(Math.floor((todayMs - W0) / DAY / 7))), sm = ms(s), en;
-        if (p[1]) en = sm + (7 * p[1] - 1) * DAY; else { var d = new Date(sm); d.setUTCMonth(d.getUTCMonth() + 1); en = d.getTime() - DAY; }
-        n.s = s; n.e = iso(en); commit(it, n);
-      });
-      ch.appendChild(b);
-    });
-    s3.appendChild(ch); panes.plan.appendChild(s3); chipsEl = ch;
-    clr.addEventListener('click', function () { var it = cur1(); if (!it) return; var n = cur(it); n.s = ''; n.e = ''; commit(it, n); });
+    opts(selP, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (v) { return [String(v), v + '%']; }));
+    selP.addEventListener('change', function () { setProgress(+selP.value); });
     inS.addEventListener('change', function () {
-      var it = cur1(); if (!it) return; var n = cur(it); n.s = inS.value; if (it.stat && !n.s) { syncDrawer(); return; } if (!n.s || eff(it).ty === 'ms') n.e = ''; else if (n.e && n.e < n.s) n.e = n.s; inE.classList.remove('bad'); commit(it, n);
+      var it = cur1(); if (!it) return; var n = cur(it); n.s = inS.value; if (it.stat && !n.s) { syncDrawer(); return; } if (!n.s || eff(it).ty !== 't') n.e = ''; else if (n.e && n.e < n.s) n.e = n.s; inE.classList.remove('bad'); commit(it, n);
     });
     inE.addEventListener('change', function () {
       var it = cur1(); if (!it) return; var n = cur(it);
       if (inE.value && n.s && inE.value < n.s) { inE.classList.add('bad'); return; }
       inE.classList.remove('bad'); n.e = inE.value; if (n.e && !n.s) n.s = n.e; commit(it, n);
     });
-    var s4 = section(), lab = el('div', 'lab'); lab.style.display = 'flex'; lab.style.justifyContent = 'space-between'; lab.style.alignItems = 'baseline';
-    lab.appendChild(el('span', '', 'Процент выполнения')); lab.appendChild(big); s4.appendChild(lab);
-    range.type = 'range'; range.min = 0; range.max = 100; range.step = 5; range.setAttribute('aria-label', 'Процент выполнения'); s4.appendChild(range); panes.plan.appendChild(s4); progSec = s4;
-    range.addEventListener('input', function () { big.textContent = range.value + '%'; });
-    range.addEventListener('change', function () { setProgress(+range.value); });
+    clrBtn = el('button', 'btn link pclr', 'Сбросить сроки'); clrBtn.type = 'button';
+    clrBtn.addEventListener('click', function () { var it = cur1(); if (!it) return; var n = cur(it); n.s = ''; n.e = ''; commit(it, n); });
+    panes.plan.appendChild(plist); panes.plan.appendChild(clrBtn);
+    var sw = section('Состав работ'); sw.appendChild(boxWork); workIn.type = 'text'; workIn.placeholder = 'Новая работа, Enter'; workIn.setAttribute('aria-label', 'Новая работа в составе'); sw.appendChild(workIn); panes.plan.appendChild(sw); workSec = sw;
+    workIn.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return; ev.preventDefault(); var it = cur1(), v = workIn.value.trim(); if (!it || !v || it.stat) return;
+      adding = { pid: it.id, stage: it.stage || '', role: eff(it).role, mode: grp, val: '', focus: false }; open['t:' + it.id] = true; createItem(v); adding = null; workIn.value = ''; render(); syncDrawer(); workIn.focus();
+    });
     // --- description
     inName.className = 'seam-title'; inName.type = 'text'; inName.placeholder = 'Название'; inName.setAttribute('aria-label', 'Название'); panes.desc.appendChild(inName);
     var noteBox = noteBoxEl = el('div', 'note'); nb.setAttribute('aria-hidden', 'true'); ta.className = 'ni'; ta.spellcheck = false; ta.setAttribute('aria-label', 'Заметка');
@@ -1011,14 +999,18 @@
     var msT = e.ty === 'ms', blT = e.ty === 'bl', one = msT || blT;
     dTitle.textContent = it.title; dTitle.title = it.title; dSub.textContent = [blT ? 'Блокатор' : msT ? (it.stat ? (it.track ? 'Целевое состояние · трек ' + it.track : 'Целевое состояние · все треки') : 'Целевое состояние') : '', msT && it.stat ? '' : it.stage, it.parent ? '↳ ' + it.parent : ''].filter(Boolean).join(' · ');
     renderCm(); syncTabs();
-    typeSec.style.display = it.stat ? 'none' : ''; Object.keys(tyBtns).forEach(function (k) { tyBtns[k].setAttribute('aria-pressed', String(k === (e.ty || 't'))); });
+    typeSec.style.display = it.stat ? 'none' : ''; selTy.value = e.ty || 't';
     roleSec.style.display = one ? 'none' : ''; progSec.style.display = one ? 'none' : ''; chipsEl.style.display = one ? 'none' : ''; fE.style.display = one ? 'none' : '';
-    two0.style.gridTemplateColumns = one ? '1fr' : ''; dateLab.firstChild.nodeValue = one ? 'Дата' : 'Сроки'; fS.firstChild.nodeValue = blT ? 'Блокатор снимется' : msT ? 'Дата достижения' : 'Начало';
+    fS.firstChild.textContent = blT ? 'Снимется' : msT ? 'Дата' : 'Старт';
     clrBtn.style.display = it.stat ? 'none' : '';
-    STATUS.forEach(function (s) { stBtns[s[0]].setAttribute('aria-pressed', String(s[0] === e.st)); });
-    ROLES.forEach(function (r) { roBtns[r.key].setAttribute('aria-pressed', String(r.key === e.role)); });
+    selSt.value = e.st; selRo.value = e.role;
     if (document.activeElement !== inS) inS.value = e.s; if (document.activeElement !== inE) inE.value = e.e; inE.min = e.s || '';
-    range.value = e.p; big.textContent = e.p + '%';
+    var days = e.s && e.e ? Math.round((ms(e.e) - ms(e.s)) / DAY) + 1 : 0;
+    selDur.textContent = ''; [['', days ? days + ' дн.' : '—'], ['1', '1 неделя'], ['2', '2 недели'], ['3', '3 недели'], ['m', '1 месяц']].forEach(function (o) { var x = el('option', '', o[1]); x.value = o[0]; selDur.appendChild(x); }); selDur.value = '';
+    var pv = e.p || 0; if (!selP.querySelector('option[value="' + pv + '"]')) { var xo = el('option', '', pv + '%'); xo.value = String(pv); xo.dataset.x = '1'; selP.appendChild(xo); } selP.value = String(pv);
+    boxWork.textContent = ''; workSec.style.display = it.stat ? 'none' : '';
+    kidsOf(it.id).forEach(function (k) { var ek = eff(k); boxWork.appendChild(lnk(k, ek.s ? fmtS(ek.s) : '')); });
+    if (!kidsOf(it.id).length) boxWork.appendChild(el('div', 'none', 'Работ нет — добавьте ниже'));
     // description
     inName.style.display = it.custom ? '' : 'none'; if (document.activeElement !== inName) inName.value = (it.name || it.title).replace(NUMSTRIP, '');
     if (document.activeElement !== ta) ta.value = e.d;
