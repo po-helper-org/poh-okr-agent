@@ -6,6 +6,7 @@
 
 | Дата | Кейс | Вид | Область | PR |
 |---|---|---|---|---|
+| 2026-11-10 | [Roadmap цели — md как трекер, граф линтером, страница сборщиком](2026-11-10-roadmap-viz-md-pipeline.md) | feature | okr-roadmap-viz | 18 |
 | 2026-10-19 | [curl без ключа отключения проверки TLS в инструкциях установки](2026-10-19-curl-no-insecure-flag.md) | security | docs-install | 15 |
 | 2026-10-08 | [Обоснование одной инициативы — презентация «брать или нет»](2026-10-08-okr-justify-deck.md) | feature | okr-justify | 14 |
 | 2026-10-07 | [Презентация квартала команде — HTML, а не слайды из редактора](2026-10-07-okr-present-html-deck.md) | feature | okr-present | 12 |
