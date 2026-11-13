@@ -161,6 +161,10 @@ button { font: inherit; color: inherit; }
 .x:hover { background: var(--raised); color: var(--ink); } .x svg { width: 16px; height: 16px; }
 .dbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 16px 8px; }
 .pane { display: none; } .pane.on { display: block; }
+.drawer.grp .dnav { display: none; }
+.prow .pv { font-size: 13px; color: var(--ink); padding: 0 6px; font-variant-numeric: tabular-nums; } .prow .pv.late { color: var(--s-block); font-weight: 500; }
+.pst { display: inline-flex; align-items: center; gap: 8px; } .pst .sd { justify-self: auto; }
+.row.sh .stbtn .chev { padding: 6px; margin: -6px; box-sizing: content-box; } .row.sh .stbtn .chev:hover { color: var(--ink); background: var(--raised); border-radius: 4px; }
 .plist { display: grid; border-top: 1px solid var(--line); }
 .prow { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); gap: 8px; }
 .prow .pk { color: var(--muted); font-size: 13px; }

@@ -399,7 +399,7 @@
         rh.dataset.stage = g.stage;
         btn.type = 'button'; btn.setAttribute('aria-expanded', String(isOpen)); btn.appendChild(svg(isOpen ? ICON.down : ICON.right, 'chev'));
         var sn = SNUM[g.stage] || '', stt = stageTitle(g.stage).slice(sn ? sn.length + 1 : 0);
-        btn.appendChild(groupCells(sn, stt, real, plural(n) + ' · ' + done + ' выполнено' + (block ? ' · ' + block + ' заблокировано' : '') + ' · ' + pct + '%')); btn.addEventListener('click', function () { open[key] = !isOpen; render(); });
+        btn.appendChild(groupCells(sn, stt, real, plural(n) + ' · ' + done + ' выполнено' + (block ? ' · ' + block + ' заблокировано' : '') + ' · ' + pct + '%')); btn.addEventListener('click', function (ev) { if (ev.target.closest('.chev')) { open[key] = !isOpen; render(); } else openGroup({ kind: 'stage', key: g.stage, title: stageTitle(g.stage) }); });
         l.appendChild(btn); l.appendChild(addBtn('Добавить задачу в этап', function () { startAdd({ stage: g.stage }); })); l.appendChild(addGrip('stage', g.stage)); rh.appendChild(l);
         if (a != null) {
           var r = el('div', 'roll'); r.style.left = (a - lo) * WPX + 2 + 'px'; r.style.width = (b - a + 1) * WPX - 4 + 'px'; r.title = 'Сводка по этапу: ' + pct + '%';
@@ -481,7 +481,7 @@
     var nm = f ? f.code + ' ' + f.title : 'Вне декомпозиции фич';
     var meta = !sub.length ? 'не спланировано' : plural(work.length) + (cps.length ? ' · ' + pl(cps.length, ['контрольная точка', 'контрольные точки', 'контрольных точек']) : '') + (end ? ' · финиш ' + fmt(end) : ' · без сроков');
     btn.appendChild(groupCells(f ? f.code : '', f ? f.title : 'Вне декомпозиции фич', sub, meta));
-    btn.addEventListener('click', function () { open[key] = !isOpen; render(); }); l.appendChild(btn); rh.appendChild(l);
+    btn.addEventListener('click', function (ev) { if (ev.target.closest('.chev') || !f) { open[key] = !isOpen; render(); } else openGroup({ kind: 'feat', key: code, title: nm }); }); l.appendChild(btn); rh.appendChild(l);
     if (a != null) {
       var r = el('div', 'roll'); r.style.left = (a - lo) * WPX + 2 + 'px'; r.style.width = (b - a + 1) * WPX - 4 + 'px';
       r.title = nm + '\n' + fmt(iso(weekMon(a))) + ' → ' + fmt(end); var pct = sub.length ? Math.round(done * 100 / sub.length) : 0;
@@ -879,7 +879,7 @@
     var head = el('div', 'dhead'), ht = el('div', 'dht'); ht.appendChild(dTitle); ht.appendChild(dSub); head.appendChild(ht);
     var x = el('button', 'x'); x.type = 'button'; x.setAttribute('aria-label', 'Закрыть'); x.appendChild(svg(ICON.x)); x.addEventListener('click', closeDrawer); head.appendChild(x);
     var body = el('div', 'dbody');
-    ['plan', 'desc', 'cm', 'links'].forEach(function (k) { var p = el('div', 'pane' + (k === 'desc' ? ' col' : '')); panes[k] = p; body.appendChild(p); });
+    ['plan', 'desc', 'cm', 'links', 'grp'].forEach(function (k) { var p = el('div', 'pane' + (k === 'desc' ? ' col' : '')); panes[k] = p; body.appendChild(p); });
     // --- planning: compact property list + work breakdown
     var plist = el('div', 'plist');
     function prow(lbl, ctrl) { var r = el('label', 'prow'), k = el('span', 'pk', lbl); r.appendChild(k); r.appendChild(ctrl); plist.appendChild(r); return r; }
@@ -974,16 +974,46 @@
     });
     dr.appendChild(head); dr.appendChild(body); dr.appendChild(nav);
   })();
-  function syncTabs() { var cu0 = cur1(); dr.classList.toggle('et', !!(cu0 && cu0.custom && tab === 'desc')); Object.keys(panes).forEach(function (k) { panes[k].classList.toggle('on', k === tab); navB[k].setAttribute('aria-pressed', String(k === tab)); }); }
+  function syncTabs() { var cu0 = cur1(); dr.classList.toggle('et', !!(cu0 && cu0.custom && tab === 'desc')); Object.keys(panes).forEach(function (k) { panes[k].classList.toggle('on', k === tab); if (navB[k]) navB[k].setAttribute('aria-pressed', String(k === tab)); }); }
   function setProgress(v) {
     var it = cur1(); if (!it) return; var n = cur(it), st = n.st || it.status;
     if (v === 100) n.st = 'Выполнено'; else if (v > 0 && (st === 'Открыт' || st === 'Выполнено')) n.st = 'В работе'; else if (v === 0 && st === 'Выполнено') n.st = 'Открыт';
     n.p = v; commit(it, n);
   }
-  function openDrawer(id, t) { flushNote(); if (t) tab = t; else if (ITEM[id] && isPt(ITEM[id])) tab = 'desc'; sel = id; dr.classList.add('open'); mark(); syncDrawer(); }
-  function closeDrawer() { flushNote(); sel = null; dr.classList.remove('open'); mark(); }
+  function openDrawer(id, t) { flushNote(); selG = null; dr.classList.remove('grp'); if (t) tab = t; else if (tab === 'grp') tab = 'plan'; else if (ITEM[id] && isPt(ITEM[id])) tab = 'desc'; sel = id; dr.classList.add('open'); mark(); syncDrawer(); }
+  function closeDrawer() { flushNote(); sel = null; selG = null; dr.classList.remove('open', 'grp'); mark(); }
+  // ---------- stage / feature card ----------
+  var selG = null, gIn = el('input', 'newin');
+  function groupList(g) { return g.kind === 'stage' ? items.filter(function (x) { return x.stage === g.key; }) : items.filter(function (x) { return inFeat(g.key, x); }); }
+  function openGroup(g) { flushNote(); sel = null; selG = g; tab = 'grp'; dr.classList.add('open', 'grp'); mark(); syncGroup(); }
+  function syncGroup() {
+    var g = selG; if (!g) return; var list = groupList(g), real = list.filter(function (x) { return !isBl(x); }), pane = panes.grp;
+    dTitle.textContent = g.title; dTitle.title = g.title; dSub.textContent = g.kind === 'stage' ? 'Этап' : 'Фича'; syncTabs(); pane.textContent = '';
+    var a = '', z = '', sum = 0, sts = {};
+    real.forEach(function (x) { var e = eff(x); sum += e.p || 0; sts[e.st] = (sts[e.st] || 0) + 1; if (e.s && (!a || e.s < a)) a = e.s; var en = e.e || e.s; if (en && en > z) z = en; });
+    var st = !real.length ? 'Открыт' : sts['Выполнено'] === real.length ? 'Выполнено' : sts['В работе'] ? 'В работе' : sts['Заблокировано'] ? 'Заблокировано' : 'Открыт';
+    var pl0 = el('div', 'plist');
+    function row(k, v, cls) { var r = el('div', 'prow'); r.appendChild(el('span', 'pk', k)); var vv = el('span', 'pv' + (cls ? ' ' + cls : '')); if (typeof v === 'string') vv.textContent = v; else vv.appendChild(v); r.appendChild(vv); pl0.appendChild(r); }
+    var sv = el('span', 'pst'); sv.appendChild(stDot(st)); sv.appendChild(document.createTextNode(st)); row('Статус', sv);
+    row('Старт', a ? fmt(a) : '—'); row('Финиш', z ? fmt(z) : '—', overdue(z, st) ? 'late' : '');
+    row('Длительность', a && z ? Math.round((ms(z) - ms(a)) / DAY) + 1 + ' дн.' : '—');
+    row('Выполнено', (real.length ? Math.round(sum / real.length) : 0) + '%');
+    row('Задачи', plural(real.length) + ' · ' + (sts['Выполнено'] || 0) + ' выполнено' + (sts['Заблокировано'] ? ' · ' + sts['Заблокировано'] + ' заблокировано' : ''));
+    pane.appendChild(pl0);
+    var sec = section(g.kind === 'stage' ? 'Состав этапа' : 'Состав фичи'), box = el('div', 'list work');
+    list.forEach(function (x) { var e = eff(x), dd = el('i', overdue(e.e || e.s, e.st) ? 'warn' : '', e.s ? fmtS(e.s) : ''), b = lnk(x, dd); b.style.paddingLeft = 8 + (depth(x) - 1) * 14 + 'px'; box.appendChild(b); });
+    if (!list.length) box.appendChild(el('div', 'none', 'Задач нет'));
+    sec.appendChild(box);
+    if (g.kind === 'stage') { gIn.type = 'text'; gIn.placeholder = 'Новая задача в этап, Enter'; gIn.setAttribute('aria-label', 'Новая задача в этап'); sec.appendChild(gIn); }
+    pane.appendChild(sec);
+  }
+  gIn.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' || !selG || selG.kind !== 'stage') return; ev.preventDefault(); var v = gIn.value.trim(); if (!v) return;
+    adding = { pid: '', stage: selG.key, role: 'PO', mode: 'stage', val: '', focus: false }; open['st:' + selG.key] = true; createItem(v); adding = null; gIn.value = ''; render(); syncGroup(); gIn.focus();
+  });
   function gotoItem(id) {
     var it = ITEM[id]; if (!it) return;
+    if (selG) { selG = null; dr.classList.remove('grp'); if (tab === 'grp') tab = 'plan'; dr.classList.add('open'); }
     if (view.t === 'tr' && curTrack().own) { if (grp === 'stage') { if (it.stage) open['st:' + it.stage] = true; var p = it.pid; while (p) { open['t:' + p] = true; p = (ITEM[p] || {}).pid; } } else open[eff(it).role] = true; }
     sel = id; render(); mark(); syncDrawer();
     var r = sc.querySelector('.row.tk[data-id="' + id + '"]'); if (r) r.scrollIntoView({ block: 'center' });
@@ -1067,7 +1097,7 @@
     rf.forEach(function (r) { boxRefs.appendChild(lnk(r[0], r[1])); });
     if (!rf.length) boxRefs.parentNode.style.display = 'none'; else boxRefs.parentNode.style.display = '';
   }
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && sel && !adding) closeDrawer(); });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && (sel || selG) && !adding) closeDrawer(); });
 
   // ---------- toast ----------
   var toastEl = document.getElementById('toast'), toastT;
