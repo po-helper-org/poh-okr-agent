@@ -58,6 +58,8 @@ button { font: inherit; color: inherit; }
 .tog { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
 .tog button { height: 22px; padding: 0 10px; border: 0; background: transparent; font-size: 12px; cursor: pointer; }
 .tog button:hover { background: var(--raised); }
+.ctop .tog { margin-left: auto; } .ctop .tog + .tog { margin-left: 8px; }
+.in.nodeps .dm, .in.nodeps svg.deps { display: none; }
 .tog button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .back { display: inline-flex; align-items: center; gap: 4px; height: 24px; margin-left: -4px; padding: 0 8px 0 0; border-radius: 6px; color: var(--ink-2); font-size: 13px; text-decoration: none; }
 .back:hover { color: var(--ink); background: var(--raised); }

@@ -18,6 +18,7 @@
   TRACKS.forEach(function (t) { (t.ms || []).forEach(function (m) { STAT.push({ id: 'm' + t.n + '_' + m.w, gid: null, title: m.t, short: m.sn || m.t, status: 'Открыт', pct: '', role: 'PO', stage: null, parent: null, pid: '', custom: false, ty: 'ms', stat: true, track: t.n, len: 1, s0: fri(m.w), sn: m.sn || m.t }); }); });
   (D.global || []).forEach(function (m) { STAT.push({ id: 'mg' + m.w, gid: null, title: m.t, short: m.sn || m.t, status: 'Открыт', pct: '', role: 'PO', stage: null, parent: null, pid: '', custom: false, ty: 'ms', stat: true, track: 0, len: m.len || 1, s0: fri(m.w + (m.len || 1) - 1), sn: m.sn || m.t }); });
   var FEATS = D.features || [], FBY = {}; FEATS.forEach(function (f) { FBY[f.code] = f; });
+  var showDeps = true; try { showDeps = localStorage.getItem('rm-deps') !== '0'; } catch (e) {}
   var grp = 'stage'; try { var g0 = localStorage.getItem('rm-grp'); grp = g0 === 'role' || (g0 === 'feat' && FEATS.length) ? g0 : 'stage'; } catch (e) {}
   var noteT = 0, noteItem = '', noteDirty = false, noteSrc = false, mn = null, mnOff = false, noteBoxEl = null, mnEl = null;
   var state = {}, customs = {}, open = {}, db = null, writeQ = {}, lo = -13, hi = 104, view = { t: 'ov' }, sel = null, adding = null, tab = 'plan', dl = null;
@@ -204,7 +205,7 @@
     relayout();
     var sl = sc.scrollLeft, st = sc.scrollTop;
     ensureRange();
-    var l = lw(), tw = (hi - lo) * WPX, inn = el('div', 'in');
+    var l = lw(), tw = (hi - lo) * WPX, inn = el('div', 'in' + (showDeps ? '' : ' nodeps'));
     inn.style.setProperty('--lw', l + 'px'); inn.style.setProperty('--tw', tw + 'px'); inn.style.width = (l + tw) + 'px';
     inn.appendChild(buildHead()); inn.appendChild(buildOverlay());
     if (view.t === 'ov') buildOverview(inn); else buildTrack(inn);
@@ -232,6 +233,10 @@
           tog.appendChild(b);
         });
         ctop.appendChild(tog);
+        var dt = el('div', 'tog'), db0 = el('button', '', 'Связи'); db0.type = 'button'; db0.setAttribute('aria-pressed', String(showDeps));
+        db0.title = showDeps ? 'Скрыть линии зависимостей и предупреждающие знаки' : 'Показать линии зависимостей и предупреждающие знаки';
+        db0.addEventListener('click', function () { showDeps = !showDeps; try { localStorage.setItem('rm-deps', showDeps ? '1' : '0'); } catch (e) {} render(); });
+        dt.appendChild(db0); ctop.appendChild(dt);
       }
       c.appendChild(ctop);
       var nm = el('div', 'cname', t.n + '. ' + t.name); nm.title = t.name; c.appendChild(nm);
@@ -262,7 +267,7 @@
       msOf(view.n).sort(function (a, b) { return eff(a).s < eff(b).s ? -1 : 1; }).forEach(function (m) {
         var e = eff(m), x = xOf(e.s), ln = el('i', 'mln ' + SCLS[e.st]), tier = 0; ln.style.left = x - 1 + 'px'; ov.appendChild(ln);
         var wx = (wk(e.s) - lo) * WPX + 1; xs.forEach(function (px) { if (px === wx) tier++; }); xs.push(wx);
-        ov.appendChild(msDiamond(m, x, 8 + tier * 20));
+        if (!curTrack().own) ov.appendChild(msDiamond(m, x, 8 + tier * 20));
       });
     }
     return ov;
@@ -345,10 +350,7 @@
 
   // ---------- track page ----------
   function buildTrack(inn) {
-    var t = curTrack(), res = el('div', 'row res'), lc = el('div', 'lc'); res.dataset.track = t.n;
-    lc.appendChild(el('div', 'lab', 'Результат трека')); lc.appendChild(el('div', 'restext', t.result || 'Не указан'));
-    if (!t.own) lc.appendChild(el('div', 'empty', 'Подробной декомпозиции у этого трека пока нет. Показан план по ролям из roadmap.'));
-    res.appendChild(lc); res.appendChild(el('div', 'tc')); inn.appendChild(res);
+    var t = curTrack();
     if (t.own) inn.appendChild(tableHead());
     if (t.own && grp === 'stage') { buildStages(inn); return; }
     if (t.own && grp === 'feat') { buildFeats(inn); return; }
@@ -452,7 +454,13 @@
   function tableHead() {
     var row = el('div', 'row thd'), lc = el('div', 'lc'), g = el('div', 'tr6');
     ['', 'Задача', 'Роль', 'Старт', 'Финиш', ''].forEach(function (h, k) { g.appendChild(el('span', ['cn', 'ct', 'cr', 'cd', 'cd', 'sd0'][k], h)); });
-    lc.appendChild(g); row.appendChild(lc); row.appendChild(el('div', 'tc')); return row;
+    var tc = el('div', 'tc'), xs = [], mx = 0;
+    msOf(view.n).sort(function (a, b) { return eff(a).s < eff(b).s ? -1 : 1; }).forEach(function (m) {
+      var e = eff(m), wx = wk(e.s), tier = 0; xs.forEach(function (w) { if (w === wx) tier++; }); xs.push(wx); mx = Math.max(mx, tier);
+      tc.appendChild(msDiamond(m, xOf(e.s), 8 + tier * 20));
+    });
+    row.style.minHeight = 32 + mx * 20 + 'px';
+    lc.appendChild(g); row.appendChild(lc); row.appendChild(tc); return row;
   }
 
   // ---------- features: the same tasks along the feature tree, with key dates ----------
