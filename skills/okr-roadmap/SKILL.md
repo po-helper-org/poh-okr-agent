@@ -1,6 +1,6 @@
 ---
 name: okr-roadmap
-description: '[deprecated] Устарело, используй /okr-teamplanner. Roadmap Architect — строит roadmap.md (now-next-later) из OKR-<quarter>.md, с привязкой каждого пункта к Key Result. Используй когда — /okr-roadmap, роадмап now-next-later по OKR квартала.'
+description: Совместимость с okr-roadmap. Предложи разложить работы по срокам и людям через okr-teamplanner.
 ---
 
 > **[deprecated]** `/okr-roadmap` устарела и больше не поддерживается. Планирование

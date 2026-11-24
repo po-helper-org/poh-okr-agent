@@ -1,6 +1,6 @@
 ---
 name: okr-draft
-description: '[deprecated] Устарело, используй /okr-scope. Objective/KR Designer — формирует черновик OKR-<quarter>.md из контекст-пака. 3-5 Objectives, у каждого 3-6 измеримых Key Results с PBV. Используй когда — /okr-draft, черновик OKR квартала, сформулировать Objectives и Key Results.'
+description: Совместимость с okr-draft. Предложи собрать черновик целей и KR через okr-scope.
 ---
 
 > **[deprecated]** `/okr-draft` устарела и больше не поддерживается. Планирование

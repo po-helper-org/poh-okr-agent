@@ -26,7 +26,7 @@ description: Первичная аналитика воркспейса — ст
 Следуй процессу из `skills/okr-index/SKILL.md` и схеме
 `skills/okr-index/resources/index_schema.md`. Создай `.okr/index/` в корне
 воркспейса. После сборки выведи `MANIFEST.md` целиком и спроси PO,
-достаточно ли покрытия перед `/okr-context <quarter>`.
+достаточно ли покрытия перед `/okr-retro <quarter>`.
 
 ## Отчёт
 
@@ -37,5 +37,5 @@ description: Первичная аналитика воркспейса — ст
 <MANIFEST.md целиком>
 
 ── СТОП ── PO: проверьте покрытие, особенно UNAVAILABLE по релевантным темам.
-Дальше: /okr-context <quarter>
+Дальше: /okr-retro <quarter>
 ```

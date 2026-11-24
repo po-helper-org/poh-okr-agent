@@ -1,6 +1,6 @@
 ---
 name: okr-plan-deck
-description: '[deprecated] Устарело, используй /okr-present. Deck Builder — собирает квартальную кикофф-презентацию для команды (plan-deck.pptx) из OKR-<quarter>.md и roadmap.md. Брендбук общий с okr-equator, структура слайдов — разумный дефолт, не зафиксирована вложением. Используй когда — /okr-plan-deck, презентация плана квартала команде.'
+description: Совместимость с okr-plan-deck. Предложи собрать презентацию квартала через okr-present.
 ---
 
 > **[deprecated]** `/okr-plan-deck` устарела и больше не поддерживается. Планирование

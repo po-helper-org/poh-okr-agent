@@ -3,8 +3,19 @@ set -e
 GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
 REPO_URL="https://github.com/po-helper-org/poh-okr-agent.git"
 
-# Источник: если запущено из клона — текущая папка; если через curl — клонируем
-if [ -d "./commands" ] && [ -d "./skills" ]; then
+# Пишем в текущий проект, исходники берём из клона рядом со скриптом.
+case "${1:-}" in
+  "") choice="" ;;
+  --codex) choice=2 ;;
+  *) echo "Использование: bash install.sh [--codex]" >&2; exit 2 ;;
+esac
+SRC=""
+if [ -f "${BASH_SOURCE[0]:-}" ]; then
+  SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+if [ -n "$SRC" ] && [ -f "$SRC/skills/okr-index/SKILL.md" ]; then
+  : # Запуск из локальной копии.
+elif [ -f ./skills/okr-index/SKILL.md ] && [ -d ./commands ]; then
   SRC="."
 else
   echo -e "${BLUE}Клонирую poh-okr-agent…${NC}"
@@ -13,24 +24,26 @@ else
   SRC="$TEMP_DIR"
 fi
 
-echo -e "${BLUE}Какой IDE-агент?${NC}"
-echo "  1) Claude Code   (.claude/)"
-echo "  2) Codex         (.agents/)"
-echo "  3) Cline         (.clinerules/)"
-echo "  4) DevX    (.clinerules/)"
-echo "  5) Universal     (.agents/)"
-if [ -r /dev/tty ]; then
-  # Файл /dev/tty есть, но терминала может не быть (CI, контейнер): ошибку
-  # открытия глушим целиком, выбор — по умолчанию.
-  { read -rp "Выбор [1]: " choice < /dev/tty; } 2>/dev/null || choice=""
-else
-  choice=""
+if [ -z "$choice" ]; then
+  echo -e "${BLUE}Какой IDE-агент?${NC}"
+  echo "  1) Claude Code   (.claude/)"
+  echo "  2) Codex         (.agents/)"
+  echo "  3) Cline         (.clinerules/)"
+  echo "  4) DevX    (.clinerules/)"
+  echo "  5) Universal     (.agents/)"
+  if [ -r /dev/tty ]; then
+    # Файл /dev/tty есть, но терминала может не быть (CI, контейнер): ошибку
+    # открытия глушим целиком, выбор — по умолчанию.
+    { read -rp "Выбор [1]: " choice < /dev/tty; } 2>/dev/null || choice=""
+  else
+    choice=""
+  fi
+  choice="${choice:-1}"
 fi
-choice="${choice:-1}"
 # CMD_DIR пустой — команды не синкаются. Claude Code сам показывает навыки как
 # слэш-команды, а у каждой команды теперь есть одноимённый навык: синк дал бы
-# каждую `/okr-*` в меню дважды. Остальным агентам каталог навыков не виден,
-# им команды нужны как единственная точка входа.
+# каждую `/okr-*` в меню дважды. Для остальных сохраняем
+# файлы команд для совместимости с прежними установками.
 case "$choice" in
   1) ROOT=".claude";     CMD_DIR="" ;;
   2) ROOT=".agents";     CMD_DIR="prompts" ;;
@@ -61,6 +74,8 @@ for skill_src in "$SRC"/skills/*; do
   [ -f "$skill_src/SKILL.md" ] || continue
   skill_name="$(basename "$skill_src")"
   skill_dst="$ROOT/skills/$skill_name"
+  # В клоне Codex читает навыки через ссылки на эти же каталоги.
+  [ "$skill_src" -ef "$skill_dst" ] && continue
   mkdir -p "$skill_dst"
   cp -R "$skill_src"/. "$skill_dst"/
   if ! head -1 "$skill_src/SKILL.md" | grep -q '^---$'; then

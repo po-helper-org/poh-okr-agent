@@ -1,6 +1,6 @@
 ---
 name: okr-jira
-description: Перенос плана квартала в JIRA прямо из TeamPlanner — KR становятся эпиками (enabler или бессрочный), подзадачи — историями. Проверяет, есть ли TeamPlanner; нет — собирает его; есть — просит PO подтвердить и проверяет. Задачи в JIRA (Atlassian MCP) или CSV для импорта — только после явного «да». Используй когда — /okr-jira, перенести OKR в JIRA, завести эпики и истории квартала, план в JIRA.
+description: Переносит подтверждённый TeamPlanner в Jira как эпики и истории или готовит CSV для импорта.
 ---
 
 # Навык: Перенос в JIRA
@@ -38,8 +38,7 @@ TeamPlanner в JIRA и записывает ключи созданных зад
 
 Формат — `skills/okr-scope/resources/plan_schema.md`, раздел «TeamPlanner»
 (поля `jira_project`, `jira_key`) и «Перенос в JIRA». Скрипт —
-`<корень установки>/skills/okr-scope/scripts/okr-plan.py` (корень — куда
-`install.sh` синкнул навыки, обычно `.claude/`). Ниже он — `okr-plan.py`.
+`skills/okr-scope/scripts/okr-plan.py` из каталога методики. Ниже он — `okr-plan.py`.
 
 ## Главное правило
 

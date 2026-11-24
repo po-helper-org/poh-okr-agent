@@ -1,6 +1,6 @@
 ---
 name: okr-equator
-description: Equator Reporter — генерирует отчёт-экватор квартала (экватор-<quarter>.md + экватор-<quarter>.pptx) из .okr/<quarter>/ артефактов. Структура обоих документов зафиксирована шаблоном/кодом, LLM только заполняет данные. Используй когда — /okr-equator, отчёт о статусе на середине квартала, экватор.
+description: Готовит отчёт о ходе квартала на его середине по фактам исполнения KR в Markdown и PowerPoint.
 ---
 
 # Навык: Equator Reporter
