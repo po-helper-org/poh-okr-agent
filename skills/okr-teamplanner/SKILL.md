@@ -1,6 +1,6 @@
 ---
 name: okr-teamplanner
-description: TeamPlanner — этап 4 планирования квартала. Раскладывает каждый KR, взятый в квартал, на операционные этапы полного цикла (PO, ADR, SA, BA, BE, FE, QA, DOPS, RM, EXT[роль] — внешний ресурс) с исполнителем, сроками, статусом, образом результата и образом действия. Итог — страница-редактор teamplanner-<quarter>.html, которую правят техлиды, и лист для Google Sheets. Используй когда — /okr-teamplanner, TeamPlanner, ресурсы квартала, кто и когда делает, передать план техлидам.
+description: Раскладывает принятые KR по подзадачам, исполнителям и срокам. Готовит редактор TeamPlanner и таблицу загрузки для техлидов.
 ---
 
 # Навык: TeamPlanner
@@ -25,8 +25,7 @@ description: TeamPlanner — этап 4 планирования квартал�
 Формат, правила вывода и проверки — `skills/okr-scope/resources/plan_schema.md`,
 раздел «TeamPlanner»; как запускать скрипт и что значат его ответы — там же,
 «Работа со скриптом». Эталон — `skills/okr-scope/scripts/fixtures/teamplanner-2026Q4.json`:
-пиши JSON по его образцу. Скрипт — `<корень установки>/skills/okr-scope/scripts/okr-plan.py`
-(корень — куда `install.sh` синкнул навыки, обычно `.claude/`). Ниже он — `okr-plan.py`.
+пиши JSON по его образцу. Скрипт — `skills/okr-scope/scripts/okr-plan.py` из каталога методики. Ниже он — `okr-plan.py`.
 
 ## Принцип
 
